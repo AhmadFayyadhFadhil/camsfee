@@ -1,0 +1,19 @@
+# CAMS API Endpoints Reference
+
+## Authentication
+- `POST /api/v1/auth/login` - Validate user credentials and return bearer token.
+- `POST /api/v1/auth/logout` - Revoke the current Sanctum token.
+
+## Cleaning Service Tasks
+- `GET /api/v1/tasks` - List all scheduled daily tasks for the authenticated CS.
+- `POST /api/v1/submissions/scan` - Validate location geofence and scan a room QR code to mark a task as `in_progress`.
+- `POST /api/v1/submissions/{id}/submit` - CS submits a completed checklist report along with a physical proof photo.
+- `POST /api/v1/submissions/{id}/resubmit` - CS resubmits corrections for a rejected report.
+
+## Verification & Approvals
+- `GET /api/v1/verifications` - Retrieve pending task submissions requiring PIC review.
+- `POST /api/v1/verifications/{id}/approve` - Approve a report, marking the task as completed.
+- `POST /api/v1/verifications/{id}/reject` - Reject a report, reverting task to incomplete with a feedback note.
+
+## System Audits
+- `GET /api/v1/audit-logs` - paginated feed of all master data changes and system actions.

@@ -1,0 +1,22 @@
+# CAMS Navigation & Features
+
+## Roles & Permissions
+- **Admin**:
+  - Full control over buildings, rooms, checklist items, schedules, system parameters, and user accounts.
+  - Access to audit trails and exportable compliance reports.
+- **Supervisor**:
+  - Monitors building compliance rates, compliance charts, and building grid statuses.
+  - Can assign daily schedules and shifts to CS workers.
+- **PIC (Person In Charge)**:
+  - Oversees specific building verifications.
+  - Inspects CS submissions and makes approval/rejection decisions.
+- **CS (Cleaning Service)**:
+  - Daily tasks checklist interface.
+  - Scan room QR code, mark items, upload photos, and verify physical completion.
+
+## Main Navigation Tabs
+- **Dashboard**: Compliance rate percentages, active logs feed, building cleanliness status cells.
+- **Verifikasi Laporan**: PIC review list with image lightbox portals.
+- **Temuan Kerusakan**: Public reporting panel for damaged facilities.
+- **Kelola Gedung / Ruangan**: Admin master tables.
+- **Audit Trails**: Security logs.

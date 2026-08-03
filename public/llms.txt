@@ -1,0 +1,9 @@
+# CAMS - Cleaning Activity Monitoring System
+
+> CAMS Pandaan is a real-time, industrial-grade cleaning activity monitoring system with secure Sanctum authentication, geofencing, QR-code physical presence validation, and automated scheduling.
+
+## Technical Specifications
+
+- [Architecture and Tech Stack](/llms-architecture.txt): Detailed overview of backend/frontend tech stack, database schemas, and caching layers.
+- [API Endpoints Reference](/llms-api.txt): Full description of Sanctum auth, CS task submission, geofence parameters, and supervisor verification routes.
+- [System Navigation & Features](/llms-features.txt): Overview of navigation tabs and role permissions (Admin, Supervisor, PIC, CS).

@@ -1,0 +1,18 @@
+# CAMS Architecture & Tech Stack
+
+## Backend
+- **Framework**: Laravel 11.x
+- **Runtime**: PHP 8.2+
+- **Database**: MySQL (relational storage for buildings, rooms, checklists, tasks, audits, and submissions)
+- **Authentication**: Laravel Sanctum (token-based authorization for all API requests)
+- **Environment**: Multi-worker local server enabled with `PHP_CLI_SERVER_WORKERS=8` for responsive concurrency.
+
+## Frontend
+- **Framework**: React 19.x with Vite 8.x
+- **Styling**: Vanilla CSS for flexibility and custom premium layouts (glassmorphism/blur overlays)
+- **State Management**: React State & hooks with clean component encapsulation
+- **Icons**: Lucide React
+- **Performance Optimizations**: 
+  - Dynamic imports (`React.lazy` and `Suspense`) for tab modules to reduce initial JS load size.
+  - Code splitting for large libraries (e.g., `html5-qrcode` loaded on demand).
+  - Manual Rollup chunking to cache vendors (`react`, `lucide-react`) separately.
