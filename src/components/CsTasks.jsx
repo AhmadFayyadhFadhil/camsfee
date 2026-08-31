@@ -123,6 +123,24 @@ export default function CsTasks({
     });
   };
 
+  const isCurrentTimeSlot = (start, end) => {
+    if (!start || !end) return false;
+    try {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      const [sH, sM] = start.split(':').map(Number);
+      const [eH, eM] = end.split(':').map(Number);
+      
+      const startMinutes = sH * 60 + (sM || 0);
+      const endMinutes = eH * 60 + (eM || 0);
+      
+      return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    } catch (e) {
+      return false;
+    }
+  };
+
   const refreshGeolocation = async () => {
     const newGpsState = await getGeolocation();
     setGpsState(newGpsState);
@@ -1692,7 +1710,7 @@ export default function CsTasks({
                         <th>Ruangan</th>
                         <th className="col-hide-mobile">Gedung</th>
                         <th className="col-hide-mobile">Shift Kerja</th>
-                        <th>Batas Waktu</th>
+                        <th>Target Waktu (Rundown)</th>
                         <th>Status Tugas</th>
                         <th>Aksi</th>
                       </tr>
@@ -1716,10 +1734,34 @@ export default function CsTasks({
                             <span style={{ fontWeight: 600 }}>{t.shift?.name || '-'}</span>
                           </td>
                           <td>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 600 }}>{t.task_date}</span>
-                              <span style={{ fontSize: '0.8rem', color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                                Jam {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {(t.target_jam_mulai && t.target_jam_selesai) ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ 
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    padding: '4px 9px', 
+                                    background: isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) ? 'rgba(34, 197, 94, 0.15)' : 'rgba(14, 49, 146, 0.07)',
+                                    color: isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) ? '#15803d' : 'var(--primary)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    border: isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) ? '1px solid #86efac' : '1px solid rgba(14, 49, 146, 0.12)'
+                                  }}>
+                                    <Clock size={13} /> {t.target_jam_mulai} - {t.target_jam_selesai} WIB
+                                  </span>
+                                  {isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) && (
+                                    <span style={{ fontSize: '0.68rem', background: '#22c55e', color: '#ffffff', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.3px' }}>
+                                      SEKARANG
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{t.task_date}</span>
+                              )}
+                              <span style={{ fontSize: '0.74rem', color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                Batas Shift: {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'} WIB
                               </span>
                             </div>
                           </td>
@@ -1777,11 +1819,21 @@ export default function CsTasks({
                         <span className="status-badge status-in_progress" style={{ fontSize: '0.72rem', padding: '3px 8px' }}>{t.shift?.name || 'Shift 1'}</span>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Batas Waktu:</span>
-                        <strong style={{ color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-primary)' }}>
-                          {t.task_date} (Pukul {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'})
-                        </strong>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Clock size={14} style={{ color: 'var(--primary)' }} />
+                          <span style={{ color: 'var(--text-secondary)' }}>Target Jam:</span>
+                          <strong style={{ color: 'var(--text-primary)' }}>
+                            {t.target_jam_mulai && t.target_jam_selesai 
+                              ? `${t.target_jam_mulai} - ${t.target_jam_selesai} WIB` 
+                              : `Pukul ${t.due_datetime ? t.due_datetime.split('T')[1]?.substring(0, 5) : '-'}`}
+                          </strong>
+                        </div>
+                        {isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) && (
+                          <span style={{ fontSize: '0.68rem', background: '#22c55e', color: '#ffffff', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                            SEKARANG
+                          </span>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '2px' }}>

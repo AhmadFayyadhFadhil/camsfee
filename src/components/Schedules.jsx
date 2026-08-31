@@ -547,6 +547,10 @@ export default function Schedules() {
           frequency: s.frequency || s.frekuensi,
           day_of_week: s.day_of_week,
           day_of_month: s.day_of_month,
+          target_jam_mulai: s.target_jam_mulai,
+          target_jam_selesai: s.target_jam_selesai,
+          estimasi_durasi_menit: s.estimasi_durasi_menit,
+          urutan: s.urutan,
           hari_minggu: s.hari_minggu,
           tanggal_bulan: s.tanggal_bulan,
           is_active: Boolean(s.is_active),
@@ -556,6 +560,10 @@ export default function Schedules() {
       }
       const entry = map.get(key);
       entry.schedules.push(s);
+      if (s.target_jam_mulai && !entry.target_jam_mulai) {
+        entry.target_jam_mulai = s.target_jam_mulai;
+        entry.target_jam_selesai = s.target_jam_selesai;
+      }
       const itemName = s.nama_item || s.checklistItem?.nama_item || s.checklist_item?.nama_item || '';
       if (itemName && !entry.items.includes(itemName)) {
         entry.items.push(itemName);
@@ -564,7 +572,11 @@ export default function Schedules() {
         entry.is_active = true;
       }
     });
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((a, b) => {
+      const timeA = a.target_jam_mulai || '99:99';
+      const timeB = b.target_jam_mulai || '99:99';
+      return timeA.localeCompare(timeB);
+    });
   }, [filteredSchedules]);
 
   const hasActiveScheduleFilter = scheduleSearch !== '' || 
@@ -1215,8 +1227,8 @@ export default function Schedules() {
                     <th>Item Checklist</th>
                     <th>Gedung</th>
                     <th>Shift Kerja</th>
+                    <th>Target Jam (Rundown)</th>
                     <th>Frekuensi</th>
-                    <th>Rincian Jadwal</th>
                     <th>Status</th>
                     <th>Aksi</th>
                   </tr>
@@ -1256,11 +1268,32 @@ export default function Schedules() {
                           </span>
                         </span>
                       </td>
-                      <td style={{ textTransform: 'capitalize' }}>{g.frekuensi || g.frequency}</td>
                       <td>
-                        {(g.frequency === 'daily' || g.frekuensi === 'harian') && 'Setiap Hari'}
-                        {(g.frequency === 'weekly' || g.frekuensi === 'mingguan') && `Hari ${g.day_of_week || g.hari_minggu}`}
-                        {(g.frequency === 'monthly' || g.frekuensi === 'bulanan') && `Tanggal ${g.day_of_month || g.tanggal_bulan} bulanan`}
+                        {g.target_jam_mulai && g.target_jam_selesai ? (
+                          <span style={{ 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '3px 8px',
+                            background: 'rgba(14, 49, 146, 0.08)',
+                            color: 'var(--primary)',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: '0.8rem',
+                            fontWeight: 700
+                          }}>
+                            <Clock size={12} /> {g.target_jam_mulai} - {g.target_jam_selesai} WIB
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Sesuai Shift</span>
+                        )}
+                      </td>
+                      <td style={{ textTransform: 'capitalize' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{g.frekuensi || g.frequency}</span>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {(g.frequency === 'daily' || g.frekuensi === 'harian') && 'Setiap Hari'}
+                          {(g.frequency === 'weekly' || g.frekuensi === 'mingguan') && `Hari ${g.day_of_week || g.hari_minggu}`}
+                          {(g.frequency === 'monthly' || g.frekuensi === 'bulanan') && `Tgl ${g.day_of_month || g.tanggal_bulan}`}
+                        </div>
                       </td>
                       <td>
                         <span className={`role-badge ${g.is_active ? 'role-cs' : 'role-admin'}`}>
