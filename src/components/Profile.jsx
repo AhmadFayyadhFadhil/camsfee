@@ -21,6 +21,7 @@ import { compressImage } from '../utils/imageCompressor';
 export default function Profile({ user, onUserUpdated }) {
   // Profile Data Form States
   const [fullName, setFullName] = useState(user?.full_name || user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || user?.foto_profile || null);
   const [avatarFile, setAvatarFile] = useState(null);
@@ -45,6 +46,7 @@ export default function Profile({ user, onUserUpdated }) {
   useEffect(() => {
     if (user) {
       setFullName(user.full_name || user.name || '');
+      setEmail(user.email || '');
       setPhone(user.phone || '');
       setAvatarPreview(user.avatar_url || user.foto_profile || null);
       setAvatarFile(null);
@@ -118,10 +120,16 @@ export default function Profile({ user, onUserUpdated }) {
       return;
     }
 
+    if (!email.trim()) {
+      setProfileError('Alamat email wajib diisi.');
+      return;
+    }
+
     setSavingProfile(true);
 
     const formData = new FormData();
     formData.append('full_name', fullName.trim());
+    formData.append('email', email.trim());
     formData.append('phone', phone ? phone.trim() : '');
 
     if (shouldRemovePhoto) {
@@ -143,6 +151,7 @@ export default function Profile({ user, onUserUpdated }) {
         }
 
         setFullName(updatedData.full_name || updatedData.name || '');
+        setEmail(updatedData.email || '');
         setPhone(updatedData.phone || '');
         setAvatarPreview(updatedData.avatar_url || updatedData.foto_profile || null);
         setAvatarFile(null);
@@ -382,20 +391,22 @@ export default function Profile({ user, onUserUpdated }) {
                 </span>
               </div>
 
-              {/* INPUT EMAIL (READONLY) */}
+              {/* INPUT EMAIL */}
               <div className="form-group" style={{ marginBottom: '16px' }}>
                 <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Mail size={15} style={{ color: 'var(--text-secondary)' }} /> Alamat Email
+                  <Mail size={15} style={{ color: 'var(--text-secondary)' }} /> Alamat Email <span style={{ color: 'var(--danger)' }}>*</span>
                 </label>
                 <input 
                   type="email" 
                   className="form-control" 
-                  value={user?.email || ''} 
-                  disabled 
-                  style={{ background: 'var(--surface-container-high)', cursor: 'not-allowed', color: 'var(--text-secondary)' }}
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  placeholder="Contoh: user@cams.com"
+                  required
+                  disabled={savingProfile}
                 />
                 <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  Email akun terdaftar permanen. Hubungi Administrator jika ingin mengubah email.
+                  Digunakan untuk login akun dan menerima notifikasi sistem.
                 </span>
               </div>
 
