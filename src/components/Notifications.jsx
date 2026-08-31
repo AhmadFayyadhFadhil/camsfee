@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Bell, Check, Info, AlertTriangle, AlertCircle, Clock } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, Info, AlertTriangle, AlertCircle, Clock } from 'lucide-react';
+import { useConfirm } from '../context/ConfirmContext.jsx';
 
 export default function Notifications({ unreadCount, setUnreadCount, fetchNotifications }) {
+  const confirm = useConfirm();
   const [notificationsList, setNotificationsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' or 'unread'
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'unread', or 'read'
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [counts, setCounts] = useState({ total: 0, unread: 0, read: 0 });
 
   const fetchHistory = async (pageNumber = 1, isAppend = false) => {
     setLoading(true);
+    setError(null);
     try {
-      const isReadParam = activeFilter === 'unread' ? '&is_read=false' : '';
+      let isReadParam = '';
+      if (activeFilter === 'unread') isReadParam = '&is_read=false';
+      if (activeFilter === 'read') isReadParam = '&is_read=true';
+
       const response = await api.get(`/notifications?page=${pageNumber}&per_page=15${isReadParam}`);
       if (response.success && response.data) {
         const fetchedData = response.data.data || response.data || [];
@@ -25,6 +34,15 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
           setNotificationsList(fetchedData);
         }
         
+        // Update counts from backend meta if available
+        if (meta.total_count !== undefined || meta.unread_count !== undefined) {
+          const total = meta.total_count ?? 0;
+          const unread = meta.unread_count ?? 0;
+          const read = meta.read_count ?? Math.max(0, total - unread);
+          setCounts({ total, unread, read });
+          if (setUnreadCount) setUnreadCount(unread);
+        }
+
         // Check if there are more pages
         const currentPage = meta.current_page || pageNumber;
         const lastPage = meta.last_page || 1;
@@ -42,17 +60,27 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
     fetchHistory(1, false);
   }, [activeFilter]);
 
+  useEffect(() => {
+    if (successMsg) {
+      const timer = setTimeout(() => setSuccessMsg(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg]);
+
+  // Mark single notification as read
   const handleMarkAsReadLocal = async (notifId) => {
     try {
       const response = await api.patch(`/notifications/${notifId}/read`);
       if (response.success) {
-        // Update local list
         setNotificationsList(prev => 
           prev.map(n => n.id === notifId ? { ...n, is_read: true } : n)
         );
-        // Update unread count
-        setUnreadCount(prev => Math.max(0, prev - 1));
-        // Refresh header bell notifications
+        setCounts(prev => ({
+          ...prev,
+          unread: Math.max(0, prev.unread - 1),
+          read: prev.read + 1
+        }));
+        if (setUnreadCount) setUnreadCount(prev => Math.max(0, prev - 1));
         if (fetchNotifications) fetchNotifications();
       }
     } catch (err) {
@@ -60,18 +88,98 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
     }
   };
 
+  // Mark all notifications as read
+  const handleMarkAllAsRead = async () => {
+    if (counts.unread === 0 && notificationsList.every(n => n.is_read)) return;
+    
+    setActionLoading(true);
+    try {
+      const response = await api.patch('/notifications/mark-all-read');
+      if (response.success) {
+        setNotificationsList(prev => prev.map(n => ({ ...n, is_read: true })));
+        setCounts(prev => ({
+          ...prev,
+          read: prev.total,
+          unread: 0
+        }));
+        if (setUnreadCount) setUnreadCount(0);
+        if (fetchNotifications) fetchNotifications();
+        setSuccessMsg('Semua notifikasi berhasil ditandai sebagai terbaca.');
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menandai semua notifikasi.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Delete single notification
+  const handleDeleteSingle = async (notifId) => {
+    try {
+      const notifItem = notificationsList.find(n => n.id === notifId);
+      const isUnread = notifItem && !notifItem.is_read;
+
+      const response = await api.delete(`/notifications/${notifId}`);
+      if (response.success) {
+        setNotificationsList(prev => prev.filter(n => n.id !== notifId));
+        setCounts(prev => ({
+          total: Math.max(0, prev.total - 1),
+          unread: isUnread ? Math.max(0, prev.unread - 1) : prev.unread,
+          read: !isUnread ? Math.max(0, prev.read - 1) : prev.read,
+        }));
+        if (isUnread && setUnreadCount) {
+          setUnreadCount(prev => Math.max(0, prev - 1));
+        }
+        if (fetchNotifications) fetchNotifications();
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus notifikasi.');
+    }
+  };
+
+  // Delete all notifications
+  const handleDeleteAll = async () => {
+    if (notificationsList.length === 0 && counts.total === 0) return;
+
+    const confirmed = await confirm({
+      title: 'Hapus Semua Notifikasi?',
+      message: 'Semua riwayat notifikasi Anda akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.',
+      confirmText: 'Ya, Hapus Semua',
+      cancelText: 'Batal',
+      type: 'danger'
+    });
+
+    if (!confirmed) return;
+
+    setActionLoading(true);
+    try {
+      const response = await api.delete('/notifications/delete-all');
+      if (response.success) {
+        setNotificationsList([]);
+        setCounts({ total: 0, unread: 0, read: 0 });
+        if (setUnreadCount) setUnreadCount(0);
+        if (fetchNotifications) fetchNotifications();
+        setSuccessMsg('Semua notifikasi berhasil dihapus.');
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus semua notifikasi.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getNotificationIcon = (title = '') => {
     const t = title.toLowerCase();
-    if (t.includes('penugasan') || t.includes('jadwal')) {
+    if (t.includes('penugasan') || t.includes('jadwal') || t.includes('tugas')) {
       return <Clock size={20} style={{ color: 'var(--primary)' }} />;
     }
-    if (t.includes('ditolak') || t.includes('perbaikan') || t.includes('kerusakan')) {
+    if (t.includes('ditolak') || t.includes('perbaikan') || t.includes('kerusakan') || t.includes('temuan')) {
       return <AlertTriangle size={20} style={{ color: 'var(--danger)' }} />;
     }
-    if (t.includes('disetujui') || t.includes('selesai') || t.includes('sukses')) {
+    if (t.includes('disetujui') || t.includes('selesai') || t.includes('sukses') || t.includes('terverifikasi')) {
       return <Check size={20} style={{ color: 'var(--success)' }} />;
     }
-    return <Info size={20} style={{ color: 'var(--secondary)' }} />;
+    return <Info size={20} style={{ color: 'var(--primary)' }} />;
   };
 
   const formatDateTime = (dateStr) => {
@@ -88,34 +196,199 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
 
   return (
     <div className="glass-panel" style={{ padding: '24px' }}>
+      {/* Header Title */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px', margin: 0, color: 'var(--primary)' }}>
           <Bell size={22} style={{ color: 'var(--primary)' }} />
           Pusat Notifikasi
         </h2>
-        
-        {/* Tab Filters */}
-        <div style={{ display: 'flex', gap: '8px' }}>
+      </div>
+
+      {/* Toolbar: Segment Filter & Action Buttons */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        flexWrap: 'wrap', 
+        gap: '12px', 
+        marginBottom: '22px',
+        padding: '8px 12px',
+        background: 'rgba(14, 49, 146, 0.03)',
+        borderRadius: 'var(--radius-xl)',
+        border: '1px solid rgba(14, 49, 146, 0.08)'
+      }}>
+        {/* Left: Filter Pills */}
+        <div style={{ display: 'inline-flex', gap: '6px', background: 'rgba(0,0,0,0.03)', padding: '4px', borderRadius: 'var(--radius-lg)' }}>
           <button 
-            className={`btn ${activeFilter === 'all' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+            className="btn btn-sm"
             onClick={() => setActiveFilter('all')}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: activeFilter === 'all' ? '#ffffff' : 'transparent',
+              color: activeFilter === 'all' ? 'var(--primary)' : 'var(--text-secondary)',
+              boxShadow: activeFilter === 'all' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
           >
-            Semua
+            <span>Semua</span>
+            <span style={{ 
+              background: activeFilter === 'all' ? 'rgba(14, 49, 146, 0.1)' : 'rgba(0,0,0,0.06)', 
+              color: activeFilter === 'all' ? 'var(--primary)' : 'var(--text-secondary)', 
+              padding: '1px 7px', 
+              borderRadius: '12px', 
+              fontSize: '0.72rem',
+              fontWeight: 700 
+            }}>
+              {counts.total}
+            </span>
           </button>
+
           <button 
-            className={`btn ${activeFilter === 'unread' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+            className="btn btn-sm"
             onClick={() => setActiveFilter('unread')}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: activeFilter === 'unread' ? '#ffffff' : 'transparent',
+              color: activeFilter === 'unread' ? 'var(--primary)' : 'var(--text-secondary)',
+              boxShadow: activeFilter === 'unread' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
           >
-            Belum Dibaca
-            {unreadCount > 0 && (
-              <span style={{ background: 'var(--danger)', color: 'var(--on-primary)', padding: '1px 5px', borderRadius: '10px', fontSize: '0.65rem' }}>
-                {unreadCount}
+            <span>Belum Dibaca</span>
+            {counts.unread > 0 ? (
+              <span style={{ 
+                background: 'var(--danger)', 
+                color: '#ffffff', 
+                padding: '1px 7px', 
+                borderRadius: '12px', 
+                fontSize: '0.72rem',
+                fontWeight: 700 
+              }}>
+                {counts.unread}
+              </span>
+            ) : (
+              <span style={{ 
+                background: activeFilter === 'unread' ? 'rgba(14, 49, 146, 0.1)' : 'rgba(0,0,0,0.06)', 
+                color: activeFilter === 'unread' ? 'var(--primary)' : 'var(--text-secondary)', 
+                padding: '1px 7px', 
+                borderRadius: '12px', 
+                fontSize: '0.72rem',
+                fontWeight: 700 
+              }}>
+                0
               </span>
             )}
           </button>
+
+          <button 
+            className="btn btn-sm"
+            onClick={() => setActiveFilter('read')}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: activeFilter === 'read' ? '#ffffff' : 'transparent',
+              color: activeFilter === 'read' ? 'var(--primary)' : 'var(--text-secondary)',
+              boxShadow: activeFilter === 'read' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span>Sudah Dibaca</span>
+            <span style={{ 
+              background: activeFilter === 'read' ? 'rgba(14, 49, 146, 0.1)' : 'rgba(0,0,0,0.06)', 
+              color: activeFilter === 'read' ? 'var(--primary)' : 'var(--text-secondary)', 
+              padding: '1px 7px', 
+              borderRadius: '12px', 
+              fontSize: '0.72rem',
+              fontWeight: 700 
+            }}>
+              {counts.read}
+            </span>
+          </button>
+        </div>
+
+        {/* Right: Actions Buttons */}
+        <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+          <button 
+            type="button"
+            className="btn btn-sm"
+            onClick={handleMarkAllAsRead}
+            disabled={actionLoading || counts.unread === 0}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              padding: '7px 14px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid rgba(14, 49, 146, 0.15)',
+              background: '#ffffff',
+              color: 'var(--primary)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+              cursor: counts.unread === 0 ? 'not-allowed' : 'pointer',
+              opacity: counts.unread === 0 ? 0.6 : 1
+            }}
+          >
+            <CheckCheck size={16} />
+            <span>Tandai Semua Dibaca</span>
+          </button>
+
+          <button 
+            type="button"
+            className="btn btn-sm"
+            onClick={handleDeleteAll}
+            disabled={actionLoading || (notificationsList.length === 0 && counts.total === 0)}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              padding: '7px 14px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              background: 'rgba(239, 68, 68, 0.06)',
+              color: 'var(--danger)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+              cursor: (notificationsList.length === 0 && counts.total === 0) ? 'not-allowed' : 'pointer',
+              opacity: (notificationsList.length === 0 && counts.total === 0) ? 0.6 : 1
+            }}
+          >
+            <Trash2 size={16} />
+            <span>Hapus Semua</span>
+          </button>
         </div>
       </div>
+
+      {successMsg && (
+        <div className="alert alert-success" style={{ marginBottom: '20px' }}>
+          <Check size={18} />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
@@ -131,46 +404,104 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
             key={n.id} 
             className="glass-panel"
             style={{ 
-              padding: '16px', 
+              padding: '16px 18px', 
               display: 'flex', 
-              gap: '16px', 
-              alignItems: 'flex-start',
-              borderLeft: n.is_read ? '3px solid transparent' : '3px solid var(--primary)',
-              background: n.is_read ? 'rgba(255, 255, 255, 0.02)' : 'rgba(14, 49, 146, 0.03)',
-              transition: 'all 0.2s ease',
-              borderRadius: 'var(--radius-md)'
+              gap: '14px', 
+              alignItems: 'center',
+              borderLeft: n.is_read ? '4px solid transparent' : '4px solid var(--primary)',
+              background: n.is_read ? '#ffffff' : 'rgba(14, 49, 146, 0.03)',
+              borderRadius: 'var(--radius-xl)',
+              border: n.is_read ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(14, 49, 146, 0.12)',
+              boxShadow: n.is_read ? 'none' : '0 2px 8px rgba(14, 49, 146, 0.04)',
+              transition: 'all 0.2s ease'
             }}
           >
-            <div style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: 'var(--radius-sm)' }}>
+            <div style={{ 
+              padding: '10px', 
+              background: n.is_read ? 'rgba(0,0,0,0.03)' : 'rgba(14, 49, 146, 0.08)', 
+              borderRadius: 'var(--radius-lg)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
               {getNotificationIcon(n.title)}
             </div>
             
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
-                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: n.is_read ? 600 : 700, color: 'var(--on-surface)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <h4 style={{ 
+                  margin: 0, 
+                  fontSize: '0.96rem', 
+                  fontWeight: n.is_read ? 600 : 750, 
+                  color: n.is_read ? 'var(--text-primary)' : 'var(--primary)' 
+                }}>
                   {n.title}
                 </h4>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={12} />
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={13} />
                   {formatDateTime(n.created_at)}
                 </span>
               </div>
-              <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              <p style={{ margin: '5px 0 0 0', fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                 {n.message}
               </p>
             </div>
 
-            {!n.is_read && (
+            {/* Per-Item Action Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
+              {!n.is_read ? (
+                <button 
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '5px',
+                    padding: '6px 12px', 
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    borderColor: 'var(--primary)',
+                    color: 'var(--primary)',
+                    background: '#ffffff',
+                    borderRadius: 'var(--radius-md)'
+                  }}
+                  onClick={() => handleMarkAsReadLocal(n.id)}
+                  title="Tandai notifikasi ini sudah dibaca"
+                >
+                  <Check size={14} />
+                  <span>Dibaca</span>
+                </button>
+              ) : (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, padding: '4px 8px' }}>
+                  ✓ Terbaca
+                </span>
+              )}
+
               <button 
-                className="btn btn-secondary btn-sm"
-                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                onClick={() => handleMarkAsReadLocal(n.id)}
-                title="Tandai sudah dibaca"
-                aria-label="Tandai sebagai dibaca"
+                type="button"
+                className="btn btn-sm"
+                style={{ 
+                  padding: '6px 8px', 
+                  color: 'var(--text-muted)',
+                  border: '1px solid transparent',
+                  background: 'transparent',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer'
+                }}
+                onClick={() => handleDeleteSingle(n.id)}
+                title="Hapus notifikasi ini"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'var(--danger)';
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                  e.currentTarget.style.background = 'transparent';
+                }}
               >
-                Dibaca
+                <Trash2 size={15} />
               </button>
-            )}
+            </div>
           </div>
         ))}
 
@@ -181,27 +512,28 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
         )}
 
         {!loading && notificationsList.length === 0 && (
-          <div className="glass-panel" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', borderRadius: 'var(--radius-md)' }}>
-            <Bell size={32} style={{ marginBottom: '12px', color: 'var(--text-muted)', opacity: 0.5 }} />
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>Tidak ada notifikasi yang ditemukan.</p>
+          <div className="glass-panel" style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)', borderRadius: 'var(--radius-xl)' }}>
+            <Bell size={36} style={{ marginBottom: '14px', color: 'var(--text-muted)', opacity: 0.4 }} />
+            <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500 }}>Tidak ada notifikasi pada kategori ini.</p>
           </div>
         )}
       </div>
 
       {/* Load More Button */}
       {hasMore && !loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
           <button 
             className="btn btn-secondary btn-sm"
             onClick={() => fetchHistory(page + 1, true)}
+            style={{ fontWeight: 600 }}
           >
-            Muat Lebih Banyak
+            Muat Lebih Banyak Notifikasi
           </button>
         </div>
       )}
       
       {hasMore && loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
           <div className="spinner" style={{ width: '20px', height: '20px' }}></div>
         </div>
       )}

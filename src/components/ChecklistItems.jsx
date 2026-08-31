@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Plus, Edit2, Trash2, Check, ShieldAlert } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, ShieldAlert, X } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 
 const FREQUENCIES = [
@@ -58,8 +58,8 @@ export default function ChecklistItems() {
     return Array.from(bMap.values());
   }, [rooms]);
 
-  const fetchItems = async () => {
-    setLoading(true);
+  const fetchItems = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const response = await api.get('/checklist-items?per_page=1000');
@@ -67,15 +67,15 @@ export default function ChecklistItems() {
         setItems(response.data.data || response.data || []);
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat item checklist.');
+      if (showLoading) setError(err.message || 'Gagal memuat item checklist.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   const fetchRooms = async () => {
     try {
-      const response = await api.get('/rooms?is_active=true&per_page=1000');
+      const response = await api.get('/rooms?is_active=true&per_page=1000', { lookup: true });
       if (response.success) {
         setRooms(response.data.data || response.data || []);
       }
@@ -86,7 +86,7 @@ export default function ChecklistItems() {
 
   const fetchAllShifts = async () => {
     try {
-      const response = await api.get('/shifts');
+      const response = await api.get('/shifts', { lookup: true });
       if (response.success) {
         const shifts = response.data.data || response.data || [];
         setAllShifts(shifts);
@@ -97,7 +97,7 @@ export default function ChecklistItems() {
   };
 
   useEffect(() => {
-    fetchItems();
+    fetchItems(true);
     fetchRooms();
     fetchAllShifts();
   }, []);
@@ -139,14 +139,19 @@ export default function ChecklistItems() {
       setSelectedShiftId('');
       return;
     }
-    const selectedRoom = rooms.find(r => r.id === selectedRoomId);
-    const buildingShifts = selectedRoom?.building?.shifts;
-    
-    if (buildingShifts && buildingShifts.length > 0) {
+
+    const room = rooms.find(r => r.id === selectedRoomId);
+    if (!room) {
+      setAvailableShifts([]);
+      setSelectedShiftId('');
+      return;
+    }
+
+    const buildingShifts = room.building?.shifts || [];
+    if (buildingShifts.length > 0) {
       setAvailableShifts(buildingShifts);
       setSelectedShiftId(buildingShifts[0]?.id || '');
     } else {
-      // Fallback: use all active shifts if building has none specifically assigned
       setAvailableShifts(allShifts);
       setSelectedShiftId(allShifts[0]?.id || '');
     }
@@ -156,19 +161,23 @@ export default function ChecklistItems() {
     setEditingItem(null);
     setNamaItem('');
     
+    // Auto-select first room from first building if available
     const firstBuilding = buildingsList[0];
     if (firstBuilding) {
       setSelectedKategoriBuildingId(firstBuilding.id);
       const firstRoomOfBuilding = rooms.find(r => r.building?.id === firstBuilding.id);
-      setKategori(firstRoomOfBuilding?.name || 'Lainnya');
+      setKategori(firstRoomOfBuilding ? firstRoomOfBuilding.name : (rooms[0]?.name || 'Lainnya'));
     } else {
-      setSelectedKategoriBuildingId('');
-      setKategori('Lainnya');
+      setSelectedKategoriBuildingId('Lainnya');
+      setKategori(rooms[0]?.name || 'Lainnya');
     }
-    
+
     setAssignDirectly(false);
-    setSelectedAssignBuildingId('');
-    setSelectedRoomId('');
+    setSelectedAssignBuildingId(firstBuilding ? firstBuilding.id : '');
+    setSelectedRoomId(rooms[0]?.id || '');
+    setFrequency('daily');
+    setDayOfWeek('Monday');
+    setDayOfMonth('1');
     setShowForm(true);
   };
 
@@ -176,6 +185,7 @@ export default function ChecklistItems() {
     setEditingItem(item);
     setNamaItem(item.nama_item);
     
+    // Detect which building this category belongs to
     const matchingRoom = rooms.find(r => r.name === item.kategori);
     if (matchingRoom && matchingRoom.building) {
       setSelectedKategoriBuildingId(matchingRoom.building.id);
@@ -213,6 +223,14 @@ export default function ChecklistItems() {
         const createdItem = response.data?.data || response.data;
         const itemId = createdItem?.id;
 
+        if (createdItem && itemId) {
+          if (editingItem) {
+            setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, ...createdItem } : i));
+          } else {
+            setItems(prev => [createdItem, ...prev]);
+          }
+        }
+
         // Automatically assign checklist item to the room via a schedule if checked
         if (assignDirectly && itemId && !editingItem) {
           const frequencyMap = {
@@ -240,7 +258,8 @@ export default function ChecklistItems() {
 
         setSuccessMsg(editingItem ? 'Item checklist berhasil diperbarui.' : 'Item checklist baru berhasil ditambahkan.');
         setShowForm(false);
-        fetchItems();
+        setEditingItem(null);
+        fetchItems(false);
       }
     } catch (err) {
       if (err.errors) {
@@ -266,8 +285,9 @@ export default function ChecklistItems() {
     try {
       const response = await api.delete(`/checklist-items/${id}`);
       if (response.success) {
-        setSuccessMsg('Item checklist berhasil dihapus sepenuhnya beserta seluruh data terkait.');
-        fetchItems();
+        setItems(prev => prev.filter(i => i.id !== id));
+        setSuccessMsg('Item checklist berhasil dihapus sepenuhnya.');
+        fetchItems(false);
       }
     } catch (err) {
       setError(err.message || 'Gagal menghapus item checklist.');
@@ -302,207 +322,235 @@ export default function ChecklistItems() {
         </div>
       )}
 
-      {/* CREATE/EDIT FORM */}
+      {/* CREATE/EDIT FORM (Floating Pop-up) */}
       {showForm && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>
-            {editingItem ? 'Edit Item Checklist' : 'Tambah Item Checklist Baru'}
-          </h2>
-          <form onSubmit={handleSave}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Nama Item Checklist</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value={namaItem} 
-                  onChange={(e) => setNamaItem(e.target.value)} 
-                  placeholder="Contoh: Bersihkan bak sampah & ganti plastik"
-                  required 
-                />
+        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
+          <div 
+            className="glass-panel" 
+            style={{ maxWidth: '680px', width: '92vw', maxHeight: '88vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {editingItem ? 'Edit Data Item' : 'Tambah Item Checklist'}
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px' }}>
+                  {editingItem ? 'Edit Item Checklist' : 'Tambah Item Checklist Baru'}
+                </h2>
               </div>
-              
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Pilih Gedung</label>
-                <select
-                  className="form-control form-select"
-                  value={selectedKategoriBuildingId}
-                  onChange={(e) => {
-                    const bId = e.target.value;
-                    setSelectedKategoriBuildingId(bId);
-                    if (bId === 'Lainnya') {
-                      setKategori('Lainnya');
-                    } else {
-                      const firstRoomOfB = rooms.find(r => r.building?.id === bId);
-                      setKategori(firstRoomOfB?.name || '');
-                    }
-                  }}
-                  required
-                >
-                  <option value="" disabled>Pilih Gedung</option>
-                  {buildingsList.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                  <option value="Lainnya">Lainnya / Umum</option>
-                </select>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Kategori (Ruangan)</label>
-                <select 
-                  className="form-control form-select"
-                  value={kategori}
-                  onChange={(e) => setKategori(e.target.value)}
-                  required
-                  disabled={selectedKategoriBuildingId === 'Lainnya'}
-                >
-                  <option value="" disabled>Pilih Ruangan</option>
-                  {selectedKategoriBuildingId === 'Lainnya' ? (
-                    <option value="Lainnya">Lainnya / Umum</option>
-                  ) : (
-                    rooms
-                      .filter(r => r.building?.id === selectedKategoriBuildingId)
-                      .map(r => (
-                        <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
-                      ))
-                  )}
-                  {selectedKategoriBuildingId === 'Lainnya' && kategori && kategori !== 'Lainnya' && (
-                    <option value={kategori}>{kategori}</option>
-                  )}
-                </select>
-              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setShowForm(false)}
+                title="Tutup formulir"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            {/* DIRECT ROOM ASSIGNMENT SECTION (Only for New Items) */}
-            {!editingItem && (
-              <div style={{ marginTop: '10px', marginBottom: '20px', borderTop: '1px dashed var(--border-color)', paddingTop: '15px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
+            <form onSubmit={handleSave}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Nama Item Checklist Kebersihan *</label>
                   <input 
-                    type="checkbox" 
-                    checked={assignDirectly} 
-                    onChange={(e) => setAssignDirectly(e.target.checked)} 
-                    style={{ width: '16px', height: '16px' }}
+                    type="text" 
+                    className="form-control" 
+                    value={namaItem} 
+                    onChange={(e) => setNamaItem(e.target.value)} 
+                    placeholder="Contoh: Bersihkan bak sampah & ganti plastik, Pel lantai koridor"
+                    required 
                   />
-                  <span>Tugaskan langsung ke ruangan (Buat Jadwal Master)</span>
-                </label>
+                </div>
+                
+                <div className="grid-2-cols" style={{ gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Gedung Penempatan *</label>
+                    <select
+                      className="form-control form-select"
+                      value={selectedKategoriBuildingId}
+                      onChange={(e) => {
+                        const bId = e.target.value;
+                        setSelectedKategoriBuildingId(bId);
+                        if (bId === 'Lainnya') {
+                          setKategori('Lainnya');
+                        } else {
+                          const firstRoomOfB = rooms.find(r => r.building?.id === bId);
+                          setKategori(firstRoomOfB?.name || '');
+                        }
+                      }}
+                      required
+                    >
+                      <option value="" disabled>Pilih Gedung</option>
+                      {buildingsList.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                      <option value="Lainnya">Lainnya / Umum</option>
+                    </select>
+                  </div>
 
-                {assignDirectly && (
-                  <div className="glass-panel" style={{ marginTop: '12px', padding: '16px', background: 'rgba(0,0,0,0.02)' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '15px' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Pilih Gedung</label>
-                        <select 
-                          className="form-control form-select"
-                          value={selectedAssignBuildingId}
-                          onChange={(e) => {
-                            setSelectedAssignBuildingId(e.target.value);
-                            setSelectedRoomId('');
-                          }}
-                          required={assignDirectly}
-                        >
-                          <option value="" disabled>Pilih Gedung</option>
-                          {buildingsList.map(b => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Kategori Ruangan *</label>
+                    <select 
+                      className="form-control form-select"
+                      value={kategori}
+                      onChange={(e) => setKategori(e.target.value)}
+                      required
+                      disabled={selectedKategoriBuildingId === 'Lainnya'}
+                    >
+                      <option value="" disabled>Pilih Ruangan</option>
+                      {selectedKategoriBuildingId === 'Lainnya' ? (
+                        <option value="Lainnya">Lainnya / Umum</option>
+                      ) : (
+                        rooms
+                          .filter(r => r.building?.id === selectedKategoriBuildingId)
+                          .map(r => (
+                            <option key={r.id} value={r.name}>{r.name} ({r.code})</option>
+                          ))
+                      )}
+                      {selectedKategoriBuildingId === 'Lainnya' && kategori && kategori !== 'Lainnya' && (
+                        <option value={kategori}>{kategori}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
 
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Pilih Ruangan</label>
-                        <select 
-                          className="form-control form-select"
-                          value={selectedRoomId}
-                          onChange={(e) => setSelectedRoomId(e.target.value)}
-                          required={assignDirectly}
-                          disabled={!selectedAssignBuildingId}
-                        >
-                          <option value="" disabled>{selectedAssignBuildingId ? 'Pilih Ruangan' : 'Pilih gedung terlebih dahulu'}</option>
-                          {rooms
-                            .filter(r => r.building?.id === selectedAssignBuildingId)
-                            .map(r => (
-                              <option key={r.id} value={r.id}>{r.name} ({r.code})</option>
-                            ))}
-                        </select>
-                      </div>
+                {/* DIRECT ROOM ASSIGNMENT SECTION (Only for New Items) */}
+                {!editingItem && (
+                  <div style={{ marginTop: '6px', background: 'rgba(14, 49, 146, 0.02)', border: '1px solid rgba(14, 49, 146, 0.1)', padding: '16px', borderRadius: 'var(--radius-xl)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 700, color: 'var(--primary)' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={assignDirectly} 
+                        onChange={(e) => setAssignDirectly(e.target.checked)} 
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
+                      />
+                      <span>Tugaskan langsung ke ruangan (Buat Jadwal Rutin)</span>
+                    </label>
 
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Pilih Shift Kerja</label>
-                        <select 
-                          className="form-control form-select"
-                          value={selectedShiftId}
-                          onChange={(e) => setSelectedShiftId(e.target.value)}
-                          required={assignDirectly}
-                          disabled={!selectedRoomId || availableShifts.length === 0}
-                        >
-                          {!selectedRoomId ? (
-                            <option value="">Pilih ruangan terlebih dahulu</option>
-                          ) : availableShifts.length === 0 ? (
-                            <option value="">Tidak ada shift tersedia</option>
-                          ) : (
-                            availableShifts.map(s => (
-                              <option key={s.id} value={s.id}>{s.name} ({s.start_time.substring(0,5)} - {s.end_time.substring(0,5)})</option>
-                            ))
+                    {assignDirectly && (
+                      <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div className="grid-3-cols" style={{ gap: '10px' }}>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>Gedung</label>
+                            <select 
+                              className="form-control form-select"
+                              value={selectedAssignBuildingId}
+                              onChange={(e) => {
+                                setSelectedAssignBuildingId(e.target.value);
+                                setSelectedRoomId('');
+                              }}
+                              required={assignDirectly}
+                            >
+                              <option value="" disabled>Pilih Gedung</option>
+                              {buildingsList.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>Ruangan</label>
+                            <select 
+                              className="form-control form-select"
+                              value={selectedRoomId}
+                              onChange={(e) => setSelectedRoomId(e.target.value)}
+                              required={assignDirectly}
+                              disabled={!selectedAssignBuildingId}
+                            >
+                              <option value="" disabled>{selectedAssignBuildingId ? 'Pilih Ruangan' : 'Pilih gedung dulu'}</option>
+                              {rooms
+                                .filter(r => r.building?.id === selectedAssignBuildingId)
+                                .map(r => (
+                                  <option key={r.id} value={r.id}>{r.name} ({r.code})</option>
+                                ))}
+                            </select>
+                          </div>
+
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>Shift Kerja</label>
+                            <select 
+                              className="form-control form-select"
+                              value={selectedShiftId}
+                              onChange={(e) => setSelectedShiftId(e.target.value)}
+                              required={assignDirectly}
+                              disabled={!selectedRoomId || availableShifts.length === 0}
+                            >
+                              {!selectedRoomId ? (
+                                <option value="">Pilih ruangan dulu</option>
+                              ) : availableShifts.length === 0 ? (
+                                <option value="">Tidak ada shift</option>
+                              ) : (
+                                availableShifts.map(s => (
+                                  <option key={s.id} value={s.id}>{s.name} ({s.start_time.substring(0,5)} - {s.end_time.substring(0,5)})</option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid-2-cols" style={{ gap: '10px' }}>
+                          <div className="form-group" style={{ margin: 0 }}>
+                            <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>Frekuensi Pengerjaan</label>
+                            <select 
+                              className="form-control form-select"
+                              value={frequency}
+                              onChange={(e) => setFrequency(e.target.value)}
+                              required={assignDirectly}
+                            >
+                              {FREQUENCIES.map(f => (
+                                <option key={f.value} value={f.value}>{f.label}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {frequency === 'weekly' && (
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>Hari Kerja</label>
+                              <select 
+                                className="form-control form-select"
+                                value={dayOfWeek}
+                                onChange={(e) => setDayOfWeek(e.target.value)}
+                                required={assignDirectly}
+                              >
+                                {DAYS_OF_WEEK.map(d => (
+                                  <option key={d.value} value={d.value}>{d.label}</option>
+                                ))}
+                              </select>
+                            </div>
                           )}
-                        </select>
-                      </div>
-                    </div>
 
-                    <div className="grid-2-cols" style={{ gap: '15px' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">Frekuensi</label>
-                        <select 
-                          className="form-control form-select"
-                          value={frequency}
-                          onChange={(e) => setFrequency(e.target.value)}
-                          required={assignDirectly}
-                        >
-                          {FREQUENCIES.map(f => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {frequency === 'weekly' && (
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">Hari Kerja</label>
-                          <select 
-                            className="form-control form-select"
-                            value={dayOfWeek}
-                            onChange={(e) => setDayOfWeek(e.target.value)}
-                            required={assignDirectly}
-                          >
-                            {DAYS_OF_WEEK.map(d => (
-                              <option key={d.value} value={d.value}>{d.label}</option>
-                            ))}
-                          </select>
+                          {frequency === 'monthly' && (
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem' }}>Tanggal Bulanan (1-31)</label>
+                              <input 
+                                type="number" 
+                                className="form-control" 
+                                value={dayOfMonth}
+                                onChange={(e) => setDayOfMonth(e.target.value)}
+                                min="1"
+                                max="31"
+                                required={assignDirectly}
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
-
-                      {frequency === 'monthly' && (
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">Tanggal Bulanan (1-31)</label>
-                          <input 
-                            type="number" 
-                            className="form-control" 
-                            value={dayOfMonth}
-                            onChange={(e) => setDayOfMonth(e.target.value)}
-                            min="1"
-                            max="31"
-                            required={assignDirectly}
-                          />
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="submit" className="btn btn-primary" disabled={assignDirectly && (!selectedRoomId || !selectedShiftId)}>Simpan</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-            </div>
-          </form>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={assignDirectly && (!selectedRoomId || !selectedShiftId)} style={{ fontWeight: 700 }}>
+                  ✓ Simpan Item Checklist
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

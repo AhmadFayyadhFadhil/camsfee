@@ -1,12 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../utils/api';
-import { ClipboardCheck, QrCode, FileText, Check, AlertTriangle, Play, HelpCircle, Image as ImageIcon } from 'lucide-react';
+import { 
+  ClipboardCheck, 
+  QrCode, 
+  FileText, 
+  Check, 
+  AlertTriangle, 
+  Play, 
+  HelpCircle, 
+  Image as ImageIcon, 
+  Zap, 
+  Sparkles, 
+  FlaskConical, 
+  Camera, 
+  RefreshCw,
+  Search,
+  Filter,
+  X,
+  Building2,
+  RotateCcw
+} from 'lucide-react';
+import { compressImage } from '../utils/imageCompressor';
 
-export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount }) {
+export default function CsTasks({ 
+  scannedTaskData, 
+  setScannedTaskData, 
+  openScanModalOnMount, 
+  setOpenScanModalOnMount, 
+  onOpenAdhocTasks, 
+  onNavigateDashboard 
+}) {
   const [tasks, setTasks] = useState([]);
+  const [availableMaterials, setAvailableMaterials] = useState([]);
+  const [selectedMaterials, setSelectedMaterials] = useState([]);
+  const [adhocCount, setAdhocCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
+
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterBuilding, setFilterBuilding] = useState('all');
+  const [filterShift, setFilterShift] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   // Active Task filling state
   const [activeTask, setActiveTask] = useState(null); // The task currently being filled
@@ -14,6 +50,8 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
   const [checklistResults, setChecklistResults] = useState({}); // { [itemId]: { status: true, notes: '' } }
   const [barcodePhoto, setBarcodePhoto] = useState(null);
   const [barcodePhotoName, setBarcodePhotoName] = useState('');
+  const [fotoBeforeFiles, setFotoBeforeFiles] = useState([null, null, null, null]);
+  const [fotoBeforePreviews, setFotoBeforePreviews] = useState([null, null, null, null]);
   const [fotoAfterFiles, setFotoAfterFiles] = useState([null, null, null, null]);
   const [fotoAfterPreviews, setFotoAfterPreviews] = useState([null, null, null, null]);
   const [gpsState, setGpsState] = useState({
@@ -149,9 +187,14 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     ctx.textAlign = 'left';
     
     return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        resolve(blob);
-      }, 'image/jpeg', 0.8);
+      canvas.toBlob(async (blob) => {
+        try {
+          const compressed = await compressImage(blob, 1600, 1000 * 1024);
+          resolve(compressed || blob);
+        } catch (e) {
+          resolve(blob);
+        }
+      }, 'image/jpeg', 0.85);
     });
   };
 
@@ -341,140 +384,73 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     }
   }, [error]);
 
-  const handleStartScanning = async () => {
-    setError(null);
-    setSuccessMsg(null);
-    try {
-      const readerElement = document.getElementById("qr-reader");
-      if (!readerElement) {
-        throw new Error("Scanner container not found in DOM.");
+  // Terima dan buka task otomatis yang baru saja dipindai dari Dashboard
+  useEffect(() => {
+    if (scannedTaskData) {
+      const { task, checklist_items, barcodePhoto, barcodePhotoName } = scannedTaskData;
+      setActiveTask(task);
+      const items = (checklist_items || []).map(item => ({
+        ...item,
+        name: item.name || item.nama_item || ''
+      }));
+      setChecklistItems(items);
+
+      const initialResults = {};
+      items.forEach(item => {
+        initialResults[item.id] = {
+          status: false,
+          notes: ''
+        };
+      });
+      setChecklistResults(initialResults);
+
+      if (barcodePhoto) {
+        setBarcodePhoto(barcodePhoto);
       }
+      if (barcodePhotoName) {
+        setBarcodePhotoName(barcodePhotoName);
+      }
+      setFotoAfterFiles([null, null, null, null]);
+      setFotoAfterPreviews([null, null, null, null]);
 
-      // Dynamic import to reduce initial JS payload
-      const { Html5Qrcode } = await import('html5-qrcode');
+      setSuccessMsg(`Memuat lembar checklist kebersihan untuk ${task?.room?.name || 'ruangan'}. Silakan isi checklist.`);
 
-      const qrCode = new Html5Qrcode("qr-reader");
-      setHtml5QrCodeInstance(qrCode);
-      setScannerActive(true);
-
-      await qrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.7;
-            return { width: size, height: size };
-          }
-        },
-        async (decodedText) => {
-          try {
-            let qrData;
-            try {
-              qrData = JSON.parse(decodedText);
-            } catch (jsonErr) {
-              throw new Error("QR Code tidak valid. Pastikan Anda melakukan scan pada QR Code CAMS yang tepat.");
-            }
-
-            const { room_id, token } = qrData;
-            if (!room_id || !token) {
-              throw new Error("Format data QR Code CAMS tidak lengkap.");
-            }
-
-            const foundTask = tasks.find(t => 
-              (t.room_id === room_id || t.room?.id === room_id) && 
-              ['pending', 'in_progress', 'rejected'].includes(t.status)
-            );
-
-            let capturedBlob = null;
-            try {
-              const videoElement = readerElement.querySelector("video");
-              if (videoElement) {
-                const canvas = document.createElement("canvas");
-                canvas.width = videoElement.videoWidth;
-                canvas.height = videoElement.videoHeight;
-                const ctx = canvas.getContext("2d");
-                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-                capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
-              }
-            } catch (capErr) {
-              console.error("Failed to capture video frame:", capErr);
-            }
-
-            if (!capturedBlob) {
-              capturedBlob = await generateMockImage('barcode', foundTask?.room?.code || 'ROOM');
-            }
-
-            const payload = {
-              room_id: room_id,
-              qr_code_token: token,
-              task_id: foundTask?.id || scanningTask?.id || null
-            };
-
-            const response = await api.post('/submissions/scan', payload);
-            if (response.success) {
-              setSuccessMsg(`Berhasil melakukan scan QR Ruangan: ${response.data.task?.room?.name || foundTask?.room?.name || 'Ruangan'}. Status tugas berubah menjadi Sedang Dikerjakan.`);
-              setError(null);
-
-              const items = (response.data.checklist_items || []).map(item => ({
-                ...item,
-                name: item.name || item.nama_item || ''
-              }));
-              setChecklistItems(items);
-
-              const initialResults = {};
-              items.forEach(item => {
-                initialResults[item.id] = {
-                  status: false,
-                  notes: ''
-                };
-              });
-              setChecklistResults(initialResults);
-
-              setBarcodePhoto(capturedBlob);
-              setBarcodePhotoName(`scanned-barcode-${(response.data.task?.id || foundTask?.id || '').substring(0,8)}.jpg`);
-              setFotoAfterFiles([null, null, null, null]);
-              setFotoAfterPreviews([null, null, null, null]);
-
-              // Hentikan scanner, tutup modal, dan aktifkan form checklist
-              await stopScanner();
-              setShowScanner(false);
-              setScanningTask(null);
-              setActiveTask(response.data.task || foundTask || scanningTask);
-            }
-          } catch (err) {
-            console.error('Error during QR decode callback:', err);
-            setError(err.message || 'Gagal memproses QR Code.');
-            await stopScanner();
-            setShowScanner(false);
-          }
-        },
-        (errorMessage) => {
-          // silent failure on frame scanner missed
-        }
-      );
-    } catch (err) {
-      setError(err.message || 'Gagal membuka akses kamera. Pastikan memberikan izin akses kamera.');
-      setScannerActive(false);
+      if (setScannedTaskData) {
+        setScannedTaskData(null);
+      }
     }
-  };
+  }, [scannedTaskData]);
 
-  const fetchMyTasks = async () => {
-    setLoading(true);
+  const fetchMyTasks = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/tasks/my-tasks');
-      if (response.success) {
-        setTasks(response.data.data || response.data || []);
+      const [tasksRes, matRes, adhocRes] = await Promise.all([
+        api.get('/tasks/my-tasks'),
+        api.get('/cleaning-materials?is_active=true&per_page=100', { lookup: true }),
+        api.get('/adhoc-tasks?per_page=20', { cache: true })
+      ]);
+
+      if (tasksRes.success) {
+        setTasks(tasksRes.data.data || tasksRes.data || []);
+      }
+      if (matRes.success) {
+        setAvailableMaterials(matRes.data.data || matRes.data || []);
+      }
+      if (adhocRes.success) {
+        const adhocList = adhocRes.data.data || adhocRes.data || [];
+        const pendingOrActive = adhocList.filter(a => ['pending', 'in_progress', 'rejected'].includes(a.status));
+        setAdhocCount(pendingOrActive.length);
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat tugas harian Anda.');
+      if (showLoading) setError(err.message || 'Gagal memuat tugas harian Anda.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMyTasks();
+    fetchMyTasks(true);
   }, []);
 
   useEffect(() => {
@@ -576,6 +552,54 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     }
   };
 
+  // Mulai pengerjaan tugas langsung tanpa harus scan QR terlebih dahulu
+  const handleStartTask = async (task) => {
+    if (!task) return;
+    setError(null);
+    setSuccessMsg(null);
+    setLoading(true);
+    try {
+      const payload = {
+        room_id: task.room_id || task.room?.id,
+        qr_code_token: task.room?.qr_code_token || null,
+        task_id: task.id
+      };
+
+      const response = await api.post('/submissions/scan', payload);
+      if (response.success) {
+        setSuccessMsg(`Memulai pengerjaan ruangan: ${task.room?.name || 'Ruangan'}. Silakan periksa item checklist dan ambil 4 foto bukti.`);
+        setError(null);
+        
+        const items = (response.data.checklist_items || []).map(item => ({
+          ...item,
+          name: item.name || item.nama_item || ''
+        }));
+        setChecklistItems(items);
+        
+        const initialResults = {};
+        items.forEach(item => {
+          initialResults[item.id] = {
+            status: false,
+            notes: ''
+          };
+        });
+        setChecklistResults(initialResults);
+        
+        setBarcodePhoto(null);
+        setBarcodePhotoName('');
+        setFotoAfterFiles([null, null, null, null]);
+        setFotoAfterPreviews([null, null, null, null]);
+        
+        setActiveTask(response.data.task || task);
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal memulai pengerjaan tugas.');
+      setSuccessMsg(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Resume an already in progress task (if CS refreshed the browser)
   const handleResumeTask = async (task) => {
     setError(null);
@@ -584,7 +608,7 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     try {
       const payload = {
         room_id: task.room_id || task.room?.id,
-        qr_code_token: task.room?.qr_code_token,
+        qr_code_token: task.room?.qr_code_token || null,
         task_id: task.id
       };
 
@@ -615,6 +639,264 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     } finally {
       setLoading(false);
     }
+  };
+
+  // Unique Buildings from tasks data
+  const uniqueBuildings = useMemo(() => {
+    const map = new Map();
+    tasks.forEach(t => {
+      if (t.room?.building) {
+        map.set(t.room.building.id || t.room.building.name, t.room.building);
+      }
+    });
+    return Array.from(map.values());
+  }, [tasks]);
+
+  // Unique Shifts from tasks data
+  const uniqueShifts = useMemo(() => {
+    const map = new Map();
+    tasks.forEach(t => {
+      if (t.shift) {
+        map.set(t.shift.id || t.shift.name, t.shift);
+      }
+    });
+    return Array.from(map.values());
+  }, [tasks]);
+
+  // Filtered Tasks
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(t => {
+      // 1. Text Search (Room name or Room code or Building name)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const roomName = (t.room?.name || '').toLowerCase();
+        const roomCode = (t.room?.code || '').toLowerCase();
+        const bName = (t.room?.building?.name || '').toLowerCase();
+        if (!roomName.includes(q) && !roomCode.includes(q) && !bName.includes(q)) {
+          return false;
+        }
+      }
+
+      // 2. Building Filter
+      if (filterBuilding !== 'all') {
+        const bId = t.room?.building?.id || t.room?.building?.name;
+        if (bId !== filterBuilding) {
+          return false;
+        }
+      }
+
+      // 3. Shift Filter
+      if (filterShift !== 'all') {
+        const sId = t.shift?.id || t.shift?.name;
+        if (sId !== filterShift) {
+          return false;
+        }
+      }
+
+      // 4. Status Filter
+      if (filterStatus !== 'all') {
+        if (t.status !== filterStatus) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [tasks, searchQuery, filterBuilding, filterShift, filterStatus]);
+
+  // Status Summary Counts
+  const statusCounts = useMemo(() => {
+    return {
+      all: tasks.length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      in_progress: tasks.filter(t => t.status === 'in_progress').length,
+      waiting_verification: tasks.filter(t => t.status === 'waiting_verification').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      overdue: tasks.filter(t => t.status === 'overdue').length,
+      rejected: tasks.filter(t => t.status === 'rejected').length,
+    };
+  }, [tasks]);
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setFilterBuilding('all');
+    setFilterShift('all');
+    setFilterStatus('all');
+  };
+
+  const currentUser = api.getUser();
+
+  const renderStatusBadge = (t) => {
+    const isMyTask = t.cs_user_id && currentUser?.id && t.cs_user_id === currentUser.id;
+    const workerName = t.cs_name || 'Rekan CS';
+
+    if (t.status === 'completed') {
+      return (
+        <span className="status-badge status-completed">
+          Selesai {isMyTask ? '(Saya)' : `(oleh ${workerName})`}
+        </span>
+      );
+    }
+    if (t.status === 'in_progress') {
+      return (
+        <span className="status-badge status-in_progress">
+          Sedang Dikerjakan {isMyTask ? '(Saya)' : `(oleh ${workerName})`}
+        </span>
+      );
+    }
+    if (t.status === 'waiting_verification') {
+      return (
+        <span className="status-badge status-waiting_verification">
+          Menunggu Verifikasi {isMyTask ? '(Saya)' : `(oleh ${workerName})`}
+        </span>
+      );
+    }
+    if (t.status === 'rejected') {
+      return (
+        <span className="status-badge status-rejected">
+          Ditolak {isMyTask ? '(Revisi Saya)' : `(Revisi ${workerName})`}
+        </span>
+      );
+    }
+    if (t.status === 'overdue') {
+      return <span className="status-badge status-overdue">Terlambat</span>;
+    }
+    return <span className="status-badge status-pending">Belum Dimulai</span>;
+  };
+
+  const renderActionColumn = (t, isMobile = false) => {
+    const isMyTask = t.cs_user_id && currentUser?.id && t.cs_user_id === currentUser.id;
+    const workerName = t.cs_name || 'Rekan CS';
+
+    if (t.status === 'pending') {
+      if (isMobile) {
+        return (
+          <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+            <button 
+              className="btn btn-primary"
+              onClick={() => handleStartTask(t)}
+              style={{ flex: 1, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              Mulai Kerjakan
+            </button>
+            <button 
+              className="btn btn-secondary btn-sm"
+              onClick={onNavigateDashboard}
+              style={{ padding: '8px 10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              title="Pindai QR"
+            >
+              Scan
+            </button>
+          </div>
+        );
+      }
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button 
+            className="btn btn-primary btn-sm"
+            onClick={() => handleStartTask(t)}
+            style={{ display: 'inline-flex', alignItems: 'center', fontWeight: 700 }}
+            title="Mulai pengerjaan tugas ruangan ini"
+          >
+            Mulai Kerjakan
+          </button>
+          <button 
+            className="btn btn-secondary btn-sm"
+            onClick={onNavigateDashboard}
+            style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 8px' }}
+            title="Opsi Pindai QR di Dashboard"
+          >
+            Scan
+          </button>
+        </div>
+      );
+    }
+
+    if (t.status === 'in_progress') {
+      if (isMyTask) {
+        return (
+          <button 
+            className={`btn btn-warning ${isMobile ? '' : 'btn-sm'}`}
+            onClick={() => handleResumeTask(t)}
+            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 700 }}
+            title="Lanjutkan pengisian form checklist"
+          >
+            Lanjutkan Isi
+          </button>
+        );
+      }
+      return (
+        <span style={{ 
+          fontSize: '0.82rem', 
+          color: 'var(--on-surface-variant)', 
+          background: 'var(--surface-container-high)', 
+          padding: '6px 12px', 
+          borderRadius: 'var(--radius-md)', 
+          fontWeight: 600,
+          display: 'inline-block'
+        }}>
+          Dikerjakan {workerName}
+        </span>
+      );
+    }
+
+    if (t.status === 'waiting_verification') {
+      return (
+        <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 600 }}>
+          Menunggu PIC
+        </span>
+      );
+    }
+
+    if (t.status === 'completed') {
+      return (
+        <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 700 }}>
+          Selesai
+        </span>
+      );
+    }
+
+    if (t.status === 'rejected') {
+      if (isMyTask) {
+        return (
+          <button 
+            className={`btn btn-warning ${isMobile ? '' : 'btn-sm'}`}
+            onClick={() => handleStartTask(t)}
+            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 700 }}
+            title="Kerjakan ulang tugas yang ditolak"
+          >
+            Kerjakan Ulang
+          </button>
+        );
+      }
+      return (
+        <span style={{ 
+          fontSize: '0.82rem', 
+          color: '#991b1b', 
+          background: '#fee2e2', 
+          padding: '6px 12px', 
+          borderRadius: 'var(--radius-md)', 
+          fontWeight: 600 
+        }}>
+          Revisi {workerName}
+        </span>
+      );
+    }
+
+    if (t.status === 'overdue') {
+      return (
+        <button 
+          className={`btn btn-danger ${isMobile ? '' : 'btn-sm'}`}
+          onClick={() => handleStartTask(t)}
+          style={{ width: isMobile ? '100%' : 'auto', fontWeight: 700 }}
+          title="Mulai pengerjaan tugas yang terlambat"
+        >
+          Mulai (Terlambat)
+        </button>
+      );
+    }
+
+    return null;
   };
 
   // Helper: Generates a mock PNG Blob using HTML5 Canvas
@@ -758,6 +1040,11 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     }
 
     try {
+      // Pastikan seluruh 4 foto terkompresi di bawah 1MB
+      const compressedPhotos = await Promise.all(
+        fotoAfterFiles.map(f => compressImage(f, 1600, 1000 * 1024))
+      );
+
       const formData = new FormData();
       formData.append('task_id', activeTask.id);
       if (submissionNotes) {
@@ -778,20 +1065,28 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
         }
       });
 
-      formData.append('foto_after_1', fotoAfterFiles[0], `after-1-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after_2', fotoAfterFiles[1], `after-2-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after_3', fotoAfterFiles[2], `after-3-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after_4', fotoAfterFiles[3], `after-4-${activeTask.id.substring(0, 8)}.jpg`);
+      // Lampirkan bahan pembersih / alat yang dipilih
+      selectedMaterials.forEach((matId, index) => {
+        formData.append(`material_ids[${index}]`, matId);
+      });
+
+      formData.append('foto_after_1', compressedPhotos[0] || fotoAfterFiles[0], `after-1-${activeTask.id.substring(0, 8)}.jpg`);
+      formData.append('foto_after_2', compressedPhotos[1] || fotoAfterFiles[1], `after-2-${activeTask.id.substring(0, 8)}.jpg`);
+      formData.append('foto_after_3', compressedPhotos[2] || fotoAfterFiles[2], `after-3-${activeTask.id.substring(0, 8)}.jpg`);
+      formData.append('foto_after_4', compressedPhotos[3] || fotoAfterFiles[3], `after-4-${activeTask.id.substring(0, 8)}.jpg`);
 
       const response = await api.post('/submissions', formData);
       if (response.success) {
+        const activeId = activeTask.id;
+        setTasks(prev => prev.map(t => (t.id === activeId ? { ...t, status: 'waiting_verification' } : t)));
         setSuccessMsg('Laporan kebersihan ruangan berhasil dikirim! Menunggu verifikasi dari PIC.');
         setActiveTask(null);
         setChecklistItems([]);
+        setSelectedMaterials([]);
         setSubmissionNotes('');
         setFotoAfterFiles([null, null, null, null]);
         setFotoAfterPreviews([null, null, null, null]);
-        fetchMyTasks();
+        fetchMyTasks(false);
       }
     } catch (err) {
       if (err.errors) {
@@ -808,20 +1103,245 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
     <div>
       <div className="flex-header">
         <div>
-          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Tugas Saya</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Melihat jadwal tugas pembersihan, scan QR Code, dan laporkan pekerjaan</p>
+          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Tugas Harian Saya</h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Daftar ruangan yang perlu Anda bersihkan hari ini
+          </p>
         </div>
         {!activeTask && (
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-primary" onClick={handleGlobalScan} style={{ display: 'inline-flex', gap: '6px' }}>
-              <QrCode size={16} /> Scan Barcode Ruangan
-            </button>
-            <button className="btn btn-secondary" onClick={fetchMyTasks}>
-              Segarkan
-            </button>
-          </div>
+          <button className="btn btn-secondary" onClick={fetchMyTasks} title="Muat ulang daftar tugas">
+            ↻ Segarkan
+          </button>
         )}
       </div>
+
+      {/* BANNER INFORMASI TUGAS HARIAN */}
+      {!activeTask && (
+        <div className="instruction-banner" style={{ marginBottom: '20px' }}>
+          <div className="instruction-banner-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ClipboardCheck size={20} color="var(--primary)" />
+            <span>Memulai Pengerjaan Tugas Kebersihan:</span>
+          </div>
+          <p style={{ margin: '8px 0 0 0', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            Anda dapat langsung menekan tombol <strong>"▶ Mulai Kerjakan"</strong> pada tabel tugas di bawah ini, atau gunakan opsi <strong>"Scan di Dashboard"</strong> untuk pemindaian QR Code stiker pintu ruangan.
+          </p>
+          <div style={{ marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button 
+              type="button"
+              className="btn btn-secondary btn-sm" 
+              onClick={onNavigateDashboard}
+              style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <QrCode size={16} /> Opsi Cepat: Buka Scanner QR di Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FILTER BAR & QUICK STATUS TABS */}
+      {!activeTask && (
+        <div className="glass-panel" style={{ padding: '18px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
+          
+          {/* Quick Status Badges / Pills */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${filterStatus === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterStatus('all')}
+              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+            >
+              Semua ({statusCounts.all})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${filterStatus === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterStatus('pending')}
+              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+            >
+              Belum Dimulai ({statusCounts.pending})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${filterStatus === 'in_progress' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterStatus('in_progress')}
+              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+            >
+              Sedang Dikerjakan ({statusCounts.in_progress})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${filterStatus === 'waiting_verification' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterStatus('waiting_verification')}
+              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+            >
+              Menunggu Verifikasi ({statusCounts.waiting_verification})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${filterStatus === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFilterStatus('completed')}
+              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+            >
+              Selesai ({statusCounts.completed})
+            </button>
+            {statusCounts.overdue > 0 && (
+              <button
+                type="button"
+                className={`btn btn-sm ${filterStatus === 'overdue' ? 'btn-danger' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('overdue')}
+                style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+              >
+                Terlambat ({statusCounts.overdue})
+              </button>
+            )}
+            {statusCounts.rejected > 0 && (
+              <button
+                type="button"
+                className={`btn btn-sm ${filterStatus === 'rejected' ? 'btn-warning' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('rejected')}
+                style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+              >
+                Ditolak ({statusCounts.rejected})
+              </button>
+            )}
+          </div>
+
+          {/* Detailed Filters Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
+            
+            {/* Search Input */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Search size={14} /> Cari Ruangan / Kode
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ketik nama / kode ruangan..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ fontSize: '0.88rem', paddingLeft: '32px' }}
+                />
+                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Gedung */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Building2 size={14} /> Gedung
+              </label>
+              <select
+                className="form-control"
+                value={filterBuilding}
+                onChange={(e) => setFilterBuilding(e.target.value)}
+                style={{ fontSize: '0.88rem' }}
+              >
+                <option value="all">Semua Gedung</option>
+                {uniqueBuildings.map(b => (
+                  <option key={b.id || b.name} value={b.id || b.name}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter Shift */}
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Filter size={14} /> Shift Kerja
+              </label>
+              <select
+                className="form-control"
+                value={filterShift}
+                onChange={(e) => setFilterShift(e.target.value)}
+                style={{ fontSize: '0.88rem' }}
+              >
+                <option value="all">Semua Shift</option>
+                {uniqueShifts.map(s => (
+                  <option key={s.id || s.name} value={s.id || s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset Button */}
+            {(searchQuery || filterBuilding !== 'all' || filterShift !== 'all' || filterStatus !== 'all') && (
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleResetFilters}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '42px', width: '100%', justifyContent: 'center' }}
+                  title="Reset semua filter"
+                >
+                  <RotateCcw size={14} /> Reset Filter
+                </button>
+              </div>
+            )}
+
+          </div>
+
+          {/* Results Summary Info */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '10px', borderTop: '1px solid rgba(14, 49, 146, 0.05)', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            <span>Menampilkan <strong>{filteredTasks.length}</strong> dari <strong>{tasks.length}</strong> tugas kebersihan</span>
+            {(searchQuery || filterBuilding !== 'all' || filterShift !== 'all' || filterStatus !== 'all') && (
+              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>Filter aktif diterapkan</span>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* BANNER TUGAS MENDADAK */}
+      {adhocCount > 0 && onOpenAdhocTasks && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(249, 115, 22, 0.15))',
+            border: '2px solid rgba(234, 179, 8, 0.5)',
+            padding: '16px 20px',
+            borderRadius: 'var(--radius-xl)',
+            marginBottom: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Zap size={26} color="#eab308" fill="#eab308" style={{ flexShrink: 0 }} />
+            <div>
+              <strong style={{ color: '#b45309', fontSize: '1rem', display: 'block' }}>
+                ⚡ Ada {adhocCount} Tugas Mendadak dari Supervisor!
+              </strong>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
+                Tugas ini bersifat darurat dan harus dikerjakan segera. Setelah selesai, Anda akan otomatis kembali ke tugas harian ini.
+              </div>
+            </div>
+          </div>
+          <button 
+            className="btn btn-warning" 
+            onClick={onOpenAdhocTasks} 
+            style={{ color: '#fff', fontWeight: 700, minWidth: '200px' }}
+          >
+            ⚡ Kerjakan Tugas Mendadak
+          </button>
+        </div>
+      )}
+
+
 
       {successMsg && (
         <div className="alert alert-success">
@@ -838,215 +1358,328 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
       )}
 
       {/* ACTIVE TASK CHECKLIST SUBMISSION */}
-      {activeTask && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-            <div>
-              <span className="role-badge role-cs" style={{ marginBottom: '6px' }}>Sedang Dikerjakan</span>
-              <h2 style={{ margin: 0, fontSize: '1.3rem' }}>Laporan: {activeTask.room?.name || 'Ruangan'} ({activeTask.room?.code})</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Gedung: {activeTask.room?.building?.name} | Shift: {activeTask.shift?.name || 'Aktif'}</p>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setActiveTask(null)} disabled={submitting}>
-              Batal & Kembali
-            </button>
-          </div>
+      {activeTask && (() => {
+        const completedChecklistCount = checklistItems.filter(item => checklistResults[item.id]?.status).length;
+        const totalChecklistCount = checklistItems.length;
+        const photosTakenCount = fotoAfterFiles.filter(Boolean).length;
+        const isAllPhotosTaken = photosTakenCount === 4;
+        const isReadyToSubmit = isAllPhotosTaken && gpsState.ready;
 
-          <form onSubmit={handleSubmitReport}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
-              {checklistItems.map((item, index) => {
-                const result = checklistResults[item.id] || {};
-                return (
-                  <div key={item.id} className="glass-card" style={{ padding: '20px', background: 'rgba(255,255,255,0.01)', margin: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
-                      <div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>ITEM #{index + 1}</span>
-                        <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{item.name}</h3>
-                        {item.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>SOP: {item.description}</p>}
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        {result.status ? (
-                          <span 
-                            style={{ 
-                              color: 'var(--primary)', 
-                              fontWeight: 600, 
-                              fontSize: '0.9rem', 
-                              display: 'inline-flex', 
-                              alignItems: 'center', 
-                              gap: '6px',
-                              background: 'rgba(16, 185, 129, 0.1)',
-                              padding: '6px 12px',
-                              borderRadius: 'var(--radius-sm)',
-                              border: '1px solid rgba(16, 185, 129, 0.2)'
-                            }}
-                          >
-                            <Check size={16} /> Dibersihkan
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => handleResultStatusChange(item.id, true)}
+        return (
+          <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
+            
+            {/* STEP PROGRESS INDICATOR */}
+            <div className="step-indicator">
+              <div className="step-item">
+                <div className={`step-num ${completedChecklistCount > 0 ? 'done' : 'active'}`}>
+                  {completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? '✓' : '1'}
+                </div>
+                <div className={`step-label ${completedChecklistCount === totalChecklistCount ? 'done' : 'active'}`}>
+                  1. Centang Checklist ({completedChecklistCount}/{totalChecklistCount})
+                </div>
+              </div>
+              <div className={`step-divider ${completedChecklistCount === totalChecklistCount ? 'done' : ''}`}></div>
+              <div className="step-item">
+                <div className={`step-num ${isAllPhotosTaken ? 'done' : completedChecklistCount === totalChecklistCount ? 'active' : 'pending-step'}`}>
+                  {isAllPhotosTaken ? '✓' : '2'}
+                </div>
+                <div className={`step-label ${isAllPhotosTaken ? 'done' : completedChecklistCount === totalChecklistCount ? 'active' : ''}`}>
+                  2. Ambil 4 Foto ({photosTakenCount}/4)
+                </div>
+              </div>
+              <div className={`step-divider ${isAllPhotosTaken ? 'done' : ''}`}></div>
+              <div className="step-item">
+                <div className={`step-num ${isReadyToSubmit ? 'active' : 'pending-step'}`}>
+                  3
+                </div>
+                <div className={`step-label ${isReadyToSubmit ? 'active' : ''}`}>
+                  3. Kirim Laporan
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
+              <div>
+                <span className="status-badge status-in_progress" style={{ marginBottom: '6px' }}>Sedang Dikerjakan</span>
+                <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800 }}>Laporan Ruang: {activeTask.room?.name || 'Ruangan'}</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '3px' }}>
+                  Gedung: <strong>{activeTask.room?.building?.name}</strong> | Kode: <strong>{activeTask.room?.code}</strong> | Shift: <strong>{activeTask.shift?.name || 'Aktif'}</strong>
+                </p>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => setActiveTask(null)} disabled={submitting}>
+                ✕ Batal &amp; Kembali
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReport}>
+              {/* STEP 1: ITEM CHECKLIST */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--primary)' }}>
+                    Langkah 1: Periksa &amp; Bersihkan Setiap Item
+                  </h3>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: completedChecklistCount === totalChecklistCount ? 'var(--success)' : 'var(--text-muted)' }}>
+                    {completedChecklistCount} dari {totalChecklistCount} Selesai
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {checklistItems.map((item, index) => {
+                    const result = checklistResults[item.id] || {};
+                    const isDone = Boolean(result.status);
+                    return (
+                      <div 
+                        key={item.id} 
+                        className="glass-card" 
+                        style={{ 
+                          padding: '16px 20px', 
+                          margin: 0,
+                          borderLeft: isDone ? '4px solid var(--success)' : '4px solid rgba(14, 49, 146, 0.2)',
+                          background: isDone ? 'rgba(15, 118, 110, 0.02)' : 'white'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingBottom: '10px', borderBottom: '1px solid rgba(14, 49, 146, 0.06)' }}>
+                          <div>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ITEM #{index + 1}</span>
+                            <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>{item.name}</h4>
+                            {item.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>SOP: {item.description}</p>}
+                          </div>
+                          
+                          <div>
+                            {isDone ? (
+                              <button
+                                type="button"
+                                className="btn btn-success btn-sm"
+                                onClick={() => handleResultStatusChange(item.id, false)}
+                                disabled={submitting}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                title="Klik untuk membatalkan status selesai"
+                              >
+                                <Check size={16} /> Selesai Dibersihkan (✓)
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => handleResultStatusChange(item.id, true)}
+                                disabled={submitting}
+                                style={{ 
+                                  borderColor: 'var(--primary)', 
+                                  color: 'var(--primary)',
+                                  fontWeight: 700,
+                                  padding: '8px 18px'
+                                }}
+                              >
+                                ✓ Tandai Bersih
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="form-group" style={{ margin: '10px 0 0' }}>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            value={result.notes || ''}
+                            onChange={(e) => handleResultNotesChange(item.id, e.target.value)}
+                            placeholder="Catatan kendala item jika ada (opsional)..."
                             disabled={submitting}
-                            style={{ 
-                              borderColor: 'var(--primary)', 
-                              color: 'var(--primary)',
-                              fontWeight: 600
-                            }}
-                          >
-                            Bersih
-                          </button>
-                        )}
+                            style={{ fontSize: '0.85rem', padding: '8px 12px' }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label">Catatan Item (Opsional)</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        value={result.notes || ''}
-                        onChange={(e) => handleResultNotesChange(item.id, e.target.value)}
-                        placeholder="Misal: Keran air agak longgar..."
-                        disabled={submitting}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Foto bukti 4 slot: 4 after */}
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 600 }}>Bukti Foto Ruangan*</label>
-                  <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                    Ambil 4 foto setelah pembersihan langsung dari kamera perangkat.
+              {/* STEP 2: FOTO BUKTI 4 SUDUT */}
+              <div style={{ marginBottom: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--primary)' }}>
+                    Langkah 2: Ambil 4 Foto Bukti Sudut Ruangan
+                  </h3>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    Wajib ambil 4 foto langsung dari kamera HP Anda (menghadap 4 arah/sudut ruangan yang berbeda).
                   </p>
                 </div>
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {[0, 1, 2, 3].map((slotIndex) => {
-                  const label = `After ${slotIndex + 1}`;
-                  const preview = fotoAfterPreviews[slotIndex];
-                  return (
-                    <div key={`after-${slotIndex}`} style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'rgba(255,255,255,0.03)' }}>
-                      <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.04)' }}>
-                        <strong style={{ display: 'block', marginBottom: '6px' }}>{label}</strong>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Setelah</span>
-                      </div>
-                      <div style={{ minHeight: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                        {preview ? (
-                          <img src={preview} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '12px' }}>
-                            Belum ada foto {label.toLowerCase()}.
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
-                        <p style={{ margin: '0 0 6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          Foto hanya bisa diambil via kamera. Upload dari galeri tidak diizinkan.
-                        </p>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '12px' }}>
+                  {[0, 1, 2, 3].map((slotIndex) => {
+                    const angleNames = [
+                      'Foto Sudut 1 (Depan)',
+                      'Foto Sudut 2 (Belakang)',
+                      'Foto Sudut 3 (Kiri)',
+                      'Foto Sudut 4 (Kanan / Detail)'
+                    ];
+                    const label = angleNames[slotIndex];
+                    const preview = fotoAfterPreviews[slotIndex];
+                    const isTaken = Boolean(preview);
+
+                    return (
+                      <div 
+                        key={`after-${slotIndex}`} 
+                        style={{ 
+                          border: isTaken ? '1.5px solid var(--success)' : '1.5px dashed rgba(14, 49, 146, 0.25)', 
+                          borderRadius: 'var(--radius-xl)', 
+                          overflow: 'hidden', 
+                          background: isTaken ? 'rgba(15, 118, 110, 0.02)' : 'white'
+                        }}
+                      >
+                        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: isTaken ? 'rgba(15, 118, 110, 0.08)' : 'rgba(14, 49, 146, 0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: '0.85rem', color: isTaken ? 'var(--success)' : 'var(--text-primary)' }}>
+                            {label}
+                          </strong>
+                          {isTaken && <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: '0.8rem' }}>✓ Ada</span>}
+                        </div>
+                        <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: '#f8fbff' }}>
+                          {preview ? (
+                            <img src={preview} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', padding: '12px', textAlign: 'center' }}>
+                              <ImageIcon size={32} opacity={0.4} />
+                              <span style={{ fontSize: '0.78rem' }}>Belum ada foto</span>
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <button
                             type="button"
-                            className="btn btn-primary btn-sm"
+                            className={isTaken ? "btn btn-secondary btn-sm" : "btn btn-primary btn-sm"}
                             disabled={submitting}
                             onClick={() => handleStartRoomCamera(slotIndex, 'after')}
-                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: 1 }}
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', fontWeight: 700 }}
                           >
-                            <ImageIcon size={14} /> {preview ? 'Ambil Ulang' : 'Kamera'}
+                            <ImageIcon size={16} /> {isTaken ? '📷 Ambil Ulang' : '📷 Buka Kamera'}
                           </button>
+                          {isTaken && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              disabled={submitting}
+                              onClick={() => {
+                                const newFiles = [...fotoAfterFiles];
+                                const newPreviews = [...fotoAfterPreviews];
+                                newFiles[slotIndex] = null;
+                                newPreviews[slotIndex] = null;
+                                setFotoAfterFiles(newFiles);
+                                setFotoAfterPreviews(newPreviews);
+                              }}
+                              style={{ color: 'var(--danger)', fontSize: '0.75rem', padding: '4px 8px' }}
+                            >
+                              Hapus Foto
+                            </button>
+                          )}
                         </div>
-                        {preview && (
-                          <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            disabled={submitting}
-                            onClick={() => {
-                              const newFiles = [...fotoAfterFiles];
-                              const newPreviews = [...fotoAfterPreviews];
-                              newFiles[slotIndex] = null;
-                              newPreviews[slotIndex] = null;
-                              setFotoAfterFiles(newFiles);
-                              setFotoAfterPreviews(newPreviews);
-                            }}
-                          >
-                            Reset
-                          </button>
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
-
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Catatan Umum Pekerjaan (Opsional)</label>
-              <textarea 
-                className="form-control" 
-                rows="3"
-                value={submissionNotes}
-                onChange={(e) => setSubmissionNotes(e.target.value)}
-                placeholder="Tulis kendala pengerjaan jika ada..."
-                disabled={submitting}
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
-              style={{ width: '100%', height: '46px' }}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                  <div className="spinner"></div>
-                  <span>Mengirim Laporan...</span>
+              {/* STEP 3: BAHAN & CATATAN */}
+              {availableMaterials.length > 0 && (
+                <div className="form-group" style={{ marginBottom: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                  <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
+                    <FlaskConical size={18} color="var(--primary)" /> Bahan Kimia &amp; Alat yang Digunakan (Ketuk untuk Memilih):
+                  </label>
+                  <p style={{ margin: '2px 0 10px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Pilih sabun, disinfektan, atau alat yang Anda pakai di ruangan ini:
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {availableMaterials.map((mat) => {
+                      const isSelected = selectedMaterials.includes(mat.id);
+                      return (
+                        <button
+                          type="button"
+                          key={mat.id}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedMaterials(selectedMaterials.filter((id) => id !== mat.id));
+                            } else {
+                              setSelectedMaterials([...selectedMaterials, mat.id]);
+                            }
+                          }}
+                          style={{
+                            padding: '8px 14px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            borderRadius: 'var(--radius-lg)',
+                            border: isSelected ? '1.5px solid var(--success)' : '1px solid var(--border-color)',
+                            background: isSelected ? 'rgba(15, 118, 110, 0.12)' : 'white',
+                            color: isSelected ? 'var(--success)' : 'var(--text-primary)',
+                            fontWeight: isSelected ? 700 : 500,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <span>{isSelected ? '✓' : '+'}</span>
+                          <span>{mat.nama_material}</span>
+                          <span style={{ fontSize: '0.72rem', opacity: 0.75 }}>({mat.jenis})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              ) : (
-                <span>Kirim Laporan & Serahkan Laporan</span>
               )}
-            </button>
-          </form>
-        </div>
-      )}
+
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.95rem' }}>Catatan Tambahan Pekerjaan (Opsional)</label>
+                <textarea 
+                  className="form-control" 
+                  rows="2"
+                  value={submissionNotes}
+                  onChange={(e) => setSubmissionNotes(e.target.value)}
+                  placeholder="Tulis kendala pengerjaan jika ada..."
+                  disabled={submitting}
+                />
+              </div>
+
+              {/* SUBMIT READINESS BAR */}
+              <div className="submit-readiness">
+                <div className={`readiness-item ${completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? 'ready' : 'not-ready'}`}>
+                  <span>{completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? '✅' : '⚪'}</span>
+                  <span>Checklist: {completedChecklistCount}/{totalChecklistCount} item</span>
+                </div>
+                <div className={`readiness-item ${isAllPhotosTaken ? 'ready' : 'not-ready'}`}>
+                  <span>{isAllPhotosTaken ? '✅' : '⚪'}</span>
+                  <span>Foto bukti: {photosTakenCount}/4 sudut</span>
+                </div>
+                <div className={`readiness-item ${gpsState.ready ? 'ready' : 'not-ready'}`}>
+                  <span>{gpsState.ready ? '✅' : '⚪'}</span>
+                  <span>Lokasi GPS: {gpsState.ready ? 'Tersedia' : 'Memuat...'}</span>
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                className={`btn btn-primary ${isReadyToSubmit ? 'btn-submit-ready' : ''}`}
+                style={{ width: '100%', height: '52px', fontSize: '1.05rem', fontWeight: 800 }}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                    <div className="spinner"></div>
+                    <span>Mengirim Laporan... Jangan tutup halaman ini.</span>
+                  </div>
+                ) : (
+                  <span>🚀 Kirim Laporan &amp; Selesaikan Tugas Ruangan</span>
+                )}
+              </button>
+            </form>
+          </div>
+        );
+      })()}
 
       {/* MY TASKS LIST */}
       {!activeTask && (
         <div>
           {loading ? (
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Ruangan</th>
-                    <th className="col-hide-mobile">Gedung</th>
-                    <th className="col-hide-mobile">Shift Kerja</th>
-                    <th>Batas Waktu (Due)</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[1, 2, 3].map((n) => (
-                    <tr key={n} className="skeleton-shimmer">
-                      <td><div className="skeleton-title" style={{ width: '120px' }}></div></td>
-                      <td className="col-hide-mobile"><div className="skeleton-text" style={{ width: '100px' }}></div></td>
-                      <td className="col-hide-mobile"><div className="skeleton-text" style={{ width: '80px' }}></div></td>
-                      <td><div className="skeleton-text" style={{ width: '140px' }}></div></td>
-                      <td><div className="skeleton-text" style={{ width: '90px' }}></div></td>
-                      <td><div className="skeleton-rect" style={{ width: '110px', height: '32px' }}></div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="loading-state">
+              <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
+              <div className="loading-state-text">⏳ Memuat jadwal tugas kebersihan Anda...</div>
             </div>
           ) : (
             <>
@@ -1059,90 +1692,60 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
                         <th>Ruangan</th>
                         <th className="col-hide-mobile">Gedung</th>
                         <th className="col-hide-mobile">Shift Kerja</th>
-                        <th>Batas Waktu (Due)</th>
-                        <th>Status</th>
+                        <th>Batas Waktu</th>
+                        <th>Status Tugas</th>
                         <th>Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {tasks.map(t => (
+                      {filteredTasks.map(t => (
                         <tr key={t.id}>
-                          <td style={{ fontWeight: 600 }}>
-                            <div>{t.room?.name || 'Ruangan'}</div>
+                          <td style={{ fontWeight: 700 }}>
+                            <div style={{ fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>{t.room?.name || 'Ruangan'}</span>
+                              {t.items_count > 1 && (
+                                <span style={{ fontSize: '0.72rem', fontWeight: 600, background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                                  {t.items_count} Item
+                                </span>
+                              )}
+                            </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kode: {t.room?.code}</div>
                           </td>
                           <td className="col-hide-mobile">{t.room?.building?.name || '-'}</td>
                           <td className="col-hide-mobile">
-                            <span style={{ fontWeight: 500 }}>{t.shift?.name}</span>
+                            <span style={{ fontWeight: 600 }}>{t.shift?.name || '-'}</span>
                           </td>
                           <td>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span>{t.task_date}</span>
+                              <span style={{ fontWeight: 600 }}>{t.task_date}</span>
                               <span style={{ fontSize: '0.8rem', color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-secondary)' }}>
                                 Jam {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'}
                               </span>
                             </div>
                           </td>
                           <td>
-                            <span className={`role-badge ${
-                              t.status === 'completed' ? 'role-cs' : 
-                              t.status === 'in_progress' ? 'role-supervisor' : 
-                              t.status === 'waiting_verification' ? 'role-pic' : 
-                              t.status === 'rejected' ? 'role-admin' :
-                              t.status === 'overdue' ? 'role-admin' : 'role-manager'
-                            }`} style={{ textTransform: 'capitalize' }}>
-                              {t.status === 'pending' ? 'Belum Mulai' :
-                               t.status === 'in_progress' ? 'Sedang Dikerjakan' :
-                               t.status === 'waiting_verification' ? 'Menunggu Verifikasi' :
-                               t.status === 'completed' ? 'Selesai' :
-                               t.status === 'rejected' ? 'Ditolak' :
-                               t.status === 'overdue' ? 'Terlambat' : t.status}
-                            </span>
+                            {renderStatusBadge(t)}
                           </td>
                           <td>
-                            {t.status === 'pending' && (
-                              <button 
-                                className="btn btn-primary btn-sm"
-                                onClick={() => handleScanQr(t)}
-                                style={{ display: 'inline-flex', gap: '6px' }}
-                              >
-                                <QrCode size={14} /> Scan & Mulai
-                              </button>
-                            )}
-                            {t.status === 'in_progress' && (
-                              <button 
-                                className="btn btn-warning btn-sm"
-                                onClick={() => handleResumeTask(t)}
-                                style={{ display: 'inline-flex', gap: '6px', color: 'white' }}
-                              >
-                                <ClipboardCheck size={14} /> Isi Laporan
-                              </button>
-                            )}
-                            {t.status === 'waiting_verification' && (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Menunggu Verifikasi</span>
-                            )}
-                            {t.status === 'completed' && (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 600 }}>Tugas Selesai</span>
-                            )}
-                            {t.status === 'rejected' && (
-                              <button 
-                                className="btn btn-danger btn-sm"
-                                onClick={() => handleScanQr(t)}
-                                style={{ display: 'inline-flex', gap: '6px' }}
-                              >
-                                <Play size={14} /> Kerjakan Ulang
-                              </button>
-                            )}
-                            {t.status === 'overdue' && (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--danger)', fontWeight: 600 }}>Terlambat</span>
-                            )}
+                            {renderActionColumn(t, false)}
                           </td>
                         </tr>
                       ))}
-                      {tasks.length === 0 && (
+                      {filteredTasks.length === 0 && (
                         <tr>
-                          <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
-                            Tidak ada tugas kebersihan yang ditugaskan kepada Anda hari ini.
+                          <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px' }}>
+                            <div style={{ fontSize: '1.5rem', marginBottom: '6px' }}>🔍</div>
+                            <div>Tidak ada tugas kebersihan yang sesuai dengan filter pencarian.</div>
+                            {(searchQuery || filterBuilding !== 'all' || filterShift !== 'all' || filterStatus !== 'all') && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={handleResetFilters}
+                                style={{ marginTop: '10px' }}
+                              >
+                                Reset Filter
+                              </button>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -1151,217 +1754,67 @@ export default function CsTasks({ openScanModalOnMount, setOpenScanModalOnMount 
                 </div>
               </div>
 
-              {/* Tampilan Mobile (Kartu Tugas CS) */}
+              {/* Tampilan Mobile (Kartu Tugas Ramah Layar Sentuh) */}
               <div className="mobile-view">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {tasks.map(t => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {filteredTasks.map(t => (
                     <div 
                       key={t.id} 
-                      className="glass-panel" 
-                      style={{ 
-                        padding: '16px', 
-                        borderRadius: 'var(--radius-md)', 
-                        border: '1px solid var(--border-color)', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '10px' 
-                      }}
+                      className={`task-card-mobile ${t.status === 'overdue' ? 'status-urgent' : t.status === 'completed' ? 'status-done' : ''}`}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{t.room?.name || 'Ruangan'}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>Gedung: {t.room?.building?.name || '-'} • Kode: {t.room?.code}</div>
+                          <div className="task-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{t.room?.name || 'Ruangan'}</span>
+                            {t.items_count > 1 && (
+                              <span style={{ fontSize: '0.72rem', fontWeight: 600, background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                                {t.items_count} Item
+                              </span>
+                            )}
+                          </div>
+                          <div className="task-card-sub">Gedung: {t.room?.building?.name || '-'} • Kode: {t.room?.code}</div>
                         </div>
-                        <span className="role-badge role-supervisor" style={{ fontSize: '0.7rem' }}>{t.shift?.name}</span>
+                        <span className="status-badge status-in_progress" style={{ fontSize: '0.72rem', padding: '3px 8px' }}>{t.shift?.name || 'Shift 1'}</span>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)', margin: '4px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Batas Waktu:</span>
                         <strong style={{ color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-primary)' }}>
-                          {t.task_date} Pukul {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'}
+                          {t.task_date} (Pukul {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'})
                         </strong>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className={`role-badge ${
-                          t.status === 'completed' ? 'role-cs' : 
-                          t.status === 'in_progress' ? 'role-supervisor' : 
-                          t.status === 'waiting_verification' ? 'role-pic' : 
-                          t.status === 'rejected' ? 'role-admin' :
-                          t.status === 'overdue' ? 'role-admin' : 'role-manager'
-                        }`} style={{ textTransform: 'capitalize', fontSize: '0.72rem' }}>
-                          {t.status === 'pending' ? 'Belum Mulai' :
-                           t.status === 'in_progress' ? 'Sedang Dikerjakan' :
-                           t.status === 'waiting_verification' ? 'Menunggu Verifikasi' :
-                           t.status === 'completed' ? 'Selesai' :
-                           t.status === 'rejected' ? 'Ditolak' :
-                           t.status === 'overdue' ? 'Terlambat' : t.status}
-                        </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '2px' }}>
+                        <div>
+                          {renderStatusBadge(t)}
+                        </div>
 
-                        <div style={{ flex: '1', display: 'flex', justifyContent: 'flex-end', marginLeft: '12px' }}>
-                          {t.status === 'pending' && (
-                            <button 
-                              className="btn btn-primary btn-sm"
-                              onClick={() => handleScanQr(t)}
-                              style={{ display: 'inline-flex', gap: '6px', width: '100%', justifyContent: 'center' }}
-                            >
-                              <QrCode size={14} /> Scan & Mulai
-                            </button>
-                          )}
-                          {t.status === 'in_progress' && (
-                            <button 
-                              className="btn btn-warning btn-sm"
-                              onClick={() => handleResumeTask(t)}
-                              style={{ display: 'inline-flex', gap: '6px', color: 'white', width: '100%', justifyContent: 'center' }}
-                            >
-                              <ClipboardCheck size={14} /> Isi Laporan
-                            </button>
-                          )}
-                          {t.status === 'waiting_verification' && (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Menunggu Verifikasi</span>
-                          )}
-                          {t.status === 'completed' && (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 600 }}>Tugas Selesai</span>
-                          )}
-                          {t.status === 'rejected' && (
-                            <button 
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleScanQr(t)}
-                              style={{ display: 'inline-flex', gap: '6px', width: '100%', justifyContent: 'center' }}
-                            >
-                              <Play size={14} /> Kerjakan Ulang
-                            </button>
-                          )}
-                          {t.status === 'overdue' && (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--danger)', fontWeight: 600 }}>Terlambat</span>
-                          )}
+                        <div style={{ flex: '1', display: 'flex', justifyContent: 'flex-end', minWidth: '160px' }}>
+                          {renderActionColumn(t, true)}
                         </div>
                       </div>
                     </div>
                   ))}
-                  {tasks.length === 0 && (
-                    <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      Tidak ada tugas kebersihan yang ditugaskan kepada Anda hari ini.
+                  {filteredTasks.length === 0 && (
+                    <div className="glass-panel" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <div style={{ fontSize: '1.8rem', marginBottom: '6px' }}>🔍</div>
+                      <div>Tidak ada tugas kebersihan yang sesuai dengan filter pencarian.</div>
+                      {(searchQuery || filterBuilding !== 'all' || filterShift !== 'all' || filterStatus !== 'all') && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={handleResetFilters}
+                          style={{ marginTop: '10px' }}
+                        >
+                          Reset Filter
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
             </>
           )}
-        </div>
-      )}
-      {/* SCANNING BARCODE MODAL */}
-      {showScanner && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(7, 10, 19, 0.9)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-          padding: '20px',
-          backdropFilter: 'blur(8px)'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%',
-            maxWidth: '500px',
-            borderRadius: 'var(--radius-lg)',
-            padding: '28px',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-            boxShadow: 'var(--shadow-lg), 0 0 30px rgba(16, 185, 129, 0.1)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <QrCode size={22} style={{ color: 'var(--primary)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>Scan Barcode Kehadiran</h3>
-              </div>
-              <button 
-                className="btn btn-secondary btn-sm" 
-                onClick={handleCloseScanner}
-                style={{ padding: '4px 8px' }}
-              >
-                Tutup
-              </button>
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '16px', textAlign: 'center' }}>
-                {lockedTask 
-                  ? `Silakan scan QR Code yang tertempel di pintu ruangan ${scanningTask?.room?.name || ''} untuk memverifikasi kehadiran.`
-                  : `Arahkan kamera ke QR Code yang tertempel di pintu ruangan mana saja untuk memverifikasi kehadiran Anda secara otomatis.`
-                }
-              </p>
-
-              {/* CAMERA SCANNER AREA */}
-              <div style={{ 
-                background: '#0a0e17', 
-                border: '1px solid var(--border-color)', 
-                borderRadius: 'var(--radius-md)',
-                padding: '12px',
-                marginBottom: '20px',
-                minHeight: '240px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative'
-              }}>
-                <div 
-                  id="qr-reader" 
-                  style={{ 
-                    width: '100%', 
-                    maxWidth: '360px', 
-                    borderRadius: 'var(--radius-sm)', 
-                    overflow: 'hidden',
-                    display: scannerActive ? 'block' : 'none'
-                  }}
-                ></div>
-                
-                {!scannerActive && (
-                  <div style={{ textAlign: 'center', padding: '24px' }}>
-                    <QrCode size={48} style={{ color: 'var(--primary)', opacity: 0.8, marginBottom: '12px' }} />
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                      Pindai QR Code langsung menggunakan kamera perangkat Anda.
-                    </p>
-                    <button 
-                      type="button" 
-                      className="btn btn-primary"
-                      onClick={handleStartScanning}
-                      style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', border: 'none' }}
-                    >
-                      Buka Kamera & Scan QR
-                    </button>
-                  </div>
-                )}
-
-                {scannerActive && (
-                  <button 
-                    type="button" 
-                    className="btn btn-danger btn-sm"
-                    onClick={stopScanner}
-                    style={{ position: 'absolute', bottom: '10px', zIndex: 10 }}
-                  >
-                    Matikan Kamera
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={handleCloseScanner}
-                style={{ width: '100%' }}
-              >
-                Tutup / Batal
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

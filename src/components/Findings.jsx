@@ -14,9 +14,11 @@ import {
   Wrench,
   AlertCircle,
   Trash2,
-  UserCheck
+  UserCheck,
+  Box
 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
+import { compressImage } from '../utils/imageCompressor';
 
 // Secure Image Renderer helper
 function SecureImage({ src, alt, className, style }) {
@@ -189,6 +191,8 @@ export default function Findings({ user, isOb = false }) {
   // Create Form State
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [roomId, setRoomId] = useState('');
+  const [roomAssetId, setRoomAssetId] = useState('');
+  const [roomAssets, setRoomAssets] = useState([]);
   const [findingCategoryId, setFindingCategoryId] = useState('');
   const [categories, setCategories] = useState([]);
   const [description, setDescription] = useState('');
@@ -553,8 +557,8 @@ export default function Findings({ user, isOb = false }) {
     }
   };
 
-  const fetchFindings = async () => {
-    setLoading(true);
+  const fetchFindings = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       let url = '/findings';
@@ -567,15 +571,15 @@ export default function Findings({ user, isOb = false }) {
         setFindings(response.data.data || response.data || []);
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat temuan masalah.');
+      if (showLoading) setError(err.message || 'Gagal memuat temuan masalah.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   const fetchRooms = async () => {
     try {
-      const response = await api.get('/rooms?is_active=true');
+      const response = await api.get('/rooms?is_active=true', { lookup: true });
       if (response.success) {
         setRooms(response.data.data || response.data || []);
       }
@@ -586,7 +590,7 @@ export default function Findings({ user, isOb = false }) {
 
   const fetchCategories = async () => {
     try {
-      const response = await api.get('/finding-categories');
+      const response = await api.get('/finding-categories', { lookup: true });
       if (response.success) {
         const cats = response.data?.data || response.data || [];
         setCategories(cats);
@@ -600,10 +604,28 @@ export default function Findings({ user, isOb = false }) {
   };
 
   useEffect(() => {
-    fetchFindings();
     fetchRooms();
     fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    fetchFindings(true);
   }, [statusFilter]);
+
+  useEffect(() => {
+    if (roomId) {
+      api.get(`/room-assets?room_id=${roomId}&is_active=true`)
+        .then(res => {
+          if (res.success) {
+            setRoomAssets(res.data.data || res.data || []);
+          }
+        })
+        .catch(err => console.error('Error fetching room assets:', err));
+    } else {
+      setRoomAssets([]);
+    }
+    setRoomAssetId('');
+  }, [roomId]);
 
   useEffect(() => {
     if (successMsg) {
@@ -706,20 +728,26 @@ export default function Findings({ user, isOb = false }) {
     }
 
     try {
+      const compressedFindingPhoto = await compressImage(fotoTemuan, 1600, 1000 * 1024);
+
       const formData = new FormData();
       formData.append('room_id', roomId);
+      if (roomAssetId) {
+        formData.append('room_asset_id', roomAssetId);
+      }
       if (findingCategoryId) {
         formData.append('finding_category_id', findingCategoryId);
       }
       formData.append('deskripsi', description);
       formData.append('prioritas', 'medium');
-      formData.append('foto_temuan', fotoTemuan, fotoTemuanName);
+      formData.append('foto_temuan', compressedFindingPhoto || fotoTemuan, fotoTemuanName || 'finding.jpg');
 
       const response = await api.post('/findings', formData);
       if (response.success) {
         setSuccessMsg('Temuan masalah berhasil dilaporkan dan notifikasi telah dikirim ke Supervisor.');
         setShowCreateForm(false);
         setRoomId('');
+        setRoomAssetId('');
         setFindingCategoryId('');
         setDescription('');
         setFotoTemuan(null);
@@ -757,7 +785,8 @@ export default function Findings({ user, isOb = false }) {
       formData.append('status', resolveStatus);
       
       if (fotoSelesai && resolveStatus === 'resolved') {
-        formData.append('foto_selesai', fotoSelesai, fotoSelesaiName);
+        const compressedResolvePhoto = await compressImage(fotoSelesai, 1600, 1000 * 1024);
+        formData.append('foto_selesai', compressedResolvePhoto || fotoSelesai, fotoSelesaiName || 'resolved.jpg');
       }
 
       const response = await api.post(`/findings/${resolvingFinding.id}/status`, formData);
@@ -811,21 +840,41 @@ export default function Findings({ user, isOb = false }) {
     <div>
       <div className="flex-header">
         <div>
-          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Temuan Masalah Fasilitas</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Pelaporan kerusakan inventaris ruangan dan pelacakan status perbaikan</p>
+          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 800 }}>Laporan Temuan Kerusakan Fasilitas</h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Laporkan kerusakan inventaris / fasilitas ruangan untuk ditindaklanjuti oleh petugas perbaikan
+          </p>
         </div>
-      {/* Tombol Laporkan Temuan — tampil untuk semua role termasuk OB */}
-      {!showCreateForm && !resolvingFinding && (
-        <button className="btn btn-primary" onClick={() => { setShowCreateForm(true); fetchRooms(); fetchCategories(); setResolvingFinding(null); }}>
-          <Plus size={16} /> Laporkan Temuan Baru
-        </button>
-      )}
+        {/* Tombol Laporkan Temuan — tampil untuk semua role termasuk CS & OB */}
+        {!showCreateForm && !resolvingFinding && (
+          <button 
+            className="btn btn-primary" 
+            onClick={() => { setShowCreateForm(true); fetchRooms(); fetchCategories(); setResolvingFinding(null); }}
+            style={{ fontWeight: 700, display: 'inline-flex', gap: '8px' }}
+          >
+            <Plus size={18} /> + Laporkan Kerusakan Baru
+          </button>
+        )}
       </div>
+
+      {/* PANDUAN PELAPORAN KERUSAKAN */}
+      {!showCreateForm && !resolvingFinding && (
+        <div className="instruction-banner">
+          <div className="instruction-banner-title">
+            🛠️ Cara Melaporkan Kerusakan Fasilitas:
+          </div>
+          <ol>
+            <li>Tekan tombol biru <strong>"+ Laporkan Kerusakan Baru"</strong> di atas.</li>
+            <li>Pilih lokasi ruangan dan ambil <strong>1 foto bukti kerusakan</strong> langsung dari kamera HP.</li>
+            <li>Kirim laporan — notifikasi perbaikan akan langsung diteruskan ke tim PIC/Supervisor &amp; petugas terkait.</li>
+          </ol>
+        </div>
+      )}
 
       {successMsg && (
         <div className="alert alert-success">
           <Check size={18} />
-          <span>{successMsg}</span>
+          <span style={{ fontWeight: 700 }}>{successMsg}</span>
         </div>
       )}
 
@@ -838,34 +887,55 @@ export default function Findings({ user, isOb = false }) {
 
       {/* CREATE FORM */}
       {showCreateForm && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>Laporkan Temuan Kerusakan Baru</h2>
+        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Formulir Pelaporan Kerusakan Baru</h2>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowCreateForm(false)}>
+              ✕ Batal
+            </button>
+          </div>
+
           <form onSubmit={handleSaveReport}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Ruangan Lokasi</label>
+                <label className="form-label" style={{ fontWeight: 700 }}>1. Ruangan Lokasi Kerusakan *</label>
                 <select 
                   className="form-control form-select"
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
                   required
                 >
-                  <option value="" disabled>Pilih Ruangan</option>
+                  <option value="" disabled>Pilih Ruangan...</option>
                   {rooms.map(r => (
-                    <option key={r.id} value={r.id}>{r.name} ({r.code}) - Gedung {r.building?.name}</option>
+                    <option key={r.id} value={r.id}>{r.name || r.nama_ruangan} ({r.code || r.kode_ruangan}) - Gedung {r.building?.name || r.building?.nama_gedung}</option>
                   ))}
                 </select>
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Kategori Kerusakan</label>
+                <label className="form-label" style={{ fontWeight: 700 }}>2. Aset / Mesin Terkait (Opsional)</label>
+                <select
+                  className="form-control form-select"
+                  value={roomAssetId}
+                  onChange={(e) => setRoomAssetId(e.target.value)}
+                  disabled={!roomId}
+                >
+                  <option value="">— Tidak Terkait Aset Tertentu —</option>
+                  {roomAssets.map(a => (
+                    <option key={a.id} value={a.id}>{a.nama_aset} ({a.kode_aset})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700 }}>3. Kategori Masalah *</label>
                 <select 
                   className="form-control form-select"
                   value={findingCategoryId}
                   onChange={(e) => setFindingCategoryId(e.target.value)}
                   required
                 >
-                  <option value="" disabled>Pilih Kategori</option>
+                  <option value="" disabled>Pilih Kategori Kerusakan...</option>
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.nama_kategori} ({c.kode_kategori})</option>
                   ))}
@@ -874,44 +944,46 @@ export default function Findings({ user, isOb = false }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Deskripsi Kerusakan</label>
+              <label className="form-label" style={{ fontWeight: 700 }}>4. Jelaskan Kerusakannya Secara Singkat *</label>
               <textarea 
                 className="form-control" 
-                rows="3"
+                rows="3" 
                 value={description} 
                 onChange={(e) => setDescription(e.target.value)} 
-                placeholder="Contoh: AC Bocor mengeluarkan air deras, lantai menjadi licin..."
+                placeholder="Contoh: Keran wastafel patah dan bocor, air meluber ke lantai..."
                 required
               />
             </div>
 
-            <div className="form-group" style={{ background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--border-color)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
-              <label className="form-label" style={{ fontWeight: 600 }}>Foto Bukti Kerusakan (1 Foto Wajib)*</label>
-              <p style={{ margin: '4px 0 10px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                Ambil 1 foto kondisi kerusakan langsung dari kamera. Unggah file dari galeri tidak diizinkan.
+            <div className="form-group" style={{ background: 'rgba(14, 49, 146, 0.03)', border: '1.5px dashed var(--primary)', padding: '20px', borderRadius: 'var(--radius-xl)' }}>
+              <label className="form-label" style={{ fontWeight: 800, fontSize: '0.95rem' }}>5. Foto Bukti Kerusakan (Wajib 1 Foto)*</label>
+              <p style={{ margin: '4px 0 12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                Wajib ambil 1 foto kondisi kerusakan langsung dari kamera HP Anda.
               </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px' }}>
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm"
+                  className={fotoTemuan ? "btn btn-secondary" : "btn btn-primary"}
                   onClick={() => handleStartCamera('finding')}
                   disabled={submitting}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}
                 >
-                  <Camera size={14} /> Ambil Foto Realtime
+                  <Camera size={18} /> {fotoTemuan ? '📷 Ambil Ulang Foto' : '📷 Buka Kamera & Foto'}
                 </button>
 
-                <span style={{ fontSize: '0.85rem', color: fotoTemuan ? 'var(--primary)' : 'var(--text-muted)', fontWeight: fotoTemuan ? 600 : 400 }}>
-                  {fotoTemuanName ? `✓ Foto Siap: ${fotoTemuanName}` : 'Foto belum diambil'}
+                <span style={{ fontSize: '0.88rem', color: fotoTemuan ? 'var(--success)' : 'var(--text-muted)', fontWeight: fotoTemuan ? 700 : 400 }}>
+                  {fotoTemuanName ? `✅ Foto Siap Dikirim: ${fotoTemuanName}` : '⚪ Belum mengambil foto'}
                 </span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Mengirim...' : 'Kirim Laporan'}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCreateForm(false)} style={{ flex: 1 }}>
+                Batal
               </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowCreateForm(false)}>Batal</button>
+              <button type="submit" className="btn btn-primary" disabled={submitting || !fotoTemuan} style={{ flex: 2, fontWeight: 700 }}>
+                {submitting ? 'Mengirim Laporan...' : '🚀 Kirim Laporan Kerusakan'}
+              </button>
             </div>
           </form>
         </div>
@@ -919,98 +991,120 @@ export default function Findings({ user, isOb = false }) {
 
       {/* RESOLVE FORM (ADMIN / SUPERVISOR ONLY) */}
       {resolvingFinding && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px', border: '1px solid var(--primary)' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '10px' }}>Update Status Perbaikan Kerusakan</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
-            Detail: {resolvingFinding.deskripsi || resolvingFinding.description} | Lokasi: {resolvingFinding.room?.name}
+        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px', border: '1.5px solid var(--primary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+            <div>
+              <span className="status-badge status-in_progress" style={{ marginBottom: '4px' }}>Update Status Perbaikan</span>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Lokasi: {resolvingFinding.room?.name}</h2>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setResolvingFinding(null)}>
+              ✕ Tutup
+            </button>
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '20px' }}>
+            Kerusakan: <strong>{resolvingFinding.deskripsi || resolvingFinding.description}</strong>
           </p>
           <form onSubmit={handleSaveResolve}>
             <div className="grid-2-cols" style={{ marginBottom: '20px' }}>
               <div className="form-group">
-                <label className="form-label">Status Saat Ini</label>
+                <label className="form-label" style={{ fontWeight: 700 }}>Status Perbaikan Saat Ini</label>
                 <input 
                   type="text" 
                   className="form-control" 
                   value="Sedang Diperbaiki (In Progress)" 
-                  disabled 
-                  style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}
+                  disabled
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Bukti Perbaikan (Wajib)*</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
-                  <button 
-                    type="button" 
-                    className="btn btn-primary btn-sm" 
-                    onClick={() => handleStartCamera('resolve')}
-                    disabled={submitting}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Camera size={14} /> Ambil Foto Realtime
-                  </button>
-
-                  <span style={{ fontSize: '0.8rem', color: fotoSelesai ? 'var(--primary)' : 'var(--text-muted)', fontWeight: fotoSelesai ? 600 : 400 }}>
-                    {fotoSelesaiName ? `✓ ${fotoSelesaiName}` : 'Belum diambil'}
-                  </span>
-                </div>
+                <label className="form-label" style={{ fontWeight: 700 }}>Ubah Status Ke</label>
+                <select 
+                  className="form-control form-select"
+                  value={resolveStatus}
+                  onChange={(e) => setResolveStatus(e.target.value)}
+                >
+                  <option value="in_progress">Sedang Dikerjakan (In Progress)</option>
+                  <option value="resolved">✅ Selesai Diperbaiki (Resolved)</option>
+                  <option value="unresolved">🔴 Belum Diperbaiki (Unresolved)</option>
+                </select>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>Selesai</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setResolvingFinding(null)}>Batal</button>
+            {resolveStatus === 'resolved' && (
+              <div className="form-group" style={{ background: 'rgba(15, 118, 110, 0.04)', border: '1px solid rgba(15, 118, 110, 0.2)', padding: '18px', borderRadius: 'var(--radius-xl)' }}>
+                <label className="form-label" style={{ fontWeight: 800, color: 'var(--success)' }}>Foto Bukti Setelah Perbaikan (Wajib)*</label>
+                <p style={{ margin: '4px 0 12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  Ambil foto kondisi fasilitas setelah selesai diperbaiki:
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm"
+                    onClick={() => handleStartCamera('resolve')}
+                    disabled={submitting}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                  >
+                    <Camera size={16} /> {fotoSelesai ? '📷 Foto Ulang' : '📷 Buka Kamera & Foto'}
+                  </button>
+
+                  <span style={{ fontSize: '0.85rem', color: fotoSelesai ? 'var(--success)' : 'var(--text-muted)', fontWeight: fotoSelesai ? 700 : 400 }}>
+                    {fotoSelesaiName ? `✅ Foto Perbaikan: ${fotoSelesaiName}` : '⚪ Belum mengambil foto perbaikan'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setResolvingFinding(null)} style={{ flex: 1 }}>
+                Batal
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={submitting || (resolveStatus === 'resolved' && !fotoSelesai)} style={{ flex: 2, fontWeight: 700 }}>
+                {submitting ? 'Menyimpan...' : 'Simpan Status Perbaikan'}
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* FILTER & LIST */}
+      {/* FILTER STATUS TABS & LIST */}
       {!showCreateForm && !resolvingFinding && (
         <div>
-          {/* Status Filter */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Filter Status:</span>
-            <button className={`btn btn-sm ${statusFilter === 'unresolved' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setStatusFilter('unresolved')}>Semua</button>
-            <button className={`btn btn-sm ${statusFilter === 'resolved' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setStatusFilter('resolved')}>Resolved</button>
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '20px' }}>
+            {[
+              { key: '', label: 'Semua Status' },
+              { key: 'unresolved', label: '🔴 Belum Diperbaiki' },
+              { key: 'in_progress', label: '🔵 Sedang Dikerjakan' },
+              { key: 'resolved', label: '✅ Selesai' }
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={`btn ${statusFilter === tab.key ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+                style={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           {loading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-              {[1, 2, 3].map((n) => (
-                <div key={n} className="glass-panel skeleton-shimmer" style={{ padding: '20px', borderRadius: 'var(--radius-md)', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
-                  {/* Photo Skeleton */}
-                  <div className="skeleton-rect" style={{ width: '150px', height: '110px', flexShrink: 0 }}></div>
-                  
-                  {/* Info details */}
-                  <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div className="skeleton-text" style={{ width: '100px' }}></div>
-                    <div className="skeleton-title" style={{ width: '250px' }}></div>
-                    <div className="skeleton-text" style={{ width: '350px' }}></div>
-                    <div className="skeleton-text" style={{ width: '180px' }}></div>
-                  </div>
-
-                  {/* Buttons Skeleton */}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <div className="skeleton-rect" style={{ width: '90px', height: '32px' }}></div>
-                    <div className="skeleton-rect" style={{ width: '70px', height: '32px' }}></div>
-                  </div>
-                </div>
-              ))}
+            <div className="loading-state">
+              <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
+              <div className="loading-state-text">⏳ Memuat daftar temuan kerusakan fasilitas...</div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
               {findings.map(f => (
-                <div key={f.id} className="glass-panel finding-card" style={{ padding: '20px', borderRadius: 'var(--radius-md)', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
+                <div key={f.id} className="glass-panel finding-card" style={{ padding: '20px', borderRadius: 'var(--radius-xl)', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
                   <div className="finding-photos-wrapper" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     {/* Photo Findings */}
-                    <div className="finding-photo-container" style={{ width: '150px', height: '110px', flexShrink: 0 }}>
+                    <div className="finding-photo-container" style={{ width: '150px', height: '110px', flexShrink: 0, borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                       <SecureImage src={`/findings/${f.id}/foto`} alt="Foto Temuan" />
                     </div>
 
                     {/* Photo Resolved (If Resolved) */}
                     {f.status === 'resolved' && (
-                      <div className="finding-photo-container" style={{ width: '150px', height: '110px', flexShrink: 0 }}>
+                      <div className="finding-photo-container" style={{ width: '150px', height: '110px', flexShrink: 0, borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                         <SecureImage src={`/findings/${f.id}/foto-resolved`} alt="Foto Selesai" />
                       </div>
                     )}
@@ -1018,67 +1112,54 @@ export default function Findings({ user, isOb = false }) {
 
                   {/* Info details */}
                   <div style={{ flex: 1, minWidth: '200px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                      <span className={`role-badge ${
-                        f.status === 'resolved' ? 'role-cs' : 
-                        f.status === 'in_progress' ? 'role-supervisor' : 'role-admin'
-                      }`} style={{ textTransform: 'capitalize' }}>
-                        {f.status === 'unresolved' ? 'Belum Diperbaiki' :
-                         f.status === 'in_progress' ? 'Sedang Diperbaiki' :
-                         f.status === 'resolved' ? 'Selesai' : f.status}
-                      </span>
-                      <span className="role-badge role-ob" style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {f.status === 'resolved' && <span className="status-badge status-completed">✅ Selesai Diperbaiki</span>}
+                      {f.status === 'in_progress' && <span className="status-badge status-in_progress">🔵 Sedang Dikerjakan</span>}
+                      {f.status === 'unresolved' && <span className="status-badge status-rejected">🔴 Belum Diperbaiki</span>}
+
+                      <span className="status-badge status-pending" style={{ fontSize: '0.72rem' }}>
                         📁 {f.category_name || 'Lainnya'}
                       </span>
                       {f.status !== 'resolved' && f.deadline_perbaikan && (
-                        <span className={`role-badge ${f.is_overdue ? 'role-admin' : 'role-cs'}`} style={{ textTransform: 'capitalize', fontSize: '0.7rem' }}>
-                          {f.is_overdue ? '🔴 Melewati Deadline' : '🟢 Dalam Batas Waktu'}
+                        <span className={f.is_overdue ? "status-badge status-overdue" : "status-badge status-waiting_verification"} style={{ fontSize: '0.72rem' }}>
+                          {f.is_overdue ? '⚠️ Melewati Deadline' : '⏱️ Dalam Batas Waktu'}
                         </span>
                       )}
                     </div>
 
-                    <h3 style={{ fontSize: '1.05rem', fontWeight: 600, margin: '8px 0 4px' }}>
-                      Ruangan: {f.room?.name || 'Ruangan'} ({f.room?.code})
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '8px 0 4px' }}>
+                      Ruang: {f.room?.name || 'Ruangan'} ({f.room?.code})
                     </h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '6px' }}>{f.deskripsi || f.description}</p>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Dilaporkan oleh: <strong>{f.reporter_name || 'Staf'}</strong> | Gedung: {f.room?.building?.name}
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', marginBottom: '6px', lineHeight: 1.4 }}>
+                      {f.deskripsi || f.description}
+                    </p>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Dilaporkan oleh: <strong>{f.reporter_name || 'Staf'}</strong> | Gedung: <strong>{f.room?.building?.name}</strong>
                     </div>
                     {f.deadline_perbaikan && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        Deadline Perbaikan: <strong>{new Date(f.deadline_perbaikan).toLocaleDateString('id-ID')}</strong>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Deadline: <strong>{new Date(f.deadline_perbaikan).toLocaleDateString('id-ID')}</strong>
                       </div>
                     )}
-                    {f.status === 'resolved' && f.response_time_minutes !== null && f.response_time_minutes !== undefined && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        Waktu Penyelesaian: <strong style={{ color: 'var(--success)' }}>{formatResponseTime(f.response_time_minutes)}</strong>
-                      </div>
-                    )}
-                    <div style={{ fontSize: '0.78rem', marginTop: '8px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '0.8rem', marginTop: '8px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600 }}>Tugas Perbaikan:</span>
                       {f.assigned_to_external ? (
-                        <span className="role-badge role-admin" style={{ fontSize: '0.7rem', textTransform: 'none' }}>
-                          Pihak Luar: {f.assigned_to_external}
-                        </span>
-                      ) : f.assigned_to ? (
-                        <span className="role-badge role-cs" style={{ fontSize: '0.7rem', textTransform: 'none' }}>
-                          Petugas: {f.assignee_name}
-                        </span>
+                        <span style={{ color: 'var(--primary)', fontWeight: 700 }}>🛠️ Vendor Luar: {f.assigned_to_external}</span>
+                      ) : f.assigned_to_user ? (
+                        <span style={{ color: 'var(--primary)', fontWeight: 700 }}>👤 Petugas: {f.assigned_to_user.name}</span>
                       ) : (
-                        <span className="role-badge role-manager" style={{ fontSize: '0.7rem', textTransform: 'none' }}>
-                          Belum Ditugaskan
-                        </span>
+                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Belum Ditugaskan</span>
                       )}
                     </div>
                   </div>
 
                   {/* Action buttons (Resolve & Delete) */}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '130px' }}>
                     {(isAdmin || isSupervisor) && f.status !== 'resolved' && (
                       <button 
                         className="btn btn-secondary btn-sm"
                         onClick={() => handleOpenAssignModal(f)}
-                        style={{ display: 'inline-flex', gap: '4px', color: 'var(--secondary)' }}
+                        style={{ display: 'inline-flex', gap: '4px', fontWeight: 600 }}
                       >
                         <UserCheck size={14} /> Tugaskan
                       </button>
@@ -1086,11 +1167,11 @@ export default function Findings({ user, isOb = false }) {
 
                     {getCanResolve(f) && f.status !== 'resolved' && (
                       <button 
-                        className="btn btn-secondary btn-sm"
+                        className="btn btn-primary btn-sm"
                         onClick={() => { setResolvingFinding(f); setResolveStatus('resolved'); setSuccessMsg(null); setError(null); }}
-                        style={{ display: 'inline-flex', gap: '4px', color: 'var(--primary)' }}
+                        style={{ display: 'inline-flex', gap: '4px', fontWeight: 700 }}
                       >
-                        <Wrench size={14} /> Update Perbaikan
+                        <Wrench size={14} /> Update Status
                       </button>
                     )}
 
@@ -1110,8 +1191,10 @@ export default function Findings({ user, isOb = false }) {
               ))}
 
               {findings.length === 0 && (
-                <div className="glass-card" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                  Tidak ada temuan kerusakan fasilitas pada kategori filter ini. Aman!
+                <div className="glass-panel" style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>✓</div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Tidak Ada Temuan Kerusakan</h3>
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}>Semua fasilitas dan inventaris ruangan dalam kondisi baik.</p>
                 </div>
               )}
             </div>

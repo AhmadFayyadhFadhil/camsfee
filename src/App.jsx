@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import api from './utils/api';
 import Login from './components/Login';
 
@@ -6,7 +6,6 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const Buildings = lazy(() => import('./components/Buildings'));
 const Rooms = lazy(() => import('./components/Rooms'));
 const UsersList = lazy(() => import('./components/Users'));
-const ChecklistItems = lazy(() => import('./components/ChecklistItems'));
 const Schedules = lazy(() => import('./components/Schedules'));
 const CsTasks = lazy(() => import('./components/CsTasks'));
 const Verifications = lazy(() => import('./components/Verifications'));
@@ -16,6 +15,12 @@ const Profile = lazy(() => import('./components/Profile'));
 const Reports = lazy(() => import('./components/Reports'));
 const Notifications = lazy(() => import('./components/Notifications'));
 const AppSettings = lazy(() => import('./components/AppSettings'));
+const ChecklistTemplates = lazy(() => import('./components/ChecklistTemplates'));
+const RoomAssets = lazy(() => import('./components/RoomAssets'));
+const CleaningMaterials = lazy(() => import('./components/CleaningMaterials'));
+const SlaParameters = lazy(() => import('./components/SlaParameters'));
+const AdhocTaskSupervisor = lazy(() => import('./components/AdhocTaskSupervisor'));
+const CsAdhocTasks = lazy(() => import('./components/CsAdhocTasks'));
 
 import { 
   Shield, 
@@ -33,23 +38,87 @@ import {
   Layers, 
   Check, 
   X,
-  Menu,
-  ShieldAlert,
-  Sliders
+  Menu, 
+  ShieldAlert, 
+  Sliders, 
+  Zap, 
+  Box, 
+  Sparkles, 
+  Award 
 } from 'lucide-react';
 import { useConfirm } from './context/ConfirmContext.jsx';
+
+const VALID_TABS = [
+  'dashboard', 'tasks', 'cs_adhoc', 'verifications', 'adhoc_tasks',
+  'findings', 'buildings', 'rooms', 'checklist_templates', 'room_assets',
+  'cleaning_materials', 'sla_parameters', 'schedules',
+  'reports', 'users', 'app_settings', 'audit_logs', 'notifications_panel', 'profile'
+];
+
+const getInitialTab = () => {
+  try {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (hash === 'checklist_items') {
+      window.location.hash = 'checklist_templates';
+      return 'checklist_templates';
+    }
+    if (hash && VALID_TABS.includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('cams_active_tab');
+    if (saved === 'checklist_items') {
+      localStorage.setItem('cams_active_tab', 'checklist_templates');
+      return 'checklist_templates';
+    }
+    if (saved && VALID_TABS.includes(saved)) {
+      return saved;
+    }
+  } catch (e) {}
+  return 'dashboard';
+};
 
 export default function App() {
   const confirm = useConfirm();
   const [isAuthenticated, setIsAuthenticated] = useState(api.isAuthenticated());
   const [user, setUser] = useState(api.getUser());
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [currentTab, setCurrentTab] = useState(getInitialTab);
   const [openScanModalOnMount, setOpenScanModalOnMount] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const contentBodyRef = useRef(null);
+
+  // Mapping judul halaman — Bahasa Indonesia bersih (untuk pengguna non-teknis)
+  const TAB_TITLES = {
+    dashboard: 'Dashboard',
+    tasks: 'Tugas Harian Saya',
+    cs_adhoc: '⚡ Tugas Mendadak',
+    verifications: 'Verifikasi Laporan',
+    adhoc_tasks: 'Tugas Instan (Supervisor)',
+    findings: 'Laporan Temuan Kerusakan',
+    buildings: 'Kelola Gedung',
+    rooms: 'Kelola Ruangan',
+    checklist_templates: 'Template Checklist',
+    room_assets: 'Aset & Peralatan Ruangan',
+    cleaning_materials: 'Bahan Kimia & Alat',
+    sla_parameters: 'Parameter Penilaian SLA',
+    schedules: 'Jadwal & Penugasan CS',
+    reports: 'Ekspor Laporan',
+    users: 'Kelola Pengguna',
+    app_settings: 'Pengaturan Sistem',
+    audit_logs: 'Riwayat Aktivitas Sistem',
+    notifications_panel: 'Kotak Notifikasi',
+    profile: 'Profil Saya',
+  };
 
   const selectTab = (tab) => {
-    setCurrentTab(tab);
+    const targetTab = tab === 'checklist_items' ? 'checklist_templates' : tab;
+    if (!VALID_TABS.includes(targetTab)) return;
+    setCurrentTab(targetTab);
     setIsSidebarOpen(false);
+
+    if (window.location.hash !== `#${targetTab}`) {
+      window.location.hash = targetTab;
+    }
+    localStorage.setItem('cams_active_tab', targetTab);
   };
   
   // Notification states
@@ -57,6 +126,7 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [alert, setAlert] = useState(null);
+  const [scannedTaskData, setScannedTaskData] = useState(null);
 
   // App Identity states (cached in localStorage for instant rendering on refresh)
   const getCachedSettings = () => {
@@ -176,10 +246,42 @@ export default function App() {
     };
   }, [isAuthenticated]);
 
+  // 1. Sync on Mount & Tab Change + Auto Scroll-To-Top (Mengatasi masalah modul terpotong)
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (window.location.hash !== `#${currentTab}`) {
+        window.location.hash = currentTab;
+      }
+      localStorage.setItem('cams_active_tab', currentTab);
+
+      // Auto Scroll-To-Top on Tab Change
+      if (contentBodyRef.current) {
+        contentBodyRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      }
+      window.scrollTo(0, 0);
+    }
+  }, [currentTab, isAuthenticated]);
+
+  // 2. Listen to Browser Back / Forward hash navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (hash && VALID_TABS.includes(hash) && hash !== currentTab) {
+        setCurrentTab(hash);
+        localStorage.setItem('cams_active_tab', hash);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [currentTab]);
+
   const handleLoginSuccess = (loggedInUser, token) => {
     setUser(loggedInUser);
     setIsAuthenticated(true);
-    setCurrentTab('dashboard');
+    const initial = getInitialTab();
+    setCurrentTab(initial);
+    window.location.hash = initial;
     setAlert({ type: 'success', message: `Selamat datang kembali, ${loggedInUser.name}!` });
   };
 
@@ -204,6 +306,8 @@ export default function App() {
       setNotifications([]);
       setUnreadCount(0);
       setAlert(null);
+      localStorage.removeItem('cams_active_tab');
+      window.location.hash = '';
     }
   };
 
@@ -282,6 +386,14 @@ export default function App() {
               {appIdentity.company_description || 'Cleaning Activity Monitor'}
             </span>
           </div>
+          <button 
+            type="button" 
+            className="sidebar-close-btn" 
+            onClick={() => setIsSidebarOpen(false)} 
+            aria-label="Tutup Menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <ul className="sidebar-menu">
@@ -335,6 +447,14 @@ export default function App() {
                   <ClipboardCheck size={18} /> Tugas Hari Ini
                 </button>
               </li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'cs_adhoc' ? 'active' : ''}`}
+                  onClick={() => selectTab('cs_adhoc')}
+                >
+                  <Zap size={18} color="#eab308" /> Tugas Mendadak
+                </button>
+              </li>
             </>
           )}
 
@@ -350,6 +470,16 @@ export default function App() {
                   <CheckSquare size={18} /> Verifikasi Laporan
                 </button>
               </li>
+              {(isSupervisor || isAdmin) && (
+                <li>
+                  <button 
+                    className={`sidebar-link ${currentTab === 'adhoc_tasks' ? 'active' : ''}`}
+                    onClick={() => selectTab('adhoc_tasks')}
+                  >
+                    <Zap size={18} /> Tugas Ad-hoc (Instan)
+                  </button>
+                </li>
+              )}
             </>
           )}
 
@@ -386,10 +516,34 @@ export default function App() {
               </li>
               <li>
                 <button 
-                  className={`sidebar-link ${currentTab === 'checklist_items' ? 'active' : ''}`}
-                  onClick={() => selectTab('checklist_items')}
+                  className={`sidebar-link ${currentTab === 'checklist_templates' ? 'active' : ''}`}
+                  onClick={() => selectTab('checklist_templates')}
                 >
-                  <CheckSquare size={18} /> Checklist Items
+                  <Layers size={18} /> Template Checklist
+                </button>
+              </li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'room_assets' ? 'active' : ''}`}
+                  onClick={() => selectTab('room_assets')}
+                >
+                  <Box size={18} /> Aset Ruangan
+                </button>
+              </li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'cleaning_materials' ? 'active' : ''}`}
+                  onClick={() => selectTab('cleaning_materials')}
+                >
+                  <Sparkles size={18} /> Bahan Kimia & Alat
+                </button>
+              </li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'sla_parameters' ? 'active' : ''}`}
+                  onClick={() => selectTab('sla_parameters')}
+                >
+                  <Award size={18} /> Parameter SLA
                 </button>
               </li>
               <li>
@@ -480,8 +634,8 @@ export default function App() {
             <button className="hamburger-btn" onClick={() => setIsSidebarOpen(true)} aria-label="Buka Sidebar Navigasi">
               <Menu size={20} />
             </button>
-            <h2 style={{ textTransform: 'capitalize', margin: 0 }}>
-              {currentTab.replace('_', ' ')}
+            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>
+              {TAB_TITLES[currentTab] || currentTab}
             </h2>
           </div>
 
@@ -502,7 +656,7 @@ export default function App() {
                     top: '40px', 
                     right: 0, 
                     width: '320px', 
-                    maxHeight: '360px', 
+                    maxHeight: '380px', 
                     overflowY: 'auto', 
                     borderRadius: 'var(--radius-md)', 
                     zIndex: 200, 
@@ -510,8 +664,14 @@ export default function App() {
                   }}
                 >
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Notifikasi Baru ({unreadCount})</span>
-                    <button className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '0.7rem' }} onClick={fetchNotifications}>Poll</button>
+                    <span>🔔 Notifikasi ({unreadCount} belum dibaca)</span>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      style={{ padding: '4px 10px', fontSize: '0.75rem' }} 
+                      onClick={(e) => { e.stopPropagation(); fetchNotifications(); }}
+                    >
+                      ↻ Perbarui
+                    </button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     {notifications.map(n => (
@@ -528,14 +688,15 @@ export default function App() {
                       >
                         <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span>{n.title}</span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Read</span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 600 }}>✓ Tandai Dibaca</span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.8rem' }}>{n.message}</p>
                       </div>
                     ))}
                     {notifications.length === 0 && (
-                      <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        Tidak ada notifikasi baru.
+                      <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>✓</div>
+                        <div>Semua notifikasi sudah dibaca.</div>
                       </div>
                     )}
                   </div>
@@ -543,26 +704,37 @@ export default function App() {
               )}
             </div>
 
-            {/* Profile Info Badge */}
+            {/* Profile Info Badge — tampil di semua ukuran layar */}
             <div className="user-profile-badge">
-              <div className="user-info">
-                <span className="user-name" style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--on-surface)' }}>{user.name}</span>
-                <span className="user-role-text" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px', fontWeight: 500 }}>
+              <div className="user-info col-hide-mobile">
+                <span className="user-name" style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--on-surface)' }}>{user.name}</span>
+                <span 
+                  className={`role-badge ${getRoleBadgeClass()}`}
+                  style={{ fontSize: '0.65rem', marginTop: '3px', display: 'inline-block' }}
+                >
                   {getRoleLabel()}
                 </span>
               </div>
-              <div className="user-avatar">{user.name[0]}</div>
+              <div className="user-avatar" title={`Login sebagai: ${user.name} (${getRoleLabel()})`}>
+                {user.name[0]}
+              </div>
             </div>
 
             {/* Logout button */}
-            <button className="btn btn-secondary" onClick={handleLogout} style={{ padding: '8px' }} title="Keluar">
-              <LogOut size={18} style={{ color: 'var(--danger)' }} />
+            <button 
+              className="btn btn-secondary" 
+              onClick={handleLogout} 
+              style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px' }} 
+              title="Keluar dari sistem"
+            >
+              <LogOut size={16} style={{ color: 'var(--danger)' }} />
+              <span className="col-hide-mobile" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>Keluar</span>
             </button>
           </div>
         </header>
 
         {/* Content Body */}
-        <main className="content-body">
+        <main className="content-body" ref={contentBodyRef}>
           {/* Banner Alert Notification */}
           {alert && (
             <div className={`alert alert-${alert.type}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -581,26 +753,42 @@ export default function App() {
 
           {/* Mount appropriate tabs */}
           <Suspense fallback={
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
-              <div className="spinner"></div>
+            <div className="loading-state">
+              <div className="spinner" style={{ width: '32px', height: '32px' }}></div>
+              <div className="loading-state-text">⏳ Memuat halaman, mohon tunggu...</div>
             </div>
           }>
             {currentTab === 'dashboard' && (
               <Dashboard 
                 user={user} 
                 setCurrentTab={setCurrentTab} 
-                setOpenScanModalOnMount={setOpenScanModalOnMount} 
+                setOpenScanModalOnMount={setOpenScanModalOnMount}
+                onScanSuccess={(data) => {
+                  setScannedTaskData(data);
+                  setCurrentTab('tasks');
+                }} 
               />
             )}
             {currentTab === 'buildings' && <Buildings />}
             {currentTab === 'rooms' && <Rooms />}
+            {currentTab === 'checklist_templates' && <ChecklistTemplates />}
+            {currentTab === 'room_assets' && <RoomAssets />}
+            {currentTab === 'cleaning_materials' && <CleaningMaterials />}
+            {currentTab === 'sla_parameters' && <SlaParameters />}
+            {currentTab === 'adhoc_tasks' && <AdhocTaskSupervisor />}
+            {currentTab === 'cs_adhoc' && (
+              <CsAdhocTasks onResumeDailyTasks={() => selectTab('tasks')} />
+            )}
             {currentTab === 'users' && <UsersList />}
-            {currentTab === 'checklist_items' && <ChecklistItems />}
             {currentTab === 'schedules' && <Schedules />}
             {currentTab === 'tasks' && (
               <CsTasks 
-                openScanModalOnMount={openScanModalOnMount} 
-                setOpenScanModalOnMount={setOpenScanModalOnMount} 
+                scannedTaskData={scannedTaskData}
+                setScannedTaskData={setScannedTaskData}
+                openScanModalOnMount={openScanModalOnMount}
+                setOpenScanModalOnMount={setOpenScanModalOnMount}
+                onOpenAdhocTasks={() => selectTab('cs_adhoc')}
+                onNavigateDashboard={() => selectTab('dashboard')}
               />
             )}
             {currentTab === 'verifications' && <Verifications />}
@@ -608,7 +796,6 @@ export default function App() {
             {currentTab === 'audit_logs' && <AuditLogs />}
             {currentTab === 'profile' && <Profile user={user} />}
             {currentTab === 'reports' && <Reports />}
-            {currentTab === 'settings' && <Settings />}
             {currentTab === 'app_settings' && (
               <AppSettings 
                 onSettingsUpdated={fetchPublicSettings} 

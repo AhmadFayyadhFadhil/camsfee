@@ -22,24 +22,23 @@ export default function Buildings() {
   const [assigningShiftsBuilding, setAssigningShiftsBuilding] = useState(null);
   const [selectedShiftIds, setSelectedShiftIds] = useState([]);
 
-  const fetchBuildings = async () => {
-    setLoading(true);
+  const fetchBuildings = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const response = await api.get('/buildings?per_page=1000');
       if (response.success) {
-        // Handle paginated or regular array response
         setBuildings(response.data.data || response.data || []);
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat data gedung.');
+      if (showLoading) setError(err.message || 'Gagal memuat data gedung.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchBuildings();
+    fetchBuildings(true);
   }, []);
 
   useEffect(() => {
@@ -89,9 +88,18 @@ export default function Buildings() {
       }
 
       if (response.success) {
+        const savedBld = response.data;
+        if (savedBld && savedBld.id) {
+          if (editingBuilding) {
+            setBuildings(prev => prev.map(b => b.id === editingBuilding.id ? { ...b, ...savedBld } : b));
+          } else {
+            setBuildings(prev => [savedBld, ...prev]);
+          }
+        }
         setSuccessMsg(editingBuilding ? 'Gedung berhasil diperbarui.' : 'Gedung baru berhasil ditambahkan.');
         setShowForm(false);
-        fetchBuildings();
+        setEditingBuilding(null);
+        fetchBuildings(false);
       }
     } catch (err) {
       if (err.errors) {
@@ -117,8 +125,9 @@ export default function Buildings() {
     try {
       const response = await api.delete(`/buildings/${id}`);
       if (response.success) {
+        setBuildings(prev => prev.filter(b => b.id !== id));
         setSuccessMsg('Gedung berhasil dihapus sepenuhnya.');
-        fetchBuildings();
+        fetchBuildings(false);
       }
     } catch (err) {
       setError(err.message || 'Gagal menghapus gedung.');
@@ -152,7 +161,7 @@ export default function Buildings() {
       if (response.success) {
         setSuccessMsg('Shift berhasil dikaitkan dengan gedung.');
         setAssigningShiftsBuilding(null);
-        fetchBuildings();
+        fetchBuildings(false);
       }
     } catch (err) {
       setError(err.message || 'Gagal mengaitkan shift.');
@@ -187,99 +196,157 @@ export default function Buildings() {
         </div>
       )}
 
-      {/* CREATE/EDIT FORM */}
+      {/* CREATE/EDIT FORM (Floating Pop-up) */}
       {showForm && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>
-            {editingBuilding ? 'Edit Gedung' : 'Tambah Gedung Baru'}
-          </h2>
-          <form onSubmit={handleSave}>
-            <div className="grid-2-cols">
-              <div className="form-group">
-                <label className="form-label">Nama Gedung</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="Contoh: Gedung Produksi Utama"
-                  required 
-                />
+        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
+          <div 
+            className="glass-panel" 
+            style={{ maxWidth: '580px', width: '92vw', maxHeight: '88vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {editingBuilding ? 'Edit Data Gedung' : 'Tambah Gedung'}
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px' }}>
+                  {editingBuilding ? 'Edit Gedung' : 'Tambah Gedung Baru'}
+                </h2>
               </div>
-              <div className="form-group">
-                <label className="form-label">Kode Gedung (Unik)</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value={code} 
-                  onChange={(e) => setCode(e.target.value)} 
-                  placeholder="Contoh: GDU"
-                  disabled={!!editingBuilding} // Disable edit code as it's typically immutable
-                  required 
-                />
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setShowForm(false)}
+                title="Tutup formulir"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="grid-2-cols" style={{ gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Nama Gedung *</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={name} 
+                      onChange={(e) => setName(e.target.value)} 
+                      placeholder="Contoh: Gedung Produksi Utama"
+                      required 
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Kode Gedung (Unik) *</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={code} 
+                      onChange={(e) => setCode(e.target.value)} 
+                      placeholder="Contoh: GDU"
+                      disabled={!!editingBuilding}
+                      required 
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Deskripsi / Catatan Lokasi</label>
+                  <textarea 
+                    className="form-control" 
+                    rows="3"
+                    value={description} 
+                    onChange={(e) => setDescription(e.target.value)} 
+                    placeholder="Tulis detail gedung atau catatan khusus..."
+                  />
+                </div>
               </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Deskripsi / Catatan Lokasi</label>
-              <textarea 
-                className="form-control" 
-                rows="3"
-                value={description} 
-                onChange={(e) => setDescription(e.target.value)} 
-                placeholder="Tulis detail gedung..."
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="submit" className="btn btn-primary">Simpan</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-            </div>
-          </form>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
+                  ✓ Simpan Gedung
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* SHIFT ALLOCATION FORM */}
+      {/* SHIFT ALLOCATION FORM (Floating Pop-up) */}
       {assigningShiftsBuilding && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '10px' }}>
-            Alokasikan Shift Kerja: {assigningShiftsBuilding.name}
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px' }}>
-            Pilih shift kerja yang berlaku aktif di dalam gedung ini.
-          </p>
-          <form onSubmit={handleSaveShifts}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-              {SHIFTS.map(shift => (
-                <label 
-                  key={shift.id} 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '12px', 
-                    padding: '12px', 
-                    background: 'rgba(255,255,255,0.02)', 
-                    border: '1px solid var(--border-color)', 
-                    borderRadius: 'var(--radius-md)',
-                    cursor: 'pointer' 
-                  }}
-                >
-                  <input 
-                    type="checkbox" 
-                    checked={selectedShiftIds.includes(shift.id)} 
-                    onChange={() => handleShiftCheckboxChange(shift.id)}
-                    style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{shift.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Jam Kerja: {shift.time}</div>
-                  </div>
-                </label>
-              ))}
+        <div className="modal-backdrop" onClick={() => setAssigningShiftsBuilding(null)}>
+          <div 
+            className="glass-panel" 
+            style={{ maxWidth: '520px', width: '92vw', maxHeight: '88vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Alokasi Shift Operasional
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px' }}>
+                  Gedung: {assigningShiftsBuilding.name}
+                </h2>
+              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setAssigningShiftsBuilding(null)}
+                title="Tutup formulir"
+              >
+                <X size={20} />
+              </button>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn btn-primary">Simpan Shift</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setAssigningShiftsBuilding(null)}>Batal</button>
-            </div>
-          </form>
+
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Pilih shift kerja yang berlaku aktif di dalam gedung ini:
+            </p>
+            <form onSubmit={handleSaveShifts}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                {SHIFTS.map(shift => (
+                  <label 
+                    key={shift.id} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '12px', 
+                      padding: '12px 14px', 
+                      background: selectedShiftIds.includes(shift.id) ? 'rgba(14, 49, 146, 0.05)' : 'rgba(0,0,0,0.02)', 
+                      border: selectedShiftIds.includes(shift.id) ? '1.5px solid var(--primary)' : '1px solid var(--border-color)', 
+                      borderRadius: 'var(--radius-lg)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <input 
+                      type="checkbox" 
+                      checked={selectedShiftIds.includes(shift.id)} 
+                      onChange={() => handleShiftCheckboxChange(shift.id)}
+                      style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: selectedShiftIds.includes(shift.id) ? 'var(--primary)' : 'var(--text-primary)' }}>{shift.name}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Jam Kerja: {shift.time}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setAssigningShiftsBuilding(null)}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
+                  ✓ Simpan Alokasi Shift
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

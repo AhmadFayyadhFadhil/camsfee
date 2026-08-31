@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
 import { 
   Building, 
@@ -11,10 +11,13 @@ import {
   Search,
   Eye,
   QrCode,
-  ThumbsUp
+  ThumbsUp,
+  AlertTriangle,
+  Image as ImageIcon
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 
-export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount }) {
+export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount, onScanSuccess }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,6 +25,39 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   const [buildingGrid, setBuildingGrid] = useState(null);
   const [loadingGrid, setLoadingGrid] = useState(false);
   const [period, setPeriod] = useState('today');
+
+  // CS Inline Scanner states on Dashboard
+  const [inlineScannerActive, setInlineScannerActive] = useState(false);
+  const [inlineScannerLoading, setInlineScannerLoading] = useState(true);
+  const [inlineScannerError, setInlineScannerError] = useState(null);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
+  const [scanSuccessMsg, setScanSuccessMsg] = useState(null);
+  const inlineQrCodeRef = useRef(null);
+
+  // Greeting Banner visibility (auto-dismiss after 10 seconds across all roles)
+  const [showGreeting, setShowGreeting] = useState(true);
+  const [isGreetingFading, setIsGreetingFading] = useState(false);
+
+  useEffect(() => {
+    setShowGreeting(true);
+    setIsGreetingFading(false);
+
+    const fadeTimer = setTimeout(() => {
+      setIsGreetingFading(true);
+    }, 9500);
+
+    const removeTimer = setTimeout(() => {
+      setShowGreeting(false);
+    }, 10000);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, [user]);
+
+  const todayFormatted = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const isAdminOrSupervisor = user.roles && (user.roles.includes('admin') || user.roles.includes('supervisor'));
   const isPic = user.roles && user.roles.includes('pic');
@@ -109,6 +145,160 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     }
   };
 
+  const stopInlineScanner = async () => {
+    if (inlineQrCodeRef.current && inlineQrCodeRef.current.isScanning) {
+      try {
+        await inlineQrCodeRef.current.stop();
+      } catch (e) {
+        console.warn('Error stopping scanner:', e);
+      }
+    }
+    setInlineScannerActive(false);
+  };
+
+  const startInlineScanner = async (cameraId = null) => {
+    if (!isCs) return;
+    setInlineScannerLoading(true);
+    setInlineScannerError(null);
+
+    try {
+      if (inlineQrCodeRef.current && inlineQrCodeRef.current.isScanning) {
+        try {
+          await inlineQrCodeRef.current.stop();
+        } catch (e) {}
+      }
+
+      const readerElement = document.getElementById("dashboard-qr-reader");
+      if (!readerElement) {
+        setInlineScannerLoading(false);
+        return;
+      }
+
+      const qrCode = new Html5Qrcode("dashboard-qr-reader");
+      inlineQrCodeRef.current = qrCode;
+
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setAvailableCameras(devices);
+          if (!selectedCameraId && !cameraId) {
+            const backCam = devices.find(d => 
+              d.label.toLowerCase().includes('back') || 
+              d.label.toLowerCase().includes('environment') || 
+              d.label.toLowerCase().includes('belakang')
+            );
+            setSelectedCameraId(backCam ? backCam.id : devices[0].id);
+          }
+        }
+      } catch (camErr) {
+        console.warn("Could not enumerate cameras:", camErr);
+      }
+
+      const activeCamConfig = cameraId || (selectedCameraId ? { deviceId: { exact: selectedCameraId } } : { facingMode: "environment" });
+
+      await qrCode.start(
+        activeCamConfig,
+        {
+          fps: 10,
+          qrbox: (width, height) => {
+            const size = Math.min(width, height) * 0.75;
+            return { width: size, height: size };
+          }
+        },
+        async (decodedText) => {
+          await handleDashboardQrDetected(decodedText);
+        },
+        () => {}
+      );
+
+      setInlineScannerActive(true);
+      setInlineScannerLoading(false);
+    } catch (err) {
+      console.error("Failed to start inline camera scanner on dashboard:", err);
+      setInlineScannerError(err.message || "Gagal membuka akses kamera. Harap izinkan akses kamera di browser Anda.");
+      setInlineScannerLoading(false);
+      setInlineScannerActive(false);
+    }
+  };
+
+  const handleDashboardQrDetected = async (decodedText) => {
+    try {
+      let qrData;
+      try {
+        qrData = JSON.parse(decodedText);
+      } catch (jsonErr) {
+        throw new Error("QR Code tidak valid. Pastikan Anda melakukan scan pada QR Code CAMS yang tepat.");
+      }
+
+      const { room_id, token } = qrData;
+      if (!room_id || !token) {
+        throw new Error("Format data QR Code CAMS tidak lengkap.");
+      }
+
+      let capturedBlob = null;
+      try {
+        const readerElement = document.getElementById("dashboard-qr-reader");
+        const videoElement = readerElement?.querySelector("video");
+        if (videoElement) {
+          const canvas = document.createElement("canvas");
+          canvas.width = videoElement.videoWidth;
+          canvas.height = videoElement.videoHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+          capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+        }
+      } catch (capErr) {
+        console.error("Failed to capture video frame:", capErr);
+      }
+
+      const payload = {
+        room_id: room_id,
+        qr_code_token: token
+      };
+
+      const response = await api.post('/submissions/scan', payload);
+      if (response.success) {
+        setScanSuccessMsg(`Berhasil memindai QR Ruangan: ${response.data.task?.room?.name || 'Ruangan'}. Mengalihkan ke lembar checklist...`);
+
+        await stopInlineScanner();
+
+        if (onScanSuccess) {
+          onScanSuccess({
+            task: response.data.task,
+            checklist_items: response.data.checklist_items,
+            barcodePhoto: capturedBlob,
+            barcodePhotoName: `scanned-barcode-${(response.data.task?.id || '').substring(0, 8)}.jpg`
+          });
+        } else if (setCurrentTab) {
+          setCurrentTab('tasks');
+        }
+      }
+    } catch (err) {
+      console.error('Error during dashboard QR decode:', err);
+      setInlineScannerError(err.message || 'Gagal memproses QR Code.');
+    }
+  };
+
+  // Lifecycle Inline Scanner di Dashboard CS
+  useEffect(() => {
+    let mounted = true;
+    if (isCs && !loading && data) {
+      const timer = setTimeout(() => {
+        if (mounted) {
+          startInlineScanner();
+        }
+      }, 350);
+
+      return () => {
+        mounted = false;
+        clearTimeout(timer);
+        stopInlineScanner();
+      };
+    } else {
+      stopInlineScanner();
+    }
+  }, [isCs, loading, data, selectedCameraId]);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
@@ -142,89 +332,187 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   if (isCs && data) {
     const summary = data.tasks_summary || {};
     const urgent = data.urgent_tasks || [];
+    const todayFormatted = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     return (
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div>
-            <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Ringkasan Tugas CS</h1>
-            <p style={{ color: 'var(--text-secondary)' }}>Status tugas harian Anda tanggal {new Date().toLocaleDateString('id-ID')}</p>
+        {/* GREETING BANNER (Auto-dismiss in 3s) */}
+        {showGreeting && (
+          <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
+            <div className="greeting-name">👋 Halo, {user?.name || 'Petugas CS'}!</div>
+            <div className="greeting-date">Hari ini {todayFormatted} • Semangat bekerja dan jaga kebersihan fasilitas!</div>
           </div>
-          <button className="btn btn-secondary" onClick={fetchDashboardData}>
+        )}
+
+        {/* EMBEDDED INLINE QR SCANNER SECTION FOR CS DASHBOARD (MATCHING IMAGE 3) */}
+        <div 
+          className="glass-panel" 
+          style={{ 
+            padding: '32px 20px', 
+            borderRadius: 'var(--radius-2xl)', 
+            marginBottom: '28px', 
+            textAlign: 'center',
+            background: 'linear-gradient(180deg, #ffffff 0%, rgba(14, 49, 146, 0.02) 100%)',
+            border: '1.5px solid rgba(14, 49, 146, 0.12)',
+            boxShadow: '0 8px 30px rgba(14, 49, 146, 0.06)'
+          }}
+        >
+          {/* Top Icon Decoration */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '48px',
+            height: '48px',
+            borderRadius: '14px',
+            background: 'rgba(14, 49, 146, 0.08)',
+            color: 'var(--primary)',
+            marginBottom: '12px'
+          }}>
+            <QrCode size={26} />
+          </div>
+
+          <h2 style={{ 
+            fontSize: '1.65rem', 
+            fontWeight: 900, 
+            letterSpacing: '1px', 
+            margin: '0 0 6px 0', 
+            color: 'var(--text-primary)',
+            textTransform: 'uppercase'
+          }}>
+            SCAN QR DISINI
+          </h2>
+
+          <p style={{ 
+            color: 'var(--text-secondary)', 
+            fontSize: '0.92rem', 
+            maxWidth: '520px', 
+            margin: '0 auto 22px auto',
+            lineHeight: 1.5
+          }}>
+            Pindai stiker kode QR yang tertempel di pintu ruangan menggunakan kamera untuk langsung membuka lembar checklist kebersihan.
+          </p>
+
+          {scanSuccessMsg && (
+            <div className="alert alert-success" style={{ maxWidth: '420px', margin: '0 auto 16px auto' }}>
+              <span>{scanSuccessMsg}</span>
+            </div>
+          )}
+
+          {/* Camera Viewport Container with HUD Corners */}
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: '360px',
+            margin: '0 auto',
+            borderRadius: '24px',
+            overflow: 'hidden',
+            background: '#070a13',
+            boxShadow: '0 12px 36px rgba(7, 10, 19, 0.35)',
+            border: '2px solid rgba(16, 185, 129, 0.35)',
+            minHeight: '300px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {/* Viewport HUD Corner Brackets */}
+            <div style={{ position: 'absolute', top: '14px', left: '14px', width: '26px', height: '26px', borderTop: '3.5px solid #10b981', borderLeft: '3.5px solid #10b981', borderTopLeftRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', top: '14px', right: '14px', width: '26px', height: '26px', borderTop: '3.5px solid #10b981', borderRight: '3.5px solid #10b981', borderTopRightRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: '14px', left: '14px', width: '26px', height: '26px', borderBottom: '3.5px solid #10b981', borderLeft: '3.5px solid #10b981', borderBottomLeftRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: '14px', right: '14px', width: '26px', height: '26px', borderBottom: '3.5px solid #10b981', borderRight: '3.5px solid #10b981', borderBottomRightRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+
+            {/* Laser scanning beam */}
+            {inlineScannerActive && (
+              <div className="scanning-laser-line" />
+            )}
+
+            {/* Live Camera Scanner DOM element */}
+            <div 
+              id="dashboard-qr-reader" 
+              style={{ width: '100%', minHeight: '300px', display: inlineScannerActive ? 'block' : 'none' }} 
+            />
+
+            {/* Initializing / Waiting for Camera State */}
+            {inlineScannerLoading && (
+              <div style={{ padding: '30px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
+                <div className="spinner" style={{ borderColor: 'rgba(16, 185, 129, 0.3)', borderTopColor: '#10b981', margin: '0 auto 16px auto', width: '38px', height: '38px' }} />
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#10b981' }}>Menginisialisasi Kamera...</div>
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '6px' }}>Harap izinkan akses kamera di browser Anda</div>
+              </div>
+            )}
+
+            {/* Error / Fallback State */}
+            {inlineScannerError && !inlineScannerLoading && (
+              <div style={{ padding: '30px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
+                <AlertTriangle size={34} color="#ef4444" style={{ marginBottom: '12px' }} />
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ef4444' }}>Akses Kamera Terkendala</div>
+                <div style={{ fontSize: '0.82rem', color: '#cbd5e1', marginTop: '6px', marginBottom: '16px' }}>
+                  {inlineScannerError}
+                </div>
+                <button 
+                  className="btn btn-primary btn-sm"
+                  onClick={() => startInlineScanner()}
+                  style={{ fontWeight: 700 }}
+                >
+                  <RefreshCw size={14} /> Coba Akses Kamera Lagi
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Action options under camera: Device selector (jika multi-kamera) */}
+          {availableCameras.length > 1 && (
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <select 
+                className="form-control form-select"
+                value={selectedCameraId}
+                onChange={(e) => {
+                  setSelectedCameraId(e.target.value);
+                  startInlineScanner(e.target.value);
+                }}
+                style={{ maxWidth: '230px', fontSize: '0.84rem' }}
+              >
+                {availableCameras.map(cam => (
+                  <option key={cam.id} value={cam.id}>📷 {cam.label || `Kamera ${cam.id.substring(0, 6)}`}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* SECTION HEADER: RINGKASAN AREA TUGAS */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.4rem', margin: 0, fontWeight: 800 }}>Ringkasan Area Tugas</h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '2px', fontSize: '0.9rem' }}>Status penugasan kebersihan area / ruangan Anda hari ini</p>
+          </div>
+          <button className="btn btn-secondary" onClick={fetchDashboardData} title="Perbarui data ringkasan">
             <RefreshCw size={16} /> Segarkan
           </button>
         </div>
 
-        {/* BIG SCAN BUTTON FOR CS */}
-        <div className="glass-panel" style={{ 
-          padding: '24px', 
-          borderRadius: 'var(--radius-lg)', 
-          marginBottom: '24px', 
-          background: 'var(--gradient-primary)',
-          border: 'none',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-          color: 'white',
-          boxShadow: 'var(--shadow-md)'
-        }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-              <QrCode size={20} />
-              Mulai Bersihkan Ruangan
-            </h3>
-            <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.875rem', marginTop: '6px' }}>
-              Pindai atau foto barcode/QR Code ruangan untuk langsung membuka lembar checklist kebersihan.
-            </p>
-          </div>
-          <button 
-            className="btn" 
-            onClick={() => {
-              if (setOpenScanModalOnMount) {
-                setOpenScanModalOnMount(true);
-              }
-              if (setCurrentTab) {
-                setCurrentTab('tasks');
-              }
-            }}
-            style={{ 
-              height: '46px', 
-              padding: '0 24px', 
-              fontWeight: 700,
-              background: '#ffffff',
-              color: 'var(--primary)',
-              boxShadow: '0 4px 15px rgba(14, 49, 146, 0.2)',
-              border: 'none'
-            }}
-          >
-            <QrCode size={18} /> Scan Barcode Ruangan
-          </button>
-        </div>
-
         <div className="dashboard-grid">
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--primary)', background: 'rgba(14, 49, 146, 0.02)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')}>
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--primary)', background: 'rgba(14, 49, 146, 0.02)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Klik untuk melihat semua area tugas">
             <div className="stats-icon" style={{ background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)' }}>
-              <FileText size={24} />
+              <Building size={24} />
             </div>
             <div className="stats-details">
               <span className="stats-number">{summary.total || 0}</span>
-              <span className="stats-label">Total Tugas</span>
+              <span className="stats-label">Total Area</span>
             </div>
           </div>
 
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--warning)', background: 'rgba(180, 83, 9, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')}>
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--warning)', background: 'rgba(180, 83, 9, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Tugas yang belum Anda mulai">
             <div className="stats-icon" style={{ background: 'rgba(180, 83, 9, 0.08)', color: 'var(--warning)' }}>
               <Clock size={24} />
             </div>
             <div className="stats-details">
               <span className="stats-number">{summary.pending || 0}</span>
-              <span className="stats-label">Menunggu</span>
+              <span className="stats-label">Belum Dimulai</span>
             </div>
           </div>
 
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid #3b82f6', background: 'rgba(59, 130, 246, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')}>
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid #3b82f6', background: 'rgba(59, 130, 246, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Tugas yang sedang Anda kerjakan">
             <div className="stats-icon" style={{ background: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6' }}>
               <RefreshCw size={24} className="spinner" style={{ animationDuration: '3s' }} />
             </div>
@@ -234,42 +522,42 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             </div>
           </div>
 
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--info)', background: 'rgba(26, 75, 196, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')}>
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--info)', background: 'rgba(26, 75, 196, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Menunggu verifikasi dari PIC">
             <div className="stats-icon" style={{ background: 'rgba(26, 75, 196, 0.08)', color: 'var(--info)' }}>
               <Eye size={24} />
             </div>
             <div className="stats-details">
               <span className="stats-number">{summary.waiting_verification || 0}</span>
-              <span className="stats-label">Menunggu Verifikasi</span>
+              <span className="stats-label">Tunggu Verifikasi</span>
             </div>
           </div>
 
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--success)', background: 'rgba(15, 118, 110, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')}>
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--success)', background: 'rgba(15, 118, 110, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Tugas yang sudah disetujui">
             <div className="stats-icon" style={{ background: 'rgba(15, 118, 110, 0.08)', color: 'var(--success)' }}>
               <CheckSquare size={24} />
             </div>
             <div className="stats-details">
               <span className="stats-number">{summary.completed || 0}</span>
-              <span className="stats-label">Selesai</span>
+              <span className="stats-label">Selesai (Approved)</span>
             </div>
           </div>
 
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--danger)', background: 'rgba(255, 0, 0, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')}>
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--danger)', background: 'rgba(255, 0, 0, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Laporan yang perlu perbaikan ulang">
             <div className="stats-icon" style={{ background: 'rgba(255, 0, 0, 0.08)', color: 'var(--danger)' }}>
               <AlertOctagon size={24} />
             </div>
             <div className="stats-details">
               <span className="stats-number">{summary.rejected || 0}</span>
-              <span className="stats-label">Ditolak</span>
+              <span className="stats-label">Perlu Diulang</span>
             </div>
           </div>
         </div>
 
         {urgent.length > 0 && (
-          <div className="glass-panel" style={{ borderRadius: 'var(--radius-md)', padding: '24px', border: '1px solid rgba(230, 0, 0, 0.2)' }}>
+          <div className="glass-panel" style={{ borderRadius: 'var(--radius-xl)', padding: '24px', border: '1.5px solid rgba(220, 38, 38, 0.3)', marginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', color: 'var(--danger)' }}>
-              <AlertOctagon size={22} />
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Tugas Mendesak (Tenggat &lt; 60 Menit)</h2>
+              <AlertOctagon size={24} />
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>⚠️ Tugas Mendesak (Batas Waktu &lt; 60 Menit!)</h2>
             </div>
             <div className="table-container">
               <table className="data-table">
@@ -285,16 +573,17 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                 <tbody>
                   {urgent.map(t => (
                     <tr key={t.task_id}>
-                      <td style={{ fontWeight: 600 }}>{t.room_code}</td>
+                      <td style={{ fontWeight: 700 }}>{t.room_code}</td>
                       <td>{t.room_name}</td>
                       <td>{new Date(t.due_datetime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
-                      <td style={{ color: 'var(--danger)', fontWeight: 600 }}>{t.minutes_left} Menit Lagi</td>
+                      <td style={{ color: 'var(--danger)', fontWeight: 800 }}>{t.minutes_left} Menit Lagi</td>
                       <td>
                         <button 
                           className="btn btn-primary btn-sm"
                           onClick={() => setCurrentTab && setCurrentTab('tasks')}
+                          style={{ fontWeight: 700 }}
                         >
-                          Mulai Kerja & Foto Barcode
+                          ⚡ Kerjakan Sekarang!
                         </button>
                       </td>
                     </tr>
@@ -315,6 +604,14 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
 
     return (
       <div>
+        {/* GREETING BANNER (Auto-dismiss in 3s) */}
+        {showGreeting && (
+          <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
+            <div className="greeting-name">👋 Halo, {user?.name || 'Petugas OB'}!</div>
+            <div className="greeting-date">Hari ini {todayFormatted} • Semangat bekerja dan pantau perbaikan fasilitas!</div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div>
             <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Ringkasan Tugas OB</h1>
@@ -440,6 +737,14 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
 
   return (
     <div>
+      {/* GREETING BANNER (Auto-dismiss in 3s) */}
+      {showGreeting && (
+        <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
+          <div className="greeting-name">👋 Halo, {user?.name || (isAdminOrSupervisor ? (user?.roles?.includes('admin') ? 'Administrator' : 'Supervisor') : 'PIC Area')}!</div>
+          <div className="greeting-date">Hari ini {todayFormatted} • Selamat datang di sistem monitoring kebersihan fasilitas CAMS.</div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>

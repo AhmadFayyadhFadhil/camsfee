@@ -42,8 +42,8 @@ export default function UsersList() {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const response = await api.get('/users?per_page=1000');
@@ -51,14 +51,14 @@ export default function UsersList() {
         setUsers(response.data.data || response.data || []);
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat data pengguna.');
+      if (showLoading) setError(err.message || 'Gagal memuat data pengguna.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(true);
   }, []);
 
   useEffect(() => {
@@ -138,9 +138,18 @@ export default function UsersList() {
       }
 
       if (response.success) {
+        const savedUser = response.data;
+        if (savedUser && savedUser.id) {
+          if (editingUser) {
+            setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...savedUser } : u));
+          } else {
+            setUsers(prev => [savedUser, ...prev]);
+          }
+        }
         setSuccessMsg(editingUser ? 'User berhasil diperbarui.' : 'User baru berhasil ditambahkan.');
         setShowForm(false);
-        fetchUsers();
+        setEditingUser(null);
+        fetchUsers(false);
       }
     } catch (err) {
       if (err.errors) {
@@ -247,99 +256,128 @@ export default function UsersList() {
         </div>
       )}
 
-      {/* CREATE/EDIT FORM */}
+      {/* CREATE/EDIT FORM (Floating Pop-up) */}
       {showForm && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>
-            {editingUser ? 'Edit Pengguna' : 'Tambah Pengguna Baru'}
-          </h2>
-          <form onSubmit={handleSave}>
-            <div className="grid-2-cols">
-              <div className="form-group">
-                <label className="form-label">Nama Lengkap</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="Contoh: Budi Santoso"
-                  required 
-                />
+        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
+          <div 
+            className="glass-panel" 
+            style={{ maxWidth: '600px', width: '92vw', maxHeight: '88vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {editingUser ? 'Edit Akun Staf' : 'Tambah Staf'}
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px' }}>
+                  {editingUser ? 'Edit Pengguna' : 'Tambah Pengguna Baru'}
+                </h2>
               </div>
-              <div className="form-group">
-                <label className="form-label">Alamat Email</label>
-                <input 
-                  type="email" 
-                  className="form-control" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  placeholder="Contoh: budi@widatra.com"
-                  required 
-                />
-              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setShowForm(false)}
+                title="Tutup formulir"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="grid-2-cols">
-              <div className="form-group">
-                <label className="form-label">
-                  Kata Sandi {editingUser && <span style={{ color: 'var(--text-muted)' }}>(Kosongkan jika tidak diganti)</span>}
-                </label>
-                <input 
-                  type="password" 
-                  className="form-control" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  placeholder={editingUser ? "Ganti password baru..." : "Ketik password akun..."}
-                  required={!editingUser} 
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Status Keaktifan</label>
-                <select 
-                  className="form-control form-select"
-                  value={isActive ? 'true' : 'false'}
-                  onChange={(e) => setIsActive(e.target.value === 'true')}
-                >
-                  <option value="true">Aktif</option>
-                  <option value="false">Non-aktif</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '25px' }}>
-              <label className="form-label">Pilih Otoritas Peran (Roles)</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '6px' }}>
-                {ROLES.map(role => (
-                  <label 
-                    key={role.id} 
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '8px', 
-                      padding: '8px 14px', 
-                      background: 'rgba(255,255,255,0.02)', 
-                      border: '1px solid var(--border-color)', 
-                      borderRadius: 'var(--radius-md)',
-                      cursor: 'pointer' 
-                    }}
-                  >
+            <form onSubmit={handleSave}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="grid-2-cols" style={{ gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Nama Lengkap *</label>
                     <input 
-                      type="checkbox" 
-                      checked={selectedRoles.includes(role.name)} 
-                      onChange={() => handleRoleCheckboxChange(role.name)}
-                      style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                      type="text" 
+                      className="form-control" 
+                      value={name} 
+                      onChange={(e) => setName(e.target.value)} 
+                      placeholder="Contoh: Budi Santoso"
+                      required 
                     />
-                    <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{role.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Alamat Email *</label>
+                    <input 
+                      type="email" 
+                      className="form-control" 
+                      value={email} 
+                      onChange={(e) => setEmail(e.target.value)} 
+                      placeholder="Contoh: budi@widatra.com"
+                      required 
+                    />
+                  </div>
+                </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn btn-primary">Simpan</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-            </div>
-          </form>
+                <div className="grid-2-cols" style={{ gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>
+                      Kata Sandi {editingUser && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Kosongkan jika tetap)</span>}
+                    </label>
+                    <input 
+                      type="password" 
+                      className="form-control" 
+                      value={password} 
+                      onChange={(e) => setPassword(e.target.value)} 
+                      placeholder={editingUser ? "Ganti password baru..." : "Ketik password akun..."}
+                      required={!editingUser} 
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Status Keaktifan</label>
+                    <select 
+                      className="form-control form-select"
+                      value={isActive ? 'true' : 'false'}
+                      onChange={(e) => setIsActive(e.target.value === 'true')}
+                    >
+                      <option value="true">🟢 Aktif Bekerja</option>
+                      <option value="false">🔴 Non-aktif</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Pilih Otoritas Peran (Roles) *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginTop: '6px' }}>
+                    {ROLES.map(role => (
+                      <label 
+                        key={role.id} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px', 
+                          padding: '10px 12px', 
+                          background: selectedRoles.includes(role.name) ? 'rgba(14, 49, 146, 0.05)' : 'rgba(0,0,0,0.02)', 
+                          border: selectedRoles.includes(role.name) ? '1.5px solid var(--primary)' : '1px solid var(--border-color)', 
+                          borderRadius: 'var(--radius-lg)',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={selectedRoles.includes(role.name)} 
+                          onChange={() => handleRoleCheckboxChange(role.name)}
+                          style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                        />
+                        <span style={{ fontSize: '0.88rem', fontWeight: 600, color: selectedRoles.includes(role.name) ? 'var(--primary)' : 'var(--text-primary)' }}>{role.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
+                  ✓ Simpan Pengguna
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

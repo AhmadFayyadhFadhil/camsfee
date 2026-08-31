@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Plus, Edit2, Trash2, Check, X, ShieldAlert, QrCode, Download, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, ShieldAlert, QrCode, Download, Eye, Printer, Layers } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
+import BulkQrPrint from './BulkQrPrint.jsx';
 
 export default function Rooms() {
   const confirm = useConfirm();
   const [rooms, setRooms] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [users, setUsers] = useState([]); // Filtered for PICs
+  const [templates, setTemplates] = useState([]); // Checklist Templates
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
+
+  // Bulk QR Print View State
+  const [showBulkPrint, setShowBulkPrint] = useState(false);
 
   // Form State
   const [showForm, setShowForm] = useState(false);
@@ -20,6 +25,7 @@ export default function Rooms() {
   const [floor, setFloor] = useState(1);
   const [buildingId, setBuildingId] = useState('');
   const [picUserId, setPicUserId] = useState('');
+  const [checklistTemplateId, setChecklistTemplateId] = useState('');
 
   // QR Code Preview State
   const [previewingRoom, setPreviewingRoom] = useState(null);
@@ -51,18 +57,32 @@ export default function Rooms() {
     setSelectedPicFilter('');
   };
 
+  // Refetch hanya data ruangan tanpa memuat ulang master lookup
+  const fetchRooms = async () => {
+    try {
+      const res = await api.get('/rooms?per_page=1000');
+      if (res.success) {
+        setRooms(res.data.data || res.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to refresh rooms list:', err);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [roomsRes, buildingsRes, usersRes] = await Promise.all([
+      const [roomsRes, buildingsRes, usersRes, templatesRes] = await Promise.all([
         api.get('/rooms?per_page=1000'),
-        api.get('/buildings?is_active=true&per_page=1000'),
-        api.get('/users?per_page=1000') // Admin only route
+        api.get('/buildings?is_active=true&per_page=1000', { lookup: true }),
+        api.get('/users?per_page=1000', { lookup: true }), // Admin only route
+        api.get('/checklist-templates?per_page=100', { lookup: true })
       ]);
 
       if (roomsRes.success) setRooms(roomsRes.data.data || roomsRes.data || []);
       if (buildingsRes.success) setBuildings(buildingsRes.data.data || buildingsRes.data || []);
+      if (templatesRes.success) setTemplates(templatesRes.data.data || templatesRes.data || []);
       
       if (usersRes.success) {
         const allUsers = usersRes.data.data || usersRes.data || [];
@@ -101,17 +121,19 @@ export default function Rooms() {
     setFloor(1);
     setBuildingId(buildings[0]?.id || '');
     setPicUserId(users[0]?.id || '');
+    setChecklistTemplateId('');
     setShowForm(true);
     setPreviewingRoom(null);
   };
 
   const handleOpenEditForm = (room) => {
     setEditingRoom(room);
-    setName(room.name);
-    setCode(room.code);
-    setFloor(room.floor);
+    setName(room.name || room.nama_ruangan || '');
+    setCode(room.code || room.kode_ruangan || '');
+    setFloor(room.floor || room.lantai || 1);
     setBuildingId(room.building_id || room.building?.id || '');
-    setPicUserId(room.active_pic?.user_id || room.active_pic?.user?.id || '');
+    setPicUserId(room.active_pic?.user_id || room.active_pic?.user?.id || room.pic_user_id || '');
+    setChecklistTemplateId(room.checklist_template_id || room.template?.id || '');
     setShowForm(true);
     setPreviewingRoom(null);
   };
@@ -126,7 +148,8 @@ export default function Rooms() {
       name,
       code,
       floor: parseInt(floor),
-      pic_user_id: picUserId
+      pic_user_id: picUserId || null,
+      checklist_template_id: checklistTemplateId || null,
     };
 
     try {
@@ -138,9 +161,19 @@ export default function Rooms() {
       }
 
       if (response.success) {
+        const savedRoom = response.data;
+        if (savedRoom && savedRoom.id) {
+          if (editingRoom) {
+            setRooms(prev => prev.map(r => r.id === editingRoom.id ? { ...r, ...savedRoom } : r));
+          } else {
+            setRooms(prev => [savedRoom, ...prev]);
+          }
+        }
         setSuccessMsg(editingRoom ? 'Ruangan berhasil diperbarui.' : 'Ruangan baru berhasil ditambahkan.');
         setShowForm(false);
-        fetchData();
+        setEditingRoom(null);
+        // Refresh background ruangan saja tanpa memblokir UI
+        fetchRooms();
       }
     } catch (err) {
       if (err.errors) {
@@ -153,9 +186,9 @@ export default function Rooms() {
 
   const handleDelete = async (id) => {
     if (!(await confirm({
-      title: 'Hapus Ruangan Permanen',
-      message: 'Apakah Anda yakin ingin menghapus ruangan ini secara permanen? Semua data tugas, jadwal, riwayat laporan, dan temuan terkait ruangan ini juga akan dihapus.',
-      confirmText: 'Ya, Hapus',
+      title: 'Nonaktifkan / Soft Delete Ruangan',
+      message: 'Apakah Anda yakin ingin menonaktifkan ruangan ini? Seluruh data historis tugas, jadwal, bukti laporan, dan audit trail akan tetap tersimpan aman di database.',
+      confirmText: 'Ya, Nonaktifkan',
       cancelText: 'Batal',
       type: 'danger'
     }))) {
@@ -166,8 +199,9 @@ export default function Rooms() {
     try {
       const response = await api.delete(`/rooms/${id}`);
       if (response.success) {
-        setSuccessMsg('Ruangan dan data terkait berhasil dihapus sepenuhnya.');
-        fetchData();
+        setRooms(prev => prev.filter(r => r.id !== id));
+        setSuccessMsg('Ruangan berhasil dinonaktifkan.');
+        fetchRooms();
       }
     } catch (err) {
       setError(err.message || 'Gagal menghapus ruangan.');
@@ -195,7 +229,7 @@ export default function Rooms() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `qrcode-room-${room.code}.png`;
+      link.download = `qrcode-room-${room.code || room.kode_ruangan}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -206,15 +240,22 @@ export default function Rooms() {
 
   return (
     <div>
+      {showBulkPrint && <BulkQrPrint onClose={() => setShowBulkPrint(false)} />}
+
       <div className="flex-header">
         <div>
           <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Kelola Ruangan</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Manajemen ruangan, alokasi PIC, dan unduh QR Code scan</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Manajemen ruangan, alokasi PIC, template checklist, dan cetak massal QR Code</p>
         </div>
         {!showForm && !previewingRoom && (
-          <button className="btn btn-primary" onClick={handleOpenNewForm}>
-            <Plus size={16} /> Tambah Ruangan
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn btn-secondary" onClick={() => setShowBulkPrint(true)} style={{ display: 'inline-flex', gap: '6px' }}>
+              <Printer size={16} /> Cetak Massal QR Code
+            </button>
+            <button className="btn btn-primary" onClick={handleOpenNewForm} style={{ display: 'inline-flex', gap: '6px' }}>
+              <Plus size={16} /> Tambah Ruangan
+            </button>
+          </div>
         )}
       </div>
 
@@ -308,117 +349,183 @@ export default function Rooms() {
         </div>
       )}
 
-      {/* CREATE/EDIT FORM */}
+      {/* CREATE/EDIT FORM (Floating Pop-up) */}
       {showForm && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px' }}>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>
-            {editingRoom ? 'Edit Ruangan' : 'Tambah Ruangan Baru'}
-          </h2>
-          <form onSubmit={handleSave}>
-            <div className="grid-2-cols">
-              <div className="form-group">
-                <label className="form-label">Nama Ruangan</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="Contoh: R. Sterilisasi A"
-                  required 
-                />
+        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
+          <div 
+            className="glass-panel" 
+            style={{ maxWidth: '640px', width: '92vw', maxHeight: '88vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {editingRoom ? 'Edit Data Ruangan' : 'Tambah Ruangan'}
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px' }}>
+                  {editingRoom ? 'Edit Ruangan' : 'Tambah Ruangan Baru'}
+                </h2>
               </div>
-              <div className="form-group">
-                <label className="form-label">Kode Ruang (Unik)</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value={code} 
-                  onChange={(e) => setCode(e.target.value)} 
-                  placeholder="Contoh: STR-A"
-                  required 
-                />
-              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setShowForm(false)}
+                title="Tutup formulir"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="grid-3-cols">
-              <div className="form-group">
-                <label className="form-label">Lantai</label>
-                <input 
-                  type="number" 
-                  className="form-control" 
-                  value={floor} 
-                  onChange={(e) => setFloor(e.target.value)} 
-                  min="1"
-                  required 
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Gedung</label>
-                <select 
-                  className="form-control form-select"
-                  value={buildingId}
-                  onChange={(e) => setBuildingId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Pilih Gedung</option>
-                  {buildings.map(b => (
-                    <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">PIC Ruangan (Penanggung Jawab)</label>
-                <select 
-                  className="form-control form-select"
-                  value={picUserId}
-                  onChange={(e) => setPicUserId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Pilih User PIC</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <form onSubmit={handleSave}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="grid-2-cols" style={{ gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Nama Ruangan *</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={name} 
+                      onChange={(e) => setName(e.target.value)} 
+                      placeholder="Contoh: R. Sterilisasi A"
+                      required 
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Kode Ruang (Unik) *</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      value={code} 
+                      onChange={(e) => setCode(e.target.value)} 
+                      placeholder="Contoh: STR-A"
+                      required 
+                    />
+                  </div>
+                </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="submit" className="btn btn-primary">Simpan</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Batal</button>
-            </div>
-          </form>
+                <div className="grid-3-cols" style={{ gap: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Lantai *</label>
+                    <input 
+                      type="number" 
+                      className="form-control" 
+                      value={floor} 
+                      onChange={(e) => setFloor(e.target.value)} 
+                      min="1"
+                      required 
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Gedung *</label>
+                    <select 
+                      className="form-control form-select"
+                      value={buildingId}
+                      onChange={(e) => setBuildingId(e.target.value)}
+                      required
+                    >
+                      <option value="" disabled>Pilih Gedung</option>
+                      {buildings.map(b => (
+                        <option key={b.id} value={b.id}>{b.name || b.nama_gedung} ({b.code || b.kode_gedung})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>PIC Penanggung Jawab</label>
+                    <select 
+                      className="form-control form-select"
+                      value={picUserId}
+                      onChange={(e) => setPicUserId(e.target.value)}
+                    >
+                      <option value="">— Belum Ditentukan —</option>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>{u.name || u.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Template Checklist Kebersihan (Otomatisasi Massal)</label>
+                  <select
+                    className="form-control form-select"
+                    value={checklistTemplateId}
+                    onChange={(e) => setChecklistTemplateId(e.target.value)}
+                  >
+                    <option value="">— Gunakan Jadwal Kustom / Tanpa Template —</option>
+                    {templates.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.nama_template} ({t.items?.length || 0} item kebersihan standar)
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    Jika dipilih, ruangan ini akan otomatis mengadopsi seluruh item kebersihan dari template setiap hari.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
+                  ✓ Simpan Ruangan
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* QR PREVIEW SECTION */}
+      {/* QR PREVIEW MODAL (Floating Pop-up) */}
       {previewingRoom && (
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)', marginBottom: '30px', display: 'flex', gap: '24px', alignItems: 'center' }}>
-          <div style={{ background: 'white', padding: '16px', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'center', alignItems: 'center', width: '200px', height: '200px', border: '1px solid var(--border-color)' }}>
-            {loadingQr ? (
-              <div className="spinner"></div>
-            ) : qrCodeUrl ? (
-              <img src={qrCodeUrl} alt="QR Code Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            ) : (
-              <span style={{ color: 'black', fontSize: '0.8rem' }}>Eror QR</span>
-            )}
-          </div>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>QR Code: {previewingRoom.name}</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.9rem' }}>
-              Kode Ruangan: <code>{previewingRoom.code}</code> | Lantai {previewingRoom.floor} | Gedung: {previewingRoom.building?.name}
-            </p>
-            <p style={{ color: 'var(--text-muted)', marginTop: '8px', fontSize: '0.8rem', fontStyle: 'italic' }}>
-              Token QR aktif: <code>{previewingRoom.qr_code_token}</code>
-            </p>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+        <div className="modal-backdrop" onClick={() => setPreviewingRoom(null)}>
+          <div 
+            className="glass-panel" 
+            style={{ maxWidth: '480px', width: '92vw', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff', textAlign: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 className="modal-title">QR Code Ruangan</h2>
               <button 
-                className="btn btn-primary btn-sm" 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setPreviewingRoom(null)}
+                title="Tutup preview"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ background: '#ffffff', padding: '16px', borderRadius: 'var(--radius-xl)', display: 'inline-flex', justifyContent: 'center', alignItems: 'center', width: '220px', height: '220px', border: '2px solid rgba(14, 49, 146, 0.1)', margin: '10px auto' }}>
+              {loadingQr ? (
+                <div className="spinner"></div>
+              ) : qrCodeUrl ? (
+                <img src={qrCodeUrl} alt="QR Code Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                <span style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>Gagal memuat QR Code</span>
+              )}
+            </div>
+
+            <h3 style={{ margin: '14px 0 4px 0', fontSize: '1.2rem', fontWeight: 800 }}>
+              {previewingRoom.name || previewingRoom.nama_ruangan}
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.88rem' }}>
+              Kode: <strong>{previewingRoom.code || previewingRoom.kode_ruangan}</strong> • Lantai {previewingRoom.floor || previewingRoom.lantai} • Gedung: {previewingRoom.building?.nama_gedung || previewingRoom.building?.name}
+            </p>
+
+            <div className="modal-footer" style={{ justifyContent: 'center' }}>
+              <button 
+                className="btn btn-primary" 
                 onClick={() => handleDownloadQrCode(previewingRoom)}
                 disabled={loadingQr}
+                style={{ fontWeight: 700 }}
               >
-                <Download size={14} /> Unduh File PNG
+                <Download size={16} /> Unduh File PNG
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setPreviewingRoom(null)}>Tutup Preview</button>
+              <button className="btn btn-secondary" onClick={() => setPreviewingRoom(null)}>
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -438,6 +545,7 @@ export default function Rooms() {
                 <th>Kode</th>
                 <th>Lantai</th>
                 <th>Gedung</th>
+                <th>Template Checklist</th>
                 <th>PIC Aktif</th>
                 <th>Status</th>
                 <th>Aksi</th>
@@ -446,13 +554,22 @@ export default function Rooms() {
             <tbody>
               {filteredRooms.map(r => (
                 <tr key={r.id}>
-                  <td style={{ fontWeight: 600 }}>{r.name}</td>
-                  <td><code>{r.code}</code></td>
-                  <td>Lantai {r.floor}</td>
-                  <td>{r.building?.name || '-'}</td>
+                  <td style={{ fontWeight: 600 }}>{r.name || r.nama_ruangan}</td>
+                  <td><code>{r.code || r.kode_ruangan}</code></td>
+                  <td>Lantai {r.floor || r.lantai}</td>
+                  <td>{r.building?.nama_gedung || r.building?.name || '-'}</td>
+                  <td>
+                    {r.template_name || r.template?.nama_template ? (
+                      <span className="role-badge role-supervisor" style={{ fontSize: '0.75rem', textTransform: 'none' }}>
+                        {r.template_name || r.template?.nama_template}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Kustom</span>
+                    )}
+                  </td>
                   <td>
                     <span className="role-badge role-pic" style={{ textTransform: 'none' }}>
-                      {r.active_pic?.user?.name || 'Belum ada PIC'}
+                      {r.active_pic?.user?.name || r.pic?.full_name || 'Belum ada PIC'}
                     </span>
                   </td>
                   <td>
