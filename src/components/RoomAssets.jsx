@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../utils/api';
 import { 
   Plus, 
@@ -113,6 +114,26 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
 
   // Modal 5: Preview Foto Modal State
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
+
+  // Lock body scroll when any modal is open
+  const isAnyModalOpen = Boolean(
+    showAuditBuildingModal ||
+    showManageAssetsModal ||
+    showScheduleModal ||
+    showVerifyModal ||
+    previewPhotoUrl
+  );
+
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isAnyModalOpen]);
 
   const generateAssetCode = () => `AST-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -249,7 +270,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
     try {
       const res = await api.get(`/buildings/${building.id}/assets-tree`);
       if (res.success) {
-        const tree = res.data;
+        const tree = res.data.data || res.data || {};
         setBuildingTree(tree);
 
         // Inisialisasi state checklist aset
@@ -795,7 +816,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                     <th>Siklus Audit Gedung</th>
                     <th>Batas Jatuh Tempo</th>
                     <th>Status Siklus</th>
-                    <th style={{ textAlign: 'right' }}>Aksi Gedung</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Aksi Gedung</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -847,13 +868,13 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                           </span>
                         </td>
 
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
                               onClick={() => handleOpenAuditBuilding(b)}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, whiteSpace: 'nowrap' }}
                               title="Lakukan audit fisik seluruh ruangan di gedung ini"
                             >
                               <ClipboardCheck size={15} />
@@ -864,7 +885,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                               type="button"
                               className="btn btn-secondary btn-sm"
                               onClick={() => handleOpenManageAssets(b)}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, whiteSpace: 'nowrap' }}
                               title="Kelola master aset tiap ruangan di gedung ini"
                             >
                               <Box size={15} />
@@ -876,7 +897,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                                 type="button"
                                 className="btn btn-secondary btn-sm"
                                 onClick={() => handleOpenScheduleModal(b)}
-                                style={{ padding: '6px 8px' }}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', padding: 0 }}
                                 title="Atur siklus & tanggal jatuh tempo audit gedung"
                               >
                                 <Calendar size={15} />
@@ -1066,40 +1087,44 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 1: FORMULIR AUDIT FISIK GEDUNG TERPADU */}
+      {/* MODAL 1: FORMULIR AUDIT FISIK GEDUNG TERPADU (PORTAL) */}
       {/* ========================================================================= */}
-      {showAuditBuildingModal && selectedBuildingForAudit && (
-        <div className="modal-overlay" onClick={() => !submittingAudit && setShowAuditBuildingModal(false)}>
+      {showAuditBuildingModal && selectedBuildingForAudit && createPortal(
+        <div className="modal-backdrop" onClick={() => !submittingAudit && setShowAuditBuildingModal(false)}>
           <div 
-            className="modal-content" 
+            className="glass-panel" 
             onClick={(e) => e.stopPropagation()} 
-            style={{ maxWidth: '960px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: '960px', width: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}
           >
-            <div className="modal-header">
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
               <div>
-                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Formulir Audit Fisik Gedung
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ClipboardCheck className="text-primary" size={22} />
-                  Formulir Audit Fisik: Gedung {selectedBuildingForAudit.nama_gedung}
-                </h3>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Kode: {selectedBuildingForAudit.kode_gedung} • Periksa seluruh fisik aset ruangan di gedung ini
+                  Gedung {selectedBuildingForAudit.nama_gedung}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Kode: {selectedBuildingForAudit.kode_gedung} • Periksa seluruh kondisi fisik aset per ruangan
                 </div>
               </div>
               <button 
                 type="button" 
-                className="btn-icon" 
+                className="modal-close-btn" 
                 onClick={() => setShowAuditBuildingModal(false)}
                 disabled={submittingAudit}
+                title="Tutup formulir"
               >
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleSubmitAuditBuilding} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-              <div className="modal-body" style={{ overflowY: 'auto', padding: '20px', flex: 1 }}>
+              <div className="modal-body" style={{ overflowY: 'auto', padding: '24px', flex: 1 }}>
                 
                 {/* PERIODE AUDIT */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '20px', background: 'rgba(14, 49, 146, 0.03)', padding: '14px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(14, 49, 146, 0.08)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '20px', background: 'rgba(14, 49, 146, 0.03)', padding: '16px 18px', borderRadius: 'var(--radius-xl)', border: '1px solid rgba(14, 49, 146, 0.1)' }}>
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem' }}>Periode Audit (Bulan &amp; Tahun) *</label>
                     <input
@@ -1125,9 +1150,9 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                 </div>
 
                 {loadingBuildingTree ? (
-                  <div style={{ padding: '40px', textAlign: 'center' }}>
-                    <div className="spinner" style={{ width: '32px', height: '32px', margin: '0 auto 12px' }}></div>
-                    <div>Memuat daftar ruangan &amp; aset di gedung ini...</div>
+                  <div style={{ padding: '50px 20px', textAlign: 'center' }}>
+                    <div className="spinner" style={{ width: '36px', height: '36px', margin: '0 auto 14px' }}></div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Memuat daftar ruangan &amp; aset di gedung ini...</div>
                   </div>
                 ) : (
                   <div>
@@ -1154,7 +1179,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                             >
                               {/* HEADER RUANGAN */}
                               <div style={{ padding: '12px 18px', background: 'rgba(14, 49, 146, 0.04)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <span style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800 }}>
                                     {rIdx + 1}
                                   </span>
@@ -1171,9 +1196,9 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                               </div>
 
                               {/* DAFTAR ASET RUANGAN */}
-                              <div style={{ padding: '14px 18px' }}>
+                              <div style={{ padding: '16px 18px' }}>
                                 {roomAssets.length === 0 ? (
-                                  <div style={{ padding: '14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', background: '#f8fafc', borderRadius: 'var(--radius-md)' }}>
+                                  <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', background: '#f8fafc', borderRadius: 'var(--radius-md)' }}>
                                     Belum ada master aset terdaftar di ruangan ini.
                                   </div>
                                 ) : (
@@ -1310,7 +1335,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
 
               </div>
 
-              <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="modal-footer" style={{ margin: 0, padding: '16px 24px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1330,39 +1355,44 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: KELOLA RUANGAN & MASTER ASET GEDUNG */}
+      {/* MODAL 2: KELOLA RUANGAN & MASTER ASET GEDUNG (PORTAL) */}
       {/* ========================================================================= */}
-      {showManageAssetsModal && selectedBuildingForAssets && (
-        <div className="modal-overlay" onClick={() => setShowManageAssetsModal(false)}>
+      {showManageAssetsModal && selectedBuildingForAssets && createPortal(
+        <div className="modal-backdrop" onClick={() => setShowManageAssetsModal(false)}>
           <div 
-            className="modal-content" 
+            className="glass-panel" 
             onClick={(e) => e.stopPropagation()} 
-            style={{ maxWidth: '980px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: '980px', width: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}
           >
-            <div className="modal-header">
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
               <div>
-                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Inventaris Master Aset
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Box className="text-primary" size={22} />
-                  Kelola Aset: Gedung {selectedBuildingForAssets.nama_gedung}
-                </h3>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Gedung {selectedBuildingForAssets.nama_gedung}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                   Pilih ruangan di bawah untuk menambah, mengedit, atau menghapus master data aset fisik.
                 </div>
               </div>
               <button 
                 type="button" 
-                className="btn-icon" 
+                className="modal-close-btn" 
                 onClick={() => setShowManageAssetsModal(false)}
+                title="Tutup"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="modal-body" style={{ overflowY: 'auto', padding: '20px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            <div className="modal-body" style={{ overflowY: 'auto', padding: '24px', display: 'flex', gap: '20px', flexWrap: 'wrap', flex: 1 }}>
               
               {/* SIDEBAR PILIH RUANGAN */}
               <div style={{ width: '260px', flexShrink: 0, borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
@@ -1452,7 +1482,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
 
                         <form onSubmit={handleSaveAssets}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {assetFormItems.map((item, idx) => (
+                            {assetFormItems.map((item) => (
                               <div key={item.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr)) 80px 40px', gap: '8px', alignItems: 'center' }}>
                                 <input
                                   type="text"
@@ -1607,41 +1637,46 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: PENGATURAN SIKLUS AUDIT GEDUNG */}
+      {/* MODAL 3: PENGATURAN SIKLUS AUDIT GEDUNG (PORTAL) */}
       {/* ========================================================================= */}
-      {showScheduleModal && selectedBuildingForSchedule && (
-        <div className="modal-overlay" onClick={() => !savingSchedule && setShowScheduleModal(false)}>
+      {showScheduleModal && selectedBuildingForSchedule && createPortal(
+        <div className="modal-backdrop" onClick={() => !savingSchedule && setShowScheduleModal(false)}>
           <div 
-            className="modal-content" 
+            className="glass-panel" 
             onClick={(e) => e.stopPropagation()} 
-            style={{ maxWidth: '520px', width: '90%' }}
+            style={{ maxWidth: '520px', width: '92vw', padding: 0, overflow: 'hidden' }}
           >
-            <div className="modal-header">
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
               <div>
-                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Pengaturan Siklus Audit
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Calendar className="text-primary" size={20} />
-                  Siklus Audit: {selectedBuildingForSchedule.nama_gedung}
-                </h3>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Gedung {selectedBuildingForSchedule.nama_gedung}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                   Atur frekuensi berkala audit stock opname aset fisik gedung ini.
                 </div>
               </div>
               <button 
                 type="button" 
-                className="btn-icon" 
+                className="modal-close-btn" 
                 onClick={() => setShowScheduleModal(false)}
                 disabled={savingSchedule}
+                title="Tutup"
               >
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleSaveBuildingSchedule}>
-              <div className="modal-body" style={{ padding: '20px' }}>
+              <div className="modal-body" style={{ padding: '24px' }}>
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label className="form-label" style={{ fontWeight: 700 }}>Interval Siklus Audit *</label>
                   <select
@@ -1692,7 +1727,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                 </div>
               </div>
 
-              <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="modal-footer" style={{ margin: 0, padding: '16px 24px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1712,41 +1747,46 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: DETAIL & VERIFIKASI AUDIT (SUPERVISOR) */}
+      {/* MODAL 4: DETAIL & VERIFIKASI AUDIT (SUPERVISOR - PORTAL) */}
       {/* ========================================================================= */}
-      {showVerifyModal && selectedAuditForVerify && (
-        <div className="modal-overlay" onClick={() => !submittingVerify && setShowVerifyModal(false)}>
+      {showVerifyModal && selectedAuditForVerify && createPortal(
+        <div className="modal-backdrop" onClick={() => !submittingVerify && setShowVerifyModal(false)}>
           <div 
-            className="modal-content" 
+            className="glass-panel" 
             onClick={(e) => e.stopPropagation()} 
-            style={{ maxWidth: '880px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: '880px', width: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}
           >
-            <div className="modal-header">
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
               <div>
-                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Tinjau Laporan Audit
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ClipboardCheck className="text-primary" size={22} />
-                  Detail Laporan Audit: {selectedAuditForVerify.building_name ? `Gedung ${selectedAuditForVerify.building_name}` : `Ruang ${selectedAuditForVerify.room_name}`}
-                </h3>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {selectedAuditForVerify.building_name ? `Gedung ${selectedAuditForVerify.building_name}` : `Ruang ${selectedAuditForVerify.room_name}`}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                   Periode: {selectedAuditForVerify.periode} • Tanggal: {selectedAuditForVerify.audit_date} • Auditor: {selectedAuditForVerify.auditor_name || 'Petugas CS'}
                 </div>
               </div>
               <button 
                 type="button" 
-                className="btn-icon" 
+                className="modal-close-btn" 
                 onClick={() => setShowVerifyModal(false)}
                 disabled={submittingVerify}
+                title="Tutup"
               >
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleSubmitVerify} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-              <div className="modal-body" style={{ overflowY: 'auto', padding: '20px', flex: 1 }}>
+              <div className="modal-body" style={{ overflowY: 'auto', padding: '24px', flex: 1 }}>
                 
                 {/* DISCREPANCY HIGHLIGHT */}
                 {selectedAuditForVerify.has_discrepancy ? (
@@ -1878,7 +1918,7 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
 
               </div>
 
-              <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="modal-footer" style={{ margin: 0, padding: '16px 24px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1901,14 +1941,15 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 5: PREVIEW FOTO ZOOM */}
+      {/* MODAL 5: PREVIEW FOTO ZOOM (PORTAL) */}
       {/* ========================================================================= */}
-      {previewPhotoUrl && (
-        <div className="modal-overlay" onClick={() => setPreviewPhotoUrl(null)} style={{ zIndex: 9999 }}>
+      {previewPhotoUrl && createPortal(
+        <div className="modal-backdrop" onClick={() => setPreviewPhotoUrl(null)} style={{ zIndex: 10000 }}>
           <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
             <img
               src={previewPhotoUrl}
@@ -1930,13 +1971,17 @@ export default function RoomAssets({ initialBuildingId = null, user = null }) {
                 cursor: 'pointer',
                 fontWeight: 800,
                 fontSize: '18px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
               &times;
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
