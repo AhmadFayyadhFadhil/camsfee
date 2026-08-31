@@ -154,6 +154,14 @@ export default function App() {
         if (response.data.company_name) {
           document.title = response.data.company_name + " - Cleaning Activity Monitoring System";
         }
+        if (response.data.company_logo) {
+          const link = document.querySelector("link[rel~='icon']");
+          if (link) {
+            link.href = response.data.company_logo.startsWith('http')
+              ? response.data.company_logo
+              : `/api/v1/settings/logo/image?v=${Date.now()}`;
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to fetch public settings:', err);
