@@ -28,6 +28,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
   const [modalChecklist, setModalChecklist] = useState([]);
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState(null);
+  const [modalError, setModalError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -196,6 +197,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     setProofFile(null);
     setProofPreview(null);
     setCameraError(null);
+    setModalError(null);
 
     const gps = await getGeolocation();
     setGpsState(gps);
@@ -206,6 +208,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
   const startLiveCamera = async () => {
     try {
       setCameraError(null);
+      setModalError(null);
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
       }
@@ -249,6 +252,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     setModalChecklist([]);
     setProofFile(null);
     setProofPreview(null);
+    setModalError(null);
   };
 
   const handleToggleChecklist = (index) => {
@@ -294,11 +298,12 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
   const handleSubmitProof = async (e) => {
     e.preventDefault();
     if (!proofFile || !activeTask) {
-      setError('Foto bukti pekerjaan wajib diambil.');
+      setModalError('Foto bukti pekerjaan wajib diambil.');
       return;
     }
 
     setSubmitting(true);
+    setModalError(null);
     setError(null);
     try {
       const formData = new FormData();
@@ -343,6 +348,8 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
         }
       }
     } catch (err) {
+      console.error('Error submitting proof:', err);
+      setModalError(err.message || 'Gagal mengirim laporan tugas.');
       setError(err.message || 'Gagal mengirim laporan tugas.');
     } finally {
       setSubmitting(false);
@@ -705,6 +712,13 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                     Foto Ulang
                   </button>
                 </div>
+
+                {modalError && (
+                  <div className="alert alert-danger" style={{ marginBottom: '14px', padding: '10px 14px', fontSize: '0.84rem' }}>
+                    <ShieldAlert size={16} />
+                    <span>{modalError}</span>
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="btn btn-secondary" onClick={handleCloseModal} disabled={submitting} style={{ flex: 1 }}>Batal</button>

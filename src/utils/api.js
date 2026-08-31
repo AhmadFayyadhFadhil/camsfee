@@ -227,6 +227,10 @@ class ApiClient {
     return this.request(endpoint, { ...options, method: 'POST', body });
   }
 
+  postFormData(endpoint, formData, options = {}) {
+    return this.request(endpoint, { ...options, method: 'POST', body: formData });
+  }
+
   put(endpoint, body, options = {}) {
     return this.request(endpoint, { ...options, method: 'PUT', body });
   }
