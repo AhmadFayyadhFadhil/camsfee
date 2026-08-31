@@ -557,7 +557,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
           <div className="glass-panel" style={{ borderRadius: 'var(--radius-xl)', padding: '24px', border: '1.5px solid rgba(220, 38, 38, 0.3)', marginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', color: 'var(--danger)' }}>
               <AlertOctagon size={24} />
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>⚠️ Tugas Mendesak (Batas Waktu &lt; 60 Menit!)</h2>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Tugas Mendesak (Batas Waktu &lt; 60 Menit)</h2>
             </div>
             <div className="table-container">
               <table className="data-table">
@@ -583,7 +583,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                           onClick={() => setCurrentTab && setCurrentTab('tasks')}
                           style={{ fontWeight: 700 }}
                         >
-                          ⚡ Kerjakan Sekarang!
+                          Kerjakan Sekarang
                         </button>
                       </td>
                     </tr>

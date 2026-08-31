@@ -214,13 +214,13 @@ export default function AdhocTaskSupervisor() {
     <div className="container-fluid">
       <div className="flex-header">
         <div>
-          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Tugas Ad-hoc & Insidental</h1>
+          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Tugas Mendadak</h1>
           <p style={{ color: 'var(--text-secondary)' }}>
             Instruksi penugasan pembersihan mendadak langsung ke staf CS dengan bukti foto & persetujuan mandiri
           </p>
         </div>
         <button className="btn btn-primary" onClick={handleOpenCreate} style={{ display: 'inline-flex', gap: '6px' }}>
-          <Zap size={16} /> Buat Tugas Mendadak
+          <Plus size={16} /> Buat Tugas Mendadak
         </button>
       </div>
 

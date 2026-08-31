@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
-import { Zap, Play, Camera, CheckCircle, ShieldAlert, X, Upload, Sparkles, ArrowRight } from 'lucide-react';
+import { Play, Camera, CheckCircle, ShieldAlert, X, Upload, Sparkles, ArrowRight } from 'lucide-react';
 import { compressImage } from '../utils/imageCompressor';
 
 export default function CsAdhocTasks({ onResumeDailyTasks }) {
@@ -109,8 +109,8 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     <div className="container-fluid">
       <div className="flex-header">
         <div>
-          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Zap color="#eab308" fill="#eab308" size={28} /> Tugas Mendadak (Ad-hoc)
+          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 800 }}>
+            Tugas Mendadak
           </h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
             Instruksi insidental langsung dari Supervisor (misal: tumpahan cairan, permintaan cepat)
@@ -126,23 +126,19 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
       {/* PANDUAN ALUR TUGAS MENDADAK */}
       <div className="instruction-banner" style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.08) 0%, rgba(249, 115, 22, 0.08) 100%)', borderColor: 'rgba(234, 179, 8, 0.3)' }}>
         <div className="instruction-banner-title" style={{ color: '#b45309' }}>
-          ⚡ Alur Pengerjaan Tugas Mendadak:
+          Alur Pengerjaan Tugas Mendadak:
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '8px' }}>
           <div style={{ background: 'white', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
             <strong style={{ fontSize: '0.82rem', color: '#b45309' }}>1. Tekan "Mulai Tugas"</strong>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Status tugas berubah jadi dikerjakan</div>
           </div>
           <div style={{ background: 'white', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-            <strong style={{ fontSize: '0.82rem', color: '#b45309' }}>2. Bersihkan di Lokasi</strong>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Selesaikan permintaan supervisor</div>
-          </div>
-          <div style={{ background: 'white', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-            <strong style={{ fontSize: '0.82rem', color: '#b45309' }}>3. Ambil 1 Foto Bukti</strong>
+            <strong style={{ fontSize: '0.82rem', color: '#b45309' }}>2. Ambil 1 Foto Bukti</strong>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Foto kondisi setelah bersih</div>
           </div>
           <div style={{ background: 'white', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-            <strong style={{ fontSize: '0.82rem', color: 'var(--success)' }}>4. Otomatis Lanjut Harian</strong>
+            <strong style={{ fontSize: '0.82rem', color: 'var(--success)' }}>3. Otomatis Lanjut Harian</strong>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Kembali ke checklist rutin</div>
           </div>
         </div>
