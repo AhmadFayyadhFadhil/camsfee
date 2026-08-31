@@ -38,6 +38,15 @@ class ApiClient {
     return this.user;
   }
 
+  setUser(user) {
+    this.user = user;
+    if (user) {
+      sessionStorage.setItem('cams_user', JSON.stringify(user));
+    } else {
+      sessionStorage.removeItem('cams_user');
+    }
+  }
+
   isAuthenticated() {
     return !!this.token;
   }

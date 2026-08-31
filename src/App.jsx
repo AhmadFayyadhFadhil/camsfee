@@ -164,6 +164,27 @@ export default function App() {
     fetchPublicSettings();
   }, []);
 
+  // Sinkronisasi data profil terbaru langsung dari backend database saat App dibuka / di-refresh (F5)
+  const syncCurrentUserProfile = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const response = await api.get('/auth/me');
+      if (response.success && response.data) {
+        const freshUser = response.data;
+        api.setUser(freshUser);
+        setUser((prev) => ({ ...prev, ...freshUser }));
+      }
+    } catch (err) {
+      console.error('Failed to sync current user profile:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncCurrentUserProfile();
+    }
+  }, [isAuthenticated]);
+
   // Auto-dismiss alert banner setelah 5 detik
   useEffect(() => {
     if (!alert) return;

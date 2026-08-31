@@ -135,17 +135,16 @@ export default function Profile({ user, onUserUpdated }) {
       if (response.success && response.data) {
         const updatedData = response.data;
         
-        // Simpan ke storage dan perbarui state global
-        try {
-          const currentCached = JSON.parse(localStorage.getItem('cams_user') || '{}');
-          const merged = { ...currentCached, ...updatedData };
-          localStorage.setItem('cams_user', JSON.stringify(merged));
-        } catch (e) {}
+        // Simpan ke API client (sessionStorage) dan panggil callback update global
+        api.setUser(updatedData);
 
         if (onUserUpdated) {
           onUserUpdated(updatedData);
         }
 
+        setFullName(updatedData.full_name || updatedData.name || '');
+        setPhone(updatedData.phone || '');
+        setAvatarPreview(updatedData.avatar_url || updatedData.foto_profile || null);
         setAvatarFile(null);
         setShouldRemovePhoto(false);
         setProfileSuccess('Data profil dan foto berhasil diperbarui!');
