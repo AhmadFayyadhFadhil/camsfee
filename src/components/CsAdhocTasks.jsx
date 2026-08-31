@@ -357,13 +357,35 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
   };
 
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  const activeTodayTasks = tasks.filter((t) => {
+    if (t.status === 'verified') return false;
+    if (t.task_type === 'immediate') return true;
+    if (t.task_type === 'scheduled_event') {
+      const taskDate = t.event_start_time?.slice(0, 10) || t.due_datetime?.slice(0, 10);
+      return !taskDate || taskDate <= todayStr;
+    }
+    return true;
+  });
+
+  const activeUpcomingTasks = tasks.filter((t) => {
+    if (t.status === 'verified') return false;
+    if (t.task_type === 'scheduled_event') {
+      const taskDate = t.event_start_time?.slice(0, 10) || t.due_datetime?.slice(0, 10);
+      return taskDate && taskDate > todayStr;
+    }
+    return false;
+  });
+
   const filteredTasks = tasks.filter((task) => {
     if (activeTab === 'all') return true;
     if (activeTab === 'upcoming') {
+      if (task.status === 'verified') return false;
       const taskDate = task.event_start_time?.slice(0, 10) || task.due_datetime?.slice(0, 10);
       return task.task_type === 'scheduled_event' && taskDate && taskDate > todayStr;
     }
     // today
+    if (task.status === 'verified') return false;
     if (task.task_type === 'immediate') return true;
     if (task.task_type === 'scheduled_event') {
       const taskDate = task.event_start_time?.slice(0, 10) || task.due_datetime?.slice(0, 10);
@@ -413,7 +435,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
             borderBottom: activeTab === 'today' ? '3px solid var(--primary)' : '3px solid transparent',
           }}
         >
-          Tugas Hari Ini ({tasks.filter(t => t.task_type === 'immediate' || !t.event_start_time || t.event_start_time.slice(0, 10) <= todayStr).length})
+          Tugas Hari Ini ({activeTodayTasks.length})
         </button>
         <button
           className="tab-button"
@@ -431,7 +453,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
             gap: '6px',
           }}
         >
-          <CalendarDays size={16} /> Jadwal Acara / Meeting Mendatang ({tasks.filter(t => t.task_type === 'scheduled_event' && t.event_start_time && t.event_start_time.slice(0, 10) > todayStr).length})
+          <CalendarDays size={16} /> Jadwal Acara / Meeting Mendatang ({activeUpcomingTasks.length})
         </button>
         <button
           className="tab-button"

@@ -167,6 +167,10 @@ const getFriendlyEntityName = (entityType) => {
       return 'Laporan Checklist';
     case 'tasks':
       return 'Tugas CS';
+    case 'adhoc_tasks':
+      return 'Tugas Khusus & Acara';
+    case 'room_asset_audits':
+      return 'Audit Aset Ruangan';
     case 'rooms':
       return 'Ruangan';
     case 'users':
@@ -189,6 +193,25 @@ const getFriendlyEntityName = (entityType) => {
 const getTargetDescription = (log) => {
   const data = log.new_data || log.old_data;
   if (!data) return '';
+
+  // If it's an adhoc task
+  if (log.entity_type === 'adhoc_tasks') {
+    const judul = data.judul || '';
+    const roomName = data.room?.nama_ruangan || data.room?.name || '';
+    if (judul && roomName) {
+      return `: "${judul}" di ruang ${roomName}`;
+    } else if (judul) {
+      return `: "${judul}"`;
+    }
+  }
+
+  // If it's a room asset audit
+  if (log.entity_type === 'room_asset_audits') {
+    const roomName = data.room?.nama_ruangan || data.room?.name || '';
+    if (roomName) {
+      return `di ruang ${roomName}`;
+    }
+  }
   
   // If it's a finding
   if (log.entity_type === 'findings') {
@@ -316,6 +339,31 @@ function RenderAuditPhotos({ log }) {
     );
   }
 
+  if (log.entity_type === 'adhoc_tasks') {
+    const hasSetup = log.action.includes('SETUP') || log.action === 'VERIFY_ADHOC_TASK' || log.action === 'SUBMIT_ADHOC_TASK' || log.new_data?.foto_bukti;
+    const hasCleanup = log.action.includes('CLEANUP') || log.action === 'VERIFY_ADHOC_TASK' || log.new_data?.foto_bukti_cleanup;
+    return (
+      <div style={{ marginTop: '12px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+        {hasSetup && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Foto Bukti Persiapan:</span>
+            <div style={{ width: '130px', height: '95px', overflow: 'hidden', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <SecureImage src={`/adhoc-tasks/${log.entity_id}/foto-persiapan`} alt="Foto Persiapan" />
+            </div>
+          </div>
+        )}
+        {hasCleanup && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Foto Bukti Perapihan:</span>
+            <div style={{ width: '130px', height: '95px', overflow: 'hidden', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <SecureImage src={`/adhoc-tasks/${log.entity_id}/foto-cleanup`} alt="Foto Perapihan" />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -351,6 +399,80 @@ export default function AuditLogs() {
   // Helper: Friendly translation of actions with color and icon mapping
   const getActionDetails = (action) => {
     switch (action) {
+      case 'CREATE_ADHOC_TASK':
+        return {
+          label: 'Buat Tugas Khusus / Acara',
+          description: 'Membuat penugasan persiapan meeting / tugas insidental',
+          color: '#34d399',
+          bgColor: 'rgba(52, 211, 153, 0.1)',
+          borderColor: 'rgba(52, 211, 153, 0.25)',
+          iconType: 'plus-circle'
+        };
+      case 'START_ADHOC_TASK':
+        return {
+          label: 'Mulai Tugas Khusus',
+          description: 'CS memulai pengerjaan persiapan ruangan / tugas khusus',
+          color: 'var(--primary)',
+          bgColor: 'rgba(16, 185, 129, 0.1)',
+          borderColor: 'rgba(16, 185, 129, 0.25)',
+          iconType: 'play'
+        };
+      case 'SUBMIT_SETUP_ADHOC_TASK':
+        return {
+          label: 'Kirim Bukti Persiapan',
+          description: 'CS menyerahkan foto bukti persiapan ruangan meeting',
+          color: '#a78bfa',
+          bgColor: 'rgba(139, 92, 246, 0.1)',
+          borderColor: 'rgba(139, 92, 246, 0.25)',
+          iconType: 'check-square'
+        };
+      case 'SUBMIT_CLEANUP_ADHOC_TASK':
+        return {
+          label: 'Kirim Bukti Perapihan',
+          description: 'CS menyerahkan foto bukti perapihan ruangan pasca-meeting',
+          color: '#a78bfa',
+          bgColor: 'rgba(139, 92, 246, 0.1)',
+          borderColor: 'rgba(139, 92, 246, 0.25)',
+          iconType: 'check-square'
+        };
+      case 'SUBMIT_ADHOC_TASK':
+        return {
+          label: 'Kirim Laporan Tugas Khusus',
+          description: 'CS menyerahkan bukti pengerjaan tugas khusus',
+          color: '#a78bfa',
+          bgColor: 'rgba(139, 92, 246, 0.1)',
+          borderColor: 'rgba(139, 92, 246, 0.25)',
+          iconType: 'check-square'
+        };
+      case 'VERIFY_ADHOC_TASK':
+        return {
+          label: 'Verifikasi Tugas Khusus Selesai',
+          description: 'Supervisor/Admin menyetujui & menyelesaikan tugas khusus / meeting',
+          color: 'var(--primary)',
+          bgColor: 'rgba(16, 185, 129, 0.1)',
+          borderColor: 'rgba(16, 185, 129, 0.25)',
+          iconType: 'check-square'
+        };
+      case 'DELETE_ADHOC_TASK':
+        return {
+          label: 'Hapus Tugas Khusus',
+          description: 'Menghapus penugasan tugas khusus dari sistem',
+          color: '#f87171',
+          bgColor: 'rgba(248, 113, 113, 0.1)',
+          borderColor: 'rgba(248, 113, 113, 0.25)',
+          iconType: 'trash'
+        };
+      case 'CREATE_ROOM_ASSET_AUDIT':
+      case 'SUBMIT_ROOM_ASSET_AUDIT':
+      case 'VERIFY_ROOM_ASSET_AUDIT':
+        return {
+          label: 'Audit Aset Ruangan',
+          description: 'Pemeriksaan fisik & verifikasi kondisi aset ruangan',
+          color: '#38bdf8',
+          bgColor: 'rgba(56, 189, 248, 0.1)',
+          borderColor: 'rgba(56, 189, 248, 0.25)',
+          iconType: 'check-square'
+        };
       case 'START_TASK':
         return {
           label: 'Mulai Tugas',
