@@ -85,6 +85,7 @@ class ApiClient {
       '/tasks': ['/tasks', '/verifications', '/dashboard', '/reports'],
       '/cleaning-materials': ['/cleaning-materials', '/reports'],
       '/sla-parameters': ['/sla-parameters', '/verifications', '/dashboard'],
+      '/notifications': ['/notifications', '/dashboard'],
     };
 
     return relations[rootResource] || [rootResource];

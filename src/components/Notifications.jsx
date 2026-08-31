@@ -24,9 +24,11 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
       if (activeFilter === 'read') isReadParam = '&is_read=true';
 
       const response = await api.get(`/notifications?page=${pageNumber}&per_page=15${isReadParam}`);
-      if (response.success && response.data) {
-        const fetchedData = response.data.data || response.data || [];
-        const meta = response.data.meta || {};
+      if (response.success) {
+        const fetchedData = Array.isArray(response.data) 
+          ? response.data 
+          : (response.data?.data || []);
+        const meta = response.meta || response.data?.meta || {};
         
         if (isAppend) {
           setNotificationsList(prev => [...prev, ...fetchedData]);
@@ -34,14 +36,12 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
           setNotificationsList(fetchedData);
         }
         
-        // Update counts from backend meta if available
-        if (meta.total_count !== undefined || meta.unread_count !== undefined) {
-          const total = meta.total_count ?? 0;
-          const unread = meta.unread_count ?? 0;
-          const read = meta.read_count ?? Math.max(0, total - unread);
-          setCounts({ total, unread, read });
-          if (setUnreadCount) setUnreadCount(unread);
-        }
+        // Update counts from backend meta
+        const total = meta.total_count ?? (meta.total ?? fetchedData.length);
+        const unread = meta.unread_count ?? fetchedData.filter(n => !n.is_read).length;
+        const read = meta.read_count ?? Math.max(0, total - unread);
+        setCounts({ total, unread, read });
+        if (setUnreadCount) setUnreadCount(unread);
 
         // Check if there are more pages
         const currentPage = meta.current_page || pageNumber;
@@ -72,9 +72,12 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
     try {
       const response = await api.patch(`/notifications/${notifId}/read`);
       if (response.success) {
-        setNotificationsList(prev => 
-          prev.map(n => n.id === notifId ? { ...n, is_read: true } : n)
-        );
+        setNotificationsList(prev => {
+          if (activeFilter === 'unread') {
+            return prev.filter(n => n.id !== notifId);
+          }
+          return prev.map(n => n.id === notifId ? { ...n, is_read: true } : n);
+        });
         setCounts(prev => ({
           ...prev,
           unread: Math.max(0, prev.unread - 1),
@@ -85,22 +88,25 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
       }
     } catch (err) {
       console.error('Failed to mark notification as read:', err);
+      setError(err.message || 'Gagal menandai notifikasi dibaca.');
     }
   };
 
   // Mark all notifications as read
   const handleMarkAllAsRead = async () => {
-    if (counts.unread === 0 && notificationsList.every(n => n.is_read)) return;
-    
     setActionLoading(true);
+    setError(null);
     try {
       const response = await api.patch('/notifications/mark-all-read');
       if (response.success) {
-        setNotificationsList(prev => prev.map(n => ({ ...n, is_read: true })));
+        setNotificationsList(prev => {
+          if (activeFilter === 'unread') return [];
+          return prev.map(n => ({ ...n, is_read: true }));
+        });
         setCounts(prev => ({
-          ...prev,
-          read: prev.total,
-          unread: 0
+          total: prev.total,
+          unread: 0,
+          read: prev.total
         }));
         if (setUnreadCount) setUnreadCount(0);
         if (fetchNotifications) fetchNotifications();
