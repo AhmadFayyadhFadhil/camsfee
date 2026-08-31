@@ -605,12 +605,49 @@ export default function AdhocTaskSupervisor() {
                 {taskType === 'scheduled_event' && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-lg)' }}>
                     <div>
-                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>Target Selesai Persiapan *</label>
-                      <input type="datetime-local" className="form-control" value={dueDatetime} onChange={(e) => setDueDatetime(e.target.value)} required={taskType === 'scheduled_event'} />
+                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                        Waktu Mulai Acara / Meeting *
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="form-control"
+                        value={eventStartTime}
+                        onChange={(e) => {
+                          const newEventTime = e.target.value;
+                          setEventStartTime(newEventTime);
+                          // Auto set target persiapan 30 menit sebelum acara jika belum diatur
+                          if (newEventTime) {
+                            const d = new Date(newEventTime);
+                            d.setMinutes(d.getMinutes() - 30);
+                            const yyyy = d.getFullYear();
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            setDueDatetime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
+                          }
+                        }}
+                        required={taskType === 'scheduled_event'}
+                      />
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginTop: '2px' }}>
+                        Kapan meeting atau acara dimulai.
+                      </small>
                     </div>
+
                     <div>
-                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>Waktu Mulai Acara (Opsional)</label>
-                      <input type="datetime-local" className="form-control" value={eventStartTime} onChange={(e) => setEventStartTime(e.target.value)} />
+                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                        Target Selesai Persiapan Ruangan *
+                      </label>
+                      <input
+                        type="datetime-local"
+                        className="form-control"
+                        value={dueDatetime}
+                        onChange={(e) => setDueDatetime(e.target.value)}
+                        required={taskType === 'scheduled_event'}
+                      />
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginTop: '2px' }}>
+                        Batas waktu CS selesai mempersiapkan ruangan.
+                      </small>
                     </div>
                   </div>
                 )}
