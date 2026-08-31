@@ -237,11 +237,11 @@ export default function RoomAssets({ initialRoomId = null }) {
   const getStatusBadge = (st) => {
     switch (st) {
       case 'active':
-        return <span className="status-badge status-completed">🟢 Baik / Aktif</span>;
+        return <span className="status-badge status-completed">Baik / Aktif</span>;
       case 'damaged':
-        return <span className="status-badge status-rejected">🔴 Rusak</span>;
+        return <span className="status-badge status-rejected">Rusak</span>;
       case 'repaired':
-        return <span className="status-badge status-waiting_verification">🟡 Dalam Perbaikan</span>;
+        return <span className="status-badge status-waiting_verification">Dalam Perbaikan</span>;
       default:
         return <span className="status-badge status-pending">{st}</span>;
     }
@@ -552,9 +552,9 @@ export default function RoomAssets({ initialRoomId = null }) {
                               onChange={(e) => handleItemChange(index, 'status', e.target.value)}
                               required
                             >
-                              <option value="active">🟢 Baik / Normal</option>
-                              <option value="damaged">🔴 Rusak</option>
-                              <option value="repaired">🟡 Dalam Perbaikan</option>
+                              <option value="active">Baik / Normal</option>
+                              <option value="damaged">Rusak</option>
+                              <option value="repaired">Dalam Perbaikan</option>
                             </select>
                           </div>
                         </div>
@@ -582,7 +582,7 @@ export default function RoomAssets({ initialRoomId = null }) {
                         borderColor: '#bfdbfe'
                       }}
                     >
-                      <Plus size={16} /> + Tambah Baris Aset Baru
+                      <Plus size={16} /> Tambah Baris Aset Baru
                     </button>
                   )}
                 </div>
@@ -597,10 +597,10 @@ export default function RoomAssets({ initialRoomId = null }) {
                   {saving
                     ? 'Menyimpan...'
                     : editingAsset
-                    ? '✓ Simpan Perubahan'
+                    ? 'Simpan Perubahan'
                     : filledItemsCount > 1
-                    ? `✓ Simpan Semua Aset (${filledItemsCount} Item)`
-                    : '✓ Simpan Aset'}
+                    ? `Simpan Semua Aset (${filledItemsCount} Item)`
+                    : 'Simpan Aset'}
                 </button>
               </div>
             </form>

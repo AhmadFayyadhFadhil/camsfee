@@ -19,7 +19,9 @@ import {
   X,
   Building2,
   RotateCcw,
-  Clock
+  Clock,
+  CheckCircle2,
+  Send
 } from 'lucide-react';
 import { compressImage } from '../utils/imageCompressor';
 
@@ -1343,7 +1345,7 @@ export default function CsTasks({
             <Zap size={26} color="#eab308" fill="#eab308" style={{ flexShrink: 0 }} />
             <div>
               <strong style={{ color: '#b45309', fontSize: '1rem', display: 'block' }}>
-                ⚡ Ada {adhocCount} Tugas Mendadak dari Supervisor!
+                Ada {adhocCount} Tugas Mendadak dari Supervisor!
               </strong>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
                 Tugas ini bersifat darurat dan harus dikerjakan segera. Setelah selesai, Anda akan otomatis kembali ke tugas harian ini.
@@ -1353,9 +1355,9 @@ export default function CsTasks({
           <button 
             className="btn btn-warning" 
             onClick={onOpenAdhocTasks} 
-            style={{ color: '#fff', fontWeight: 700, minWidth: '200px' }}
+            style={{ color: '#fff', fontWeight: 700, minWidth: '200px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           >
-            ⚡ Kerjakan Tugas Mendadak
+            <Zap size={16} /> Kerjakan Tugas Mendadak
           </button>
         </div>
       )}
@@ -1391,7 +1393,7 @@ export default function CsTasks({
             <div className="step-indicator">
               <div className="step-item">
                 <div className={`step-num ${completedChecklistCount > 0 ? 'done' : 'active'}`}>
-                  {completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? '✓' : '1'}
+                  {completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? <Check size={14} /> : '1'}
                 </div>
                 <div className={`step-label ${completedChecklistCount === totalChecklistCount ? 'done' : 'active'}`}>
                   1. Centang Checklist ({completedChecklistCount}/{totalChecklistCount})
@@ -1400,7 +1402,7 @@ export default function CsTasks({
               <div className={`step-divider ${completedChecklistCount === totalChecklistCount ? 'done' : ''}`}></div>
               <div className="step-item">
                 <div className={`step-num ${isAllPhotosTaken ? 'done' : completedChecklistCount === totalChecklistCount ? 'active' : 'pending-step'}`}>
-                  {isAllPhotosTaken ? '✓' : '2'}
+                  {isAllPhotosTaken ? <Check size={14} /> : '2'}
                 </div>
                 <div className={`step-label ${isAllPhotosTaken ? 'done' : completedChecklistCount === totalChecklistCount ? 'active' : ''}`}>
                   2. Ambil 4 Foto ({photosTakenCount}/4)
@@ -1426,7 +1428,7 @@ export default function CsTasks({
                 </p>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={() => setActiveTask(null)} disabled={submitting}>
-                ✕ Batal &amp; Kembali
+                Batal &amp; Kembali
               </button>
             </div>
 
@@ -1474,7 +1476,7 @@ export default function CsTasks({
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                 title="Klik untuk membatalkan status selesai"
                               >
-                                <Check size={16} /> Selesai Dibersihkan (✓)
+                                <Check size={16} /> Selesai Dibersihkan
                               </button>
                             ) : (
                               <button
@@ -1489,7 +1491,7 @@ export default function CsTasks({
                                   padding: '8px 18px'
                                 }}
                               >
-                                ✓ Tandai Bersih
+                                Tandai Bersih
                               </button>
                             )}
                           </div>
@@ -1549,7 +1551,7 @@ export default function CsTasks({
                           <strong style={{ fontSize: '0.85rem', color: isTaken ? 'var(--success)' : 'var(--text-primary)' }}>
                             {label}
                           </strong>
-                          {isTaken && <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: '0.8rem' }}>✓ Ada</span>}
+                          {isTaken && <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Check size={12} /> Ada</span>}
                         </div>
                         <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: '#f8fbff' }}>
                           {preview ? (
@@ -1569,7 +1571,7 @@ export default function CsTasks({
                             onClick={() => handleStartRoomCamera(slotIndex, 'after')}
                             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', fontWeight: 700 }}
                           >
-                            <ImageIcon size={16} /> {isTaken ? '📷 Ambil Ulang' : '📷 Buka Kamera'}
+                            <ImageIcon size={16} /> {isTaken ? 'Ambil Ulang' : 'Buka Kamera'}
                           </button>
                           {isTaken && (
                             <button
@@ -1634,7 +1636,7 @@ export default function CsTasks({
                             transition: 'all 0.2s ease',
                           }}
                         >
-                          <span>{isSelected ? '✓' : '+'}</span>
+                          {isSelected && <Check size={14} />}
                           <span>{mat.nama_material}</span>
                           <span style={{ fontSize: '0.72rem', opacity: 0.75 }}>({mat.jenis})</span>
                         </button>
@@ -1659,15 +1661,15 @@ export default function CsTasks({
               {/* SUBMIT READINESS BAR */}
               <div className="submit-readiness">
                 <div className={`readiness-item ${completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? 'ready' : 'not-ready'}`}>
-                  <span>{completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? '✅' : '⚪'}</span>
+                  {completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
                   <span>Checklist: {completedChecklistCount}/{totalChecklistCount} item</span>
                 </div>
                 <div className={`readiness-item ${isAllPhotosTaken ? 'ready' : 'not-ready'}`}>
-                  <span>{isAllPhotosTaken ? '✅' : '⚪'}</span>
+                  {isAllPhotosTaken ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
                   <span>Foto bukti: {photosTakenCount}/4 sudut</span>
                 </div>
                 <div className={`readiness-item ${gpsState.ready ? 'ready' : 'not-ready'}`}>
-                  <span>{gpsState.ready ? '✅' : '⚪'}</span>
+                  {gpsState.ready ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
                   <span>Lokasi GPS: {gpsState.ready ? 'Tersedia' : 'Memuat...'}</span>
                 </div>
               </div>
@@ -1675,7 +1677,7 @@ export default function CsTasks({
               <button 
                 type="submit" 
                 className={`btn btn-primary ${isReadyToSubmit ? 'btn-submit-ready' : ''}`}
-                style={{ width: '100%', height: '52px', fontSize: '1.05rem', fontWeight: 800 }}
+                style={{ width: '100%', height: '52px', fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 disabled={submitting}
               >
                 {submitting ? (
@@ -1684,7 +1686,10 @@ export default function CsTasks({
                     <span>Mengirim Laporan... Jangan tutup halaman ini.</span>
                   </div>
                 ) : (
-                  <span>🚀 Kirim Laporan &amp; Selesaikan Tugas Ruangan</span>
+                  <>
+                    <Send size={18} />
+                    <span>Kirim Laporan &amp; Selesaikan Tugas Ruangan</span>
+                  </>
                 )}
               </button>
             </form>
@@ -1698,7 +1703,7 @@ export default function CsTasks({
           {loading ? (
             <div className="loading-state">
               <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
-              <div className="loading-state-text">⏳ Memuat jadwal tugas kebersihan Anda...</div>
+              <div className="loading-state-text">Memuat jadwal tugas kebersihan Anda...</div>
             </div>
           ) : (
             <>
@@ -1708,73 +1713,58 @@ export default function CsTasks({
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Ruangan</th>
-                        <th className="col-hide-mobile">Gedung</th>
-                        <th className="col-hide-mobile">Shift Kerja</th>
-                        <th>Target Waktu (Rundown)</th>
-                        <th>Status Tugas</th>
-                        <th>Aksi</th>
+                        <th>Ruangan &amp; Gedung</th>
+                        <th>Target Jam Kerja</th>
+                        <th>Status</th>
+                        <th>Item Checklist</th>
+                        <th className="col-hide-mobile">Petugas</th>
+                        <th style={{ textAlign: 'center' }}>Aksi Pengerjaan</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredTasks.map(t => (
-                        <tr key={t.id}>
-                          <td style={{ fontWeight: 700 }}>
-                            <div style={{ fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span>{t.room?.name || 'Ruangan'}</span>
-                              {t.items_count > 1 && (
-                                <span style={{ fontSize: '0.72rem', fontWeight: 600, background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-                                  {t.items_count} Item
-                                </span>
-                              )}
+                        <tr key={t.id} style={{ background: t.status === 'overdue' ? 'rgba(239, 68, 68, 0.03)' : 'transparent' }}>
+                          <td>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.room?.name || 'Ruangan'}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              Gedung: {t.room?.building?.name || '-'} • Kode: {t.room?.code}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kode: {t.room?.code}</div>
-                          </td>
-                          <td className="col-hide-mobile">{t.room?.building?.name || '-'}</td>
-                          <td className="col-hide-mobile">
-                            <span style={{ fontWeight: 600 }}>{t.shift?.name || '-'}</span>
-                            {t.shift?.start_time && t.shift?.end_time && (
-                              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                                {t.shift.start_time} - {t.shift.end_time} WIB
-                              </div>
-                            )}
                           </td>
                           <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              {(t.target_jam_mulai && t.target_jam_selesai) ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span style={{ 
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px',
-                                    padding: '4px 9px', 
-                                    background: isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) ? 'rgba(34, 197, 94, 0.15)' : 'rgba(14, 49, 146, 0.07)',
-                                    color: isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) ? '#15803d' : 'var(--primary)',
-                                    borderRadius: 'var(--radius-sm)',
-                                    fontSize: '0.82rem',
-                                    fontWeight: 700,
-                                    border: isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) ? '1px solid #86efac' : '1px solid rgba(14, 49, 146, 0.12)'
-                                  }}>
-                                    <Clock size={13} /> {t.target_jam_mulai} - {t.target_jam_selesai} WIB
-                                  </span>
-                                  {isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) && (
-                                    <span style={{ fontSize: '0.68rem', background: '#22c55e', color: '#ffffff', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', letterSpacing: '0.3px' }}>
-                                      SEKARANG
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{t.task_date}</span>
-                              )}
-                              <span style={{ fontSize: '0.74rem', color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-muted)' }}>
-                                Batas Shift: {t.shift?.end_time ? `${t.shift.end_time} WIB` : (t.due_datetime ? `${t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)} WIB` : '-')}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.88rem', fontWeight: 600 }}>
+                              <Clock size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                              <span>
+                                {t.target_jam_mulai && t.target_jam_selesai 
+                                  ? `${t.target_jam_mulai} - ${t.target_jam_selesai} WIB` 
+                                  : `Pukul ${t.due_datetime ? t.due_datetime.split('T')[1]?.substring(0, 5) : '-'}`}
                               </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {t.shift?.name || 'Shift Normal'} {t.shift?.start_time ? `(${t.shift.start_time} - ${t.shift.end_time} WIB)` : ''}
+                              </span>
+                              {isCurrentTimeSlot(t.target_jam_mulai, t.target_jam_selesai) && (
+                                <span style={{ fontSize: '0.68rem', background: '#22c55e', color: '#ffffff', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
+                                  SEKARANG
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td>
                             {renderStatusBadge(t)}
                           </td>
                           <td>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                              {t.items_count} Item SOP
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {(t.checklist_item_names || []).join(', ') || '-'}
+                            </div>
+                          </td>
+                          <td className="col-hide-mobile">
+                            <span style={{ fontSize: '0.85rem' }}>{t.cs?.name || 'Anda'}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
                             {renderActionColumn(t, false)}
                           </td>
                         </tr>
@@ -1782,7 +1772,7 @@ export default function CsTasks({
                       {filteredTasks.length === 0 && (
                         <tr>
                           <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px' }}>
-                            <div style={{ fontSize: '1.5rem', marginBottom: '6px' }}>🔍</div>
+                            <Search size={32} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
                             <div>Tidak ada tugas kebersihan yang sesuai dengan filter pencarian.</div>
                             {(searchQuery || filterBuilding !== 'all' || filterShift !== 'all' || filterStatus !== 'all') && (
                               <button
@@ -1857,7 +1847,7 @@ export default function CsTasks({
                   ))}
                   {filteredTasks.length === 0 && (
                     <div className="glass-panel" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      <div style={{ fontSize: '1.8rem', marginBottom: '6px' }}>🔍</div>
+                      <Search size={32} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
                       <div>Tidak ada tugas kebersihan yang sesuai dengan filter pencarian.</div>
                       {(searchQuery || filterBuilding !== 'all' || filterShift !== 'all' || filterStatus !== 'all') && (
                         <button

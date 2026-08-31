@@ -304,8 +304,8 @@ export default function SlaParameters() {
                     onChange={(e) => setTipePenilaian(e.target.value)}
                     required
                   >
-                    <option value="scale_1_5">⭐ Skala Angka 1 sampai 5 (1 = Buruk, 5 = Sempurna)</option>
-                    <option value="yes_no">✓ Binary Ya / Tidak (Yes / No Compliance)</option>
+                    <option value="scale_1_5">Skala Angka 1 sampai 5 (1 = Buruk, 5 = Sempurna)</option>
+                    <option value="yes_no">Binary Ya / Tidak (Yes / No Compliance)</option>
                   </select>
                 </div>
 
@@ -328,7 +328,7 @@ export default function SlaParameters() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving} style={{ fontWeight: 700 }}>
-                  {saving ? 'Menyimpan...' : '✓ Simpan Parameter'}
+                  {saving ? 'Menyimpan...' : 'Simpan Parameter'}
                 </button>
               </div>
             </form>

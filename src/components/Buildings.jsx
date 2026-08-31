@@ -268,7 +268,7 @@ export default function Buildings() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
-                  ✓ Simpan Gedung
+                  Simpan Gedung
                 </button>
               </div>
             </form>
@@ -342,7 +342,7 @@ export default function Buildings() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
-                  ✓ Simpan Alokasi Shift
+                  Simpan Alokasi Shift
                 </button>
               </div>
             </form>

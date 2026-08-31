@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../utils/api';
-import { Check, X, ShieldAlert, AlertCircle, MessageSquare, Eye, ArrowLeft } from 'lucide-react';
+import { Check, X, ShieldAlert, AlertCircle, MessageSquare, Eye, ArrowLeft, Camera, CheckCircle2 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 
 // Reusable component to render images protected by Sanctum token authentication
@@ -343,7 +343,7 @@ export default function Verifications() {
         <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
 
           <div style={{ marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
-            <span className="status-badge status-waiting_verification" style={{ marginBottom: '6px' }}>🟡 Menunggu Verifikasi Anda</span>
+            <span className="status-badge status-waiting_verification" style={{ marginBottom: '6px' }}>Menunggu Verifikasi Anda</span>
             <h2 style={{ margin: 0, fontSize: '1.35rem', marginTop: '4px', fontWeight: 800 }}>
               Ruang: {selectedSubmission.task?.room?.name} ({selectedSubmission.task?.room?.code})
             </h2>
@@ -355,8 +355,8 @@ export default function Verifications() {
           {/* FOTO BUKTI 4 SUDUT */}
           <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'rgba(255,255,255,0.02)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--primary)' }}>
-                📷 Foto Bukti 4 Sudut Ruangan
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <Camera size={18} /> Foto Bukti 4 Sudut Ruangan
               </h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ketuk foto untuk memperbesar (zoom)</span>
             </div>
@@ -392,9 +392,9 @@ export default function Verifications() {
                     #{idx + 1} - {result.checklist_item?.name || 'Item Checklist'}
                   </h4>
                   {result.status ? (
-                    <span className="status-badge status-completed">✅ Dibersihkan</span>
+                    <span className="status-badge status-completed">Dibersihkan</span>
                   ) : (
-                    <span className="status-badge status-pending">⚪ Belum/Tidak</span>
+                    <span className="status-badge status-pending">Belum / Tidak</span>
                   )}
                 </div>
 
@@ -420,7 +420,7 @@ export default function Verifications() {
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
                 {selectedSubmission.materials.map((m) => (
                   <span key={m.id} className="status-badge status-completed" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
-                    ✓ {m.nama_material} ({m.jenis})
+                    {m.nama_material} ({m.jenis})
                   </span>
                 ))}
               </div>
@@ -502,17 +502,17 @@ export default function Verifications() {
                             type="button"
                             onClick={() => setSlaRatings({ ...slaRatings, [param.id]: 'yes' })}
                             className={`btn btn-sm ${slaRatings[param.id] === 'yes' ? 'btn-success' : 'btn-secondary'}`}
-                            style={{ fontWeight: 700 }}
+                            style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
-                            ✓ Ya (Sesuai SOP)
+                            <Check size={14} /> Ya (Sesuai SOP)
                           </button>
                           <button
                             type="button"
                             onClick={() => setSlaRatings({ ...slaRatings, [param.id]: 'no' })}
                             className={`btn btn-sm ${slaRatings[param.id] === 'no' ? 'btn-danger' : 'btn-secondary'}`}
-                            style={{ fontWeight: 700 }}
+                            style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
-                            ✕ Tidak Sesuai
+                            <X size={14} /> Tidak Sesuai
                           </button>
                         </div>
                       )}
@@ -549,19 +549,19 @@ export default function Verifications() {
                 className="btn btn-success btn-lg"
                 onClick={handleApprove}
                 disabled={processing}
-                style={{ fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 16px rgba(15, 118, 110, 0.25)' }}
+                style={{ fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 16px rgba(15, 118, 110, 0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               >
-                {processing ? 'Memproses...' : '✅ Setujui Laporan Ini (Approve)'}
+                <Check size={18} /> {processing ? 'Memproses...' : 'Setujui Laporan Ini (Approve)'}
               </button>
               <button 
                 type="button" 
                 className="btn btn-danger btn-lg"
                 onClick={handleReject}
                 disabled={processing || feedback.trim().length < 5}
-                style={{ fontWeight: 800, fontSize: '1rem' }}
+                style={{ fontWeight: 800, fontSize: '1rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 title={feedback.trim().length < 5 ? "Harap tulis catatan alasan penolakan di atas terlebih dahulu" : "Tolak laporan ini"}
               >
-                {processing ? 'Memproses...' : '❌ Tolak & Minta Perbaikan Ulang'}
+                <X size={18} /> {processing ? 'Memproses...' : 'Tolak & Minta Perbaikan Ulang'}
               </button>
             </div>
             {feedback.trim().length < 5 && (
@@ -579,7 +579,7 @@ export default function Verifications() {
           {loading ? (
             <div className="loading-state">
               <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
-              <div className="loading-state-text">⏳ Memuat antrean verifikasi laporan...</div>
+              <div className="loading-state-text">Memuat antrean verifikasi laporan...</div>
             </div>
           ) : (
             <>
@@ -646,7 +646,7 @@ export default function Verifications() {
                       {submissions.length === 0 && (
                         <tr>
                           <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
-                            <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🎉</div>
+                            <CheckCircle2 size={36} style={{ color: 'var(--success)', marginBottom: '8px' }} />
                             <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Semua Laporan Sudah Terverifikasi</h3>
                             <p style={{ margin: 0, fontSize: '0.85rem' }}>Tidak ada antrean laporan yang menunggu persetujuan Anda saat ini.</p>
                           </td>
@@ -710,7 +710,7 @@ export default function Verifications() {
                   })}
                   {submissions.length === 0 && (
                     <div className="glass-panel" style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🎉</div>
+                      <CheckCircle2 size={36} style={{ color: 'var(--success)', marginBottom: '8px' }} />
                       <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Semua Laporan Terverifikasi</h3>
                       <p style={{ margin: 0, fontSize: '0.85rem' }}>Tidak ada antrean laporan kebersihan saat ini.</p>
                     </div>

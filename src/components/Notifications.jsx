@@ -472,8 +472,8 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
                   <span>Dibaca</span>
                 </button>
               ) : (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, padding: '4px 8px' }}>
-                  ✓ Terbaca
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Check size={13} /> Terbaca
                 </span>
               )}
 

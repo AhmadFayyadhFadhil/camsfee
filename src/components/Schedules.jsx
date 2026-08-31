@@ -724,7 +724,7 @@ export default function Schedules() {
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Semua Ruangan Sudah Memiliki Jadwal!</div>
                   <div style={{ fontSize: '0.82rem', marginTop: '3px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                    Seluruh ruangan aktif sudah memiliki jadwal pembersihan. Untuk mengubah template, shift, atau SOP ruangan yang sudah ada, silakan gunakan tombol <strong>Edit (✏️)</strong> pada tabel jadwal.
+                    Seluruh ruangan aktif sudah memiliki jadwal pembersihan. Untuk mengubah template, shift, atau SOP ruangan yang sudah ada, silakan gunakan tombol <strong>Edit</strong> pada tabel jadwal.
                   </div>
                 </div>
               </div>
@@ -801,7 +801,7 @@ export default function Schedules() {
                       <option value="" disabled>Pilih Template</option>
                       {checklistTemplates.map(t => (
                         <option key={t.id} value={t.id}>
-                          📦 {t.nama_template} ({t.items?.length || 0} item SOP)
+                          {t.nama_template} ({t.items?.length || 0} item SOP)
                         </option>
                       ))}
                     </select>
@@ -961,7 +961,7 @@ export default function Schedules() {
                       <span>Menyimpan...</span>
                     </div>
                   ) : (
-                    editingSchedule ? '✓ Simpan Perubahan' : '✓ Simpan Jadwal'
+                    editingSchedule ? 'Simpan Perubahan' : 'Simpan Jadwal'
                   )}
                 </button>
               </div>
@@ -1075,7 +1075,7 @@ export default function Schedules() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={buildings.length === 0 || csUsers.length === 0} style={{ fontWeight: 700 }}>
-                  {editingAssignment ? '✓ Simpan Perubahan' : '✓ Simpan Penugasan'}
+                  {editingAssignment ? 'Simpan Perubahan' : 'Simpan Penugasan'}
                 </button>
               </div>
             </form>
@@ -1295,7 +1295,7 @@ export default function Schedules() {
                               padding: '2px 8px',
                               borderRadius: '12px'
                             }}>
-                              📦 {g.items.length} Item Checklist
+                              {g.items.length} Item Checklist
                             </span>
                           </div>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4', maxWidth: '300px' }}>
@@ -1376,7 +1376,7 @@ export default function Schedules() {
                       <td colSpan="8" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 20px' }}>
                         {hasActiveScheduleFilter ? (
                           <div>
-                            <div style={{ fontSize: '1.2rem', marginBottom: '6px' }}>🔍</div>
+                            <Search size={28} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
                             <div style={{ fontWeight: 600, marginBottom: '8px' }}>Tidak ada jadwal pembersihan yang sesuai dengan filter.</div>
                             <button className="btn btn-secondary btn-sm" onClick={handleResetScheduleFilters}>
                               <X size={13} /> Reset Filter
@@ -1587,7 +1587,7 @@ export default function Schedules() {
                       <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 20px' }}>
                         {hasActiveAssignmentFilter ? (
                           <div>
-                            <div style={{ fontSize: '1.2rem', marginBottom: '6px' }}>🔍</div>
+                            <Search size={28} style={{ margin: '0 auto 8px auto', opacity: 0.4 }} />
                             <div style={{ fontWeight: 600, marginBottom: '8px' }}>Tidak ada penugasan CS yang sesuai dengan filter.</div>
                             <button className="btn btn-secondary btn-sm" onClick={handleResetAssignmentFilters}>
                               <X size={13} /> Reset Filter

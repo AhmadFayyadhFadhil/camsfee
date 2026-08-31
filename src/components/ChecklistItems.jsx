@@ -546,7 +546,7 @@ export default function ChecklistItems() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={assignDirectly && (!selectedRoomId || !selectedShiftId)} style={{ fontWeight: 700 }}>
-                  ✓ Simpan Item Checklist
+                  Simpan Item Checklist
                 </button>
               </div>
             </form>

@@ -15,7 +15,12 @@ import {
   AlertCircle,
   Trash2,
   UserCheck,
-  Box
+  Box,
+  CheckCircle2,
+  Folder,
+  Clock,
+  User,
+  Send
 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { compressImage } from '../utils/imageCompressor';
@@ -857,11 +862,10 @@ export default function Findings({ user, isOb = false }) {
         )}
       </div>
 
-      {/* PANDUAN PELAPORAN KERUSAKAN */}
       {!showCreateForm && !resolvingFinding && (
         <div className="instruction-banner">
           <div className="instruction-banner-title">
-            🛠️ Cara Melaporkan Kerusakan Fasilitas:
+            <Wrench size={18} /> Cara Melaporkan Kerusakan Fasilitas:
           </div>
           <ol>
             <li>Tekan tombol biru <strong>"+ Laporkan Kerusakan Baru"</strong> di atas.</li>
@@ -885,13 +889,12 @@ export default function Findings({ user, isOb = false }) {
         </div>
       )}
 
-      {/* CREATE FORM */}
       {showCreateForm && (
         <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Formulir Pelaporan Kerusakan Baru</h2>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowCreateForm(false)}>
-              ✕ Batal
+              Batal
             </button>
           </div>
 
@@ -968,11 +971,17 @@ export default function Findings({ user, isOb = false }) {
                   disabled={submitting}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}
                 >
-                  <Camera size={18} /> {fotoTemuan ? '📷 Ambil Ulang Foto' : '📷 Buka Kamera & Foto'}
+                  <Camera size={18} /> {fotoTemuan ? 'Ambil Ulang Foto' : 'Buka Kamera & Foto'}
                 </button>
 
-                <span style={{ fontSize: '0.88rem', color: fotoTemuan ? 'var(--success)' : 'var(--text-muted)', fontWeight: fotoTemuan ? 700 : 400 }}>
-                  {fotoTemuanName ? `✅ Foto Siap Dikirim: ${fotoTemuanName}` : '⚪ Belum mengambil foto'}
+                <span style={{ fontSize: '0.88rem', color: fotoTemuan ? 'var(--success)' : 'var(--text-muted)', fontWeight: fotoTemuan ? 700 : 400, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  {fotoTemuanName ? (
+                    <>
+                      <CheckCircle2 size={16} /> Foto Siap Dikirim: {fotoTemuanName}
+                    </>
+                  ) : (
+                    'Belum mengambil foto'
+                  )}
                 </span>
               </div>
             </div>
@@ -981,15 +990,14 @@ export default function Findings({ user, isOb = false }) {
               <button type="button" className="btn btn-secondary" onClick={() => setShowCreateForm(false)} style={{ flex: 1 }}>
                 Batal
               </button>
-              <button type="submit" className="btn btn-primary" disabled={submitting || !fotoTemuan} style={{ flex: 2, fontWeight: 700 }}>
-                {submitting ? 'Mengirim Laporan...' : '🚀 Kirim Laporan Kerusakan'}
+              <button type="submit" className="btn btn-primary" disabled={submitting || !fotoTemuan} style={{ flex: 2, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                {submitting ? 'Mengirim Laporan...' : <><Send size={18} /><span>Kirim Laporan Kerusakan</span></>}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* RESOLVE FORM (ADMIN / SUPERVISOR ONLY) */}
       {resolvingFinding && (
         <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px', border: '1.5px solid var(--primary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
@@ -998,7 +1006,7 @@ export default function Findings({ user, isOb = false }) {
               <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Lokasi: {resolvingFinding.room?.name}</h2>
             </div>
             <button className="btn btn-secondary btn-sm" onClick={() => setResolvingFinding(null)}>
-              ✕ Tutup
+              Tutup
             </button>
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '20px' }}>
@@ -1024,8 +1032,8 @@ export default function Findings({ user, isOb = false }) {
                   onChange={(e) => setResolveStatus(e.target.value)}
                 >
                   <option value="in_progress">Sedang Dikerjakan (In Progress)</option>
-                  <option value="resolved">✅ Selesai Diperbaiki (Resolved)</option>
-                  <option value="unresolved">🔴 Belum Diperbaiki (Unresolved)</option>
+                  <option value="resolved">Selesai Diperbaiki (Resolved)</option>
+                  <option value="unresolved">Belum Diperbaiki (Unresolved)</option>
                 </select>
               </div>
             </div>
@@ -1044,11 +1052,17 @@ export default function Findings({ user, isOb = false }) {
                     disabled={submitting}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                   >
-                    <Camera size={16} /> {fotoSelesai ? '📷 Foto Ulang' : '📷 Buka Kamera & Foto'}
+                    <Camera size={16} /> {fotoSelesai ? 'Foto Ulang' : 'Buka Kamera & Foto'}
                   </button>
 
-                  <span style={{ fontSize: '0.85rem', color: fotoSelesai ? 'var(--success)' : 'var(--text-muted)', fontWeight: fotoSelesai ? 700 : 400 }}>
-                    {fotoSelesaiName ? `✅ Foto Perbaikan: ${fotoSelesaiName}` : '⚪ Belum mengambil foto perbaikan'}
+                  <span style={{ fontSize: '0.85rem', color: fotoSelesai ? 'var(--success)' : 'var(--text-muted)', fontWeight: fotoSelesai ? 700 : 400, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {fotoSelesaiName ? (
+                      <>
+                        <CheckCircle2 size={16} /> Foto Perbaikan: {fotoSelesaiName}
+                      </>
+                    ) : (
+                      'Belum mengambil foto perbaikan'
+                    )}
                   </span>
                 </div>
               </div>
@@ -1066,15 +1080,14 @@ export default function Findings({ user, isOb = false }) {
         </div>
       )}
 
-      {/* FILTER STATUS TABS & LIST */}
       {!showCreateForm && !resolvingFinding && (
         <div>
           <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '20px' }}>
             {[
               { key: '', label: 'Semua Status' },
-              { key: 'unresolved', label: '🔴 Belum Diperbaiki' },
-              { key: 'in_progress', label: '🔵 Sedang Dikerjakan' },
-              { key: 'resolved', label: '✅ Selesai' }
+              { key: 'unresolved', label: 'Belum Diperbaiki' },
+              { key: 'in_progress', label: 'Sedang Dikerjakan' },
+              { key: 'resolved', label: 'Selesai' }
             ].map(tab => (
               <button
                 key={tab.key}
@@ -1090,19 +1103,17 @@ export default function Findings({ user, isOb = false }) {
           {loading ? (
             <div className="loading-state">
               <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
-              <div className="loading-state-text">⏳ Memuat daftar temuan kerusakan fasilitas...</div>
+              <div className="loading-state-text">Memuat daftar temuan kerusakan fasilitas...</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
               {findings.map(f => (
                 <div key={f.id} className="glass-panel finding-card" style={{ padding: '20px', borderRadius: 'var(--radius-xl)', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center' }}>
                   <div className="finding-photos-wrapper" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    {/* Photo Findings */}
                     <div className="finding-photo-container" style={{ width: '150px', height: '110px', flexShrink: 0, borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                       <SecureImage src={`/findings/${f.id}/foto`} alt="Foto Temuan" />
                     </div>
 
-                    {/* Photo Resolved (If Resolved) */}
                     {f.status === 'resolved' && (
                       <div className="finding-photo-container" style={{ width: '150px', height: '110px', flexShrink: 0, borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
                         <SecureImage src={`/findings/${f.id}/foto-resolved`} alt="Foto Selesai" />
@@ -1110,19 +1121,18 @@ export default function Findings({ user, isOb = false }) {
                     )}
                   </div>
 
-                  {/* Info details */}
                   <div style={{ flex: 1, minWidth: '200px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      {f.status === 'resolved' && <span className="status-badge status-completed">✅ Selesai Diperbaiki</span>}
-                      {f.status === 'in_progress' && <span className="status-badge status-in_progress">🔵 Sedang Dikerjakan</span>}
-                      {f.status === 'unresolved' && <span className="status-badge status-rejected">🔴 Belum Diperbaiki</span>}
+                      {f.status === 'resolved' && <span className="status-badge status-completed">Selesai Diperbaiki</span>}
+                      {f.status === 'in_progress' && <span className="status-badge status-in_progress">Sedang Dikerjakan</span>}
+                      {f.status === 'unresolved' && <span className="status-badge status-rejected">Belum Diperbaiki</span>}
 
-                      <span className="status-badge status-pending" style={{ fontSize: '0.72rem' }}>
-                        📁 {f.category_name || 'Lainnya'}
+                      <span className="status-badge status-pending" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Folder size={12} /> {f.category_name || 'Lainnya'}
                       </span>
                       {f.status !== 'resolved' && f.deadline_perbaikan && (
-                        <span className={f.is_overdue ? "status-badge status-overdue" : "status-badge status-waiting_verification"} style={{ fontSize: '0.72rem' }}>
-                          {f.is_overdue ? '⚠️ Melewati Deadline' : '⏱️ Dalam Batas Waktu'}
+                        <span className={f.is_overdue ? "status-badge status-overdue" : "status-badge status-waiting_verification"} style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={12} /> {f.is_overdue ? 'Melewati Deadline' : 'Dalam Batas Waktu'}
                         </span>
                       )}
                     </div>
@@ -1144,16 +1154,15 @@ export default function Findings({ user, isOb = false }) {
                     <div style={{ fontSize: '0.8rem', marginTop: '8px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600 }}>Tugas Perbaikan:</span>
                       {f.assigned_to_external ? (
-                        <span style={{ color: 'var(--primary)', fontWeight: 700 }}>🛠️ Vendor Luar: {f.assigned_to_external}</span>
+                        <span style={{ color: 'var(--primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Wrench size={13} /> Vendor Luar: {f.assigned_to_external}</span>
                       ) : f.assigned_to_user ? (
-                        <span style={{ color: 'var(--primary)', fontWeight: 700 }}>👤 Petugas: {f.assigned_to_user.name}</span>
+                        <span style={{ color: 'var(--primary)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><User size={13} /> Petugas: {f.assigned_to_user.name}</span>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Belum Ditugaskan</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Action buttons (Resolve & Delete) */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '130px' }}>
                     {(isAdmin || isSupervisor) && f.status !== 'resolved' && (
                       <button 
@@ -1192,7 +1201,7 @@ export default function Findings({ user, isOb = false }) {
 
               {findings.length === 0 && (
                 <div className="glass-panel" style={{ textAlign: 'center', padding: '36px 20px', color: 'var(--text-muted)' }}>
-                  <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>✓</div>
+                  <CheckCircle2 size={36} style={{ color: 'var(--success)', marginBottom: '8px' }} />
                   <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Tidak Ada Temuan Kerusakan</h3>
                   <p style={{ margin: 0, fontSize: '0.85rem' }}>Semua fasilitas dan inventaris ruangan dalam kondisi baik.</p>
                 </div>
@@ -1202,7 +1211,6 @@ export default function Findings({ user, isOb = false }) {
         </div>
       )}
 
-      {/* CAMERA MODAL */}
       {showCamera && (
         <div style={{
           position: 'fixed',
@@ -1397,11 +1405,10 @@ export default function Findings({ user, isOb = false }) {
                       } else if (u.shift_label) {
                         statusText = 'Shift Lain';
                       }
-                      const statusIndicator = u.is_on_shift ? '🟢' : '⚪';
                       
                       return (
                         <option key={u.id} value={u.id}>
-                          {statusIndicator} [{statusText}] {u.name} ({roleName}) {u.shift_label ? `- ${u.shift_label}` : ''}
+                          [{statusText}] {u.name} ({roleName}) {u.shift_label ? `- ${u.shift_label}` : ''}
                         </option>
                       );
                     })}

@@ -436,7 +436,7 @@ export default function ChecklistTemplates() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving} style={{ minWidth: '160px', fontWeight: 700 }}>
-                  {saving ? 'Menyimpan Template...' : '✓ Simpan Template'}
+                  {saving ? 'Menyimpan Template...' : 'Simpan Template'}
                 </button>
               </div>
             </form>

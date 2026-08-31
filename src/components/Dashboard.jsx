@@ -339,7 +339,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         {/* GREETING BANNER (Auto-dismiss in 3s) */}
         {showGreeting && (
           <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
-            <div className="greeting-name">👋 Halo, {user?.name || 'Petugas CS'}!</div>
+            <div className="greeting-name">Halo, {user?.name || 'Petugas CS'}!</div>
             <div className="greeting-date">Hari ini {todayFormatted} • Semangat bekerja dan jaga kebersihan fasilitas!</div>
           </div>
         )}
@@ -473,7 +473,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                 style={{ maxWidth: '230px', fontSize: '0.84rem' }}
               >
                 {availableCameras.map(cam => (
-                  <option key={cam.id} value={cam.id}>📷 {cam.label || `Kamera ${cam.id.substring(0, 6)}`}</option>
+                  <option key={cam.id} value={cam.id}>{cam.label || `Kamera ${cam.id.substring(0, 6)}`}</option>
                 ))}
               </select>
             </div>
@@ -607,7 +607,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         {/* GREETING BANNER (Auto-dismiss in 3s) */}
         {showGreeting && (
           <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
-            <div className="greeting-name">👋 Halo, {user?.name || 'Petugas OB'}!</div>
+            <div className="greeting-name">Halo, {user?.name || 'Petugas OB'}!</div>
             <div className="greeting-date">Hari ini {todayFormatted} • Semangat bekerja dan pantau perbaikan fasilitas!</div>
           </div>
         )}
@@ -740,7 +740,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       {/* GREETING BANNER (Auto-dismiss in 3s) */}
       {showGreeting && (
         <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
-          <div className="greeting-name">👋 Halo, {user?.name || (isAdminOrSupervisor ? (user?.roles?.includes('admin') ? 'Administrator' : 'Supervisor') : 'PIC Area')}!</div>
+          <div className="greeting-name">Halo, {user?.name || (isAdminOrSupervisor ? (user?.roles?.includes('admin') ? 'Administrator' : 'Supervisor') : 'PIC Area')}!</div>
           <div className="greeting-date">Hari ini {todayFormatted} • Selamat datang di sistem monitoring kebersihan fasilitas CAMS.</div>
         </div>
       )}

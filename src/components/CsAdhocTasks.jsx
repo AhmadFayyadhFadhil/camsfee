@@ -353,7 +353,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
       {loading ? (
         <div className="loading-state">
           <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
-          <div className="loading-state-text">⏳ Memuat daftar tugas mendadak...</div>
+          <div className="loading-state-text">Memuat daftar tugas mendadak...</div>
         </div>
       ) : tasks.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>

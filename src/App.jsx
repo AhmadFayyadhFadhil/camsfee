@@ -45,7 +45,9 @@ import {
   Zap, 
   Box, 
   Sparkles, 
-  Award 
+  Award,
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
 import { useConfirm } from './context/ConfirmContext.jsx';
 
@@ -721,13 +723,15 @@ export default function App() {
                   }}
                 >
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>🔔 Notifikasi ({unreadCount} belum dibaca)</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Bell size={16} /> Notifikasi ({unreadCount} belum dibaca)
+                    </span>
                     <button 
                       className="btn btn-secondary btn-sm" 
                       style={{ padding: '4px 10px', fontSize: '0.75rem' }} 
                       onClick={(e) => { e.stopPropagation(); fetchNotifications(); }}
                     >
-                      ↻ Perbarui
+                      <RefreshCw size={12} /> Perbarui
                     </button>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -745,14 +749,16 @@ export default function App() {
                       >
                         <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span>{n.title}</span>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 600 }}>✓ Tandai Dibaca</span>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Check size={11} /> Tandai Dibaca
+                          </span>
                         </div>
                         <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.8rem' }}>{n.message}</p>
                       </div>
                     ))}
                     {notifications.length === 0 && (
                       <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>✓</div>
+                        <CheckCircle2 size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
                         <div>Semua notifikasi sudah dibaca.</div>
                       </div>
                     )}
@@ -825,7 +831,7 @@ export default function App() {
             <Suspense fallback={
               <div className="loading-state">
                 <div className="spinner" style={{ width: '32px', height: '32px' }}></div>
-                <div className="loading-state-text">⏳ Memuat halaman, mohon tunggu...</div>
+                <div className="loading-state-text">Memuat halaman, mohon tunggu...</div>
               </div>
             }>
               {currentTab === 'dashboard' && (

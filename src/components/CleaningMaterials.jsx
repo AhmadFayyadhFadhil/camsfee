@@ -304,8 +304,8 @@ export default function CleaningMaterials() {
                     onChange={(e) => setJenis(e.target.value)}
                     required
                   >
-                    <option value="chemical">🧪 Bahan Kimia / Disinfektan (Chemical)</option>
-                    <option value="tool">🧹 Alat Kerja / Mesin (Tool)</option>
+                    <option value="chemical">Bahan Kimia / Disinfektan (Chemical)</option>
+                    <option value="tool">Alat Kerja / Mesin (Tool)</option>
                   </select>
                 </div>
 
@@ -352,7 +352,7 @@ export default function CleaningMaterials() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving} style={{ fontWeight: 700 }}>
-                  {saving ? 'Menyimpan...' : '✓ Simpan Material'}
+                  {saving ? 'Menyimpan...' : 'Simpan Material'}
                 </button>
               </div>
             </form>

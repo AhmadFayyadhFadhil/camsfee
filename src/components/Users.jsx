@@ -379,8 +379,8 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
                       value={isActive ? 'true' : 'false'}
                       onChange={(e) => setIsActive(e.target.value === 'true')}
                     >
-                      <option value="true">🟢 Aktif Bekerja</option>
-                      <option value="false">🔴 Non-aktif</option>
+                      <option value="true">Aktif Bekerja</option>
+                      <option value="false">Non-aktif</option>
                     </select>
                   </div>
                 </div>
@@ -421,7 +421,7 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
-                  ✓ Simpan Pengguna
+                  Simpan Pengguna
                 </button>
               </div>
             </form>

@@ -449,7 +449,7 @@ export default function Profile({ user, onUserUpdated }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Status:</span>
                 <span style={{ fontWeight: 700, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  ✓ Aktif Terverifikasi
+                  <Check size={14} /> Aktif Terverifikasi
                 </span>
               </div>
 

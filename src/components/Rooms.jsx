@@ -469,7 +469,7 @@ export default function Rooms() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ fontWeight: 700 }}>
-                  ✓ Simpan Ruangan
+                  Simpan Ruangan
                 </button>
               </div>
             </form>
