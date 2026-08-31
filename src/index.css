@@ -487,30 +487,33 @@ button.sidebar-link {
 }
 
 .user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--primary, #2563eb);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: 0.85rem;
+  font-weight: 700;
+  font-size: 0.9rem;
   color: white;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+  flex-shrink: 0;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .user-name {
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #111827;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* ── Closed 5-Status & Role Badges ── */
@@ -526,6 +529,13 @@ button.sidebar-link {
   line-height: 16px;
   white-space: nowrap;
   letter-spacing: 0.02em;
+}
+
+/* Compact role badge inside navbar user-info */
+.user-info .role-badge {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  line-height: 14px;
 }
 
 /* Success / Complete / Positive */

@@ -767,31 +767,29 @@ export default function App() {
               )}
             </div>
 
-            {/* Profile Info Badge — tampil di semua ukuran layar */}
+            {/* Profile Info Badge */}
             <div className="user-profile-badge">
-              <div className="user-info col-hide-mobile">
-                <span className="user-name" style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--on-surface)' }}>{user.name}</span>
-                <span 
-                  className={`role-badge ${getRoleBadgeClass()}`}
-                  style={{ fontSize: '0.65rem', marginTop: '3px', display: 'inline-block' }}
-                >
-                  {getRoleLabel()}
-                </span>
-              </div>
               <div 
-                className="user-avatar" 
-                title={`Login sebagai: ${user.name} (${getRoleLabel()})`}
-                style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                className="user-avatar"
+                title={`${user.name} — ${getRoleLabel()}`}
+                style={{ overflow: 'hidden', flexShrink: 0 }}
               >
                 {user.avatar_url || user.foto_profile ? (
                   <img 
                     src={user.avatar_url || user.foto_profile} 
                     alt={user.name} 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.textContent = user.name?.[0] || 'U'; }}
                   />
                 ) : (
-                  user.name?.[0] || 'U'
+                  user.name?.[0]?.toUpperCase() || 'U'
                 )}
+              </div>
+              <div className="user-info col-hide-mobile">
+                <span className="user-name">{user.name}</span>
+                <span className={`role-badge ${getRoleBadgeClass()}`}>
+                  {getRoleLabel()}
+                </span>
               </div>
             </div>
 
