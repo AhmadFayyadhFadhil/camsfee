@@ -1733,6 +1733,11 @@ export default function CsTasks({
                           <td className="col-hide-mobile">{t.room?.building?.name || '-'}</td>
                           <td className="col-hide-mobile">
                             <span style={{ fontWeight: 600 }}>{t.shift?.name || '-'}</span>
+                            {t.shift?.start_time && t.shift?.end_time && (
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                                {t.shift.start_time} - {t.shift.end_time} WIB
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -1762,7 +1767,7 @@ export default function CsTasks({
                                 <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{t.task_date}</span>
                               )}
                               <span style={{ fontSize: '0.74rem', color: t.status === 'overdue' ? 'var(--danger)' : 'var(--text-muted)' }}>
-                                Batas Shift: {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'} WIB
+                                Batas Shift: {t.shift?.end_time ? `${t.shift.end_time} WIB` : (t.due_datetime ? `${t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)} WIB` : '-')}
                               </span>
                             </div>
                           </td>
@@ -1817,7 +1822,9 @@ export default function CsTasks({
                           </div>
                           <div className="task-card-sub">Gedung: {t.room?.building?.name || '-'} • Kode: {t.room?.code}</div>
                         </div>
-                        <span className="status-badge status-in_progress" style={{ fontSize: '0.72rem', padding: '3px 8px' }}>{t.shift?.name || 'Shift 1'}</span>
+                        <span className="status-badge status-in_progress" style={{ fontSize: '0.72rem', padding: '3px 8px' }}>
+                          {t.shift?.name || 'Shift Normal'} {t.shift?.start_time ? `(${t.shift.start_time} - ${t.shift.end_time})` : ''}
+                        </span>
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)', flexWrap: 'wrap', gap: '6px' }}>
