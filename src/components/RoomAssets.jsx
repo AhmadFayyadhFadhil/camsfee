@@ -778,64 +778,7 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
       {/* ========================================================================= */}
       {activeSubTab === 'rooms' && (
         <>
-          {/* 1. GEDUNG SELECTION PILLS */}
-          <div style={{ marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
-              Pilih Gedung:
-            </span>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setActiveBuildingId('')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  border: activeBuildingId === '' ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
-                  background: activeBuildingId === '' ? 'var(--primary)' : '#ffffff',
-                  color: activeBuildingId === '' ? '#ffffff' : 'var(--text-primary)',
-                  fontWeight: activeBuildingId === '' ? 700 : 500,
-                  fontSize: '0.88rem',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                Semua Gedung ({rooms.length} Ruangan)
-              </button>
-
-              {buildings.map((b) => {
-                const count = buildingRoomCounts[b.id] || 0;
-                const isActive = activeBuildingId === b.id;
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setActiveBuildingId(b.id)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '20px',
-                      border: isActive ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
-                      background: isActive ? 'var(--primary)' : '#ffffff',
-                      color: isActive ? '#ffffff' : 'var(--text-primary)',
-                      fontWeight: isActive ? 700 : 500,
-                      fontSize: '0.88rem',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    {b.nama_gedung || b.name} ({count} Ruangan)
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. SEARCH & STATUS FILTER BAR */}
+          {/* SEARCH & FILTER BAR */}
           <div
             className="glass-panel"
             style={{
@@ -848,7 +791,8 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
               alignItems: 'center',
             }}
           >
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px', maxWidth: '380px' }}>
+            {/* 1. Cari Nama / Kode Ruangan */}
+            <div style={{ position: 'relative', flex: 1, minWidth: '220px', maxWidth: '340px' }}>
               <input
                 type="text"
                 className="form-control"
@@ -869,11 +813,30 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
               />
             </div>
 
+            {/* 2. Dropdown Filter Gedung */}
+            <select
+              className="form-control"
+              value={activeBuildingId}
+              onChange={(e) => setActiveBuildingId(e.target.value)}
+              style={{ maxWidth: '220px', fontWeight: 600 }}
+            >
+              <option value="">Semua Gedung ({buildings.length})</option>
+              {buildings.map((b) => {
+                const count = buildingRoomCounts[b.id] || 0;
+                return (
+                  <option key={b.id} value={b.id}>
+                    {b.nama_gedung || b.name} ({count} Ruangan)
+                  </option>
+                );
+              })}
+            </select>
+
+            {/* 3. Dropdown Filter Status Siklus Audit */}
             <select
               className="form-control"
               value={statusAuditFilter}
               onChange={(e) => setStatusAuditFilter(e.target.value)}
-              style={{ maxWidth: '240px' }}
+              style={{ maxWidth: '220px' }}
             >
               <option value="">Semua Status Siklus Audit</option>
               <option value="up_to_date">Aman / Up-to-date</option>
@@ -882,10 +845,12 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
               <option value="never">Belum Dijadwalkan</option>
             </select>
 
-            {(roomSearch || statusAuditFilter) && (
+            {/* Reset Button */}
+            {(activeBuildingId || roomSearch || statusAuditFilter) && (
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
+                  setActiveBuildingId('');
                   setRoomSearch('');
                   setStatusAuditFilter('');
                 }}
