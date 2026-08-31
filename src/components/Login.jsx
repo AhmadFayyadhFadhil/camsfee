@@ -47,8 +47,12 @@ export default function Login({ onLoginSuccess, appIdentity }) {
           {appIdentity && appIdentity.company_logo ? (
             <div style={{ width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <img 
-                src={appIdentity.company_logo} 
+                src={appIdentity.company_logo.includes('/api/v1/settings/logo/image') ? '/api/v1/settings/logo/image' : appIdentity.company_logo} 
                 alt="Logo" 
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = '/favicon.svg';
+                }}
                 style={{ 
                   width: '100%', 
                   height: '100%', 

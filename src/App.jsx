@@ -129,38 +129,59 @@ export default function App() {
   const [alert, setAlert] = useState(null);
   const [scannedTaskData, setScannedTaskData] = useState(null);
 
+  const normalizeLogoUrl = (url) => {
+    if (!url) return null;
+    if (typeof url === 'string' && (url.includes('/api/v1/settings/logo/image') || url.includes('/settings/logo/image'))) {
+      return '/api/v1/settings/logo/image';
+    }
+    return url;
+  };
+
   // App Identity states (cached in localStorage for instant rendering on refresh)
   const getCachedSettings = () => {
     try {
       const cached = localStorage.getItem('cams_public_settings');
-      return cached ? JSON.parse(cached) : null;
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.company_logo) {
+          parsed.company_logo = normalizeLogoUrl(parsed.company_logo);
+        }
+        return parsed;
+      }
+      return null;
     } catch (e) {
       return null;
     }
   };
 
-  const [appIdentity, setAppIdentity] = useState(getCachedSettings() || {
-    company_name: 'CAMS PANDAAN',
-    company_logo: null,
-    company_description: 'Cleaning Activity Monitor',
-    app_footer_text: '© 2026 CAMS Pandaan. All rights reserved.'
+  const [appIdentity, setAppIdentity] = useState(() => {
+    const cached = getCachedSettings();
+    if (cached) return cached;
+    return {
+      company_name: 'PT WIDARTA BHAKTI',
+      company_logo: '/api/v1/settings/logo/image',
+      company_description: 'Cleaning Activity Monitor',
+      app_footer_text: '© 2026 CAMS Pandaan. All rights reserved.'
+    };
   });
 
   const fetchPublicSettings = async () => {
     try {
       const response = await api.get('/settings/public');
       if (response.success && response.data) {
-        setAppIdentity(response.data);
-        localStorage.setItem('cams_public_settings', JSON.stringify(response.data));
-        if (response.data.company_name) {
-          document.title = response.data.company_name + " - Cleaning Activity Monitoring System";
+        const normData = {
+          ...response.data,
+          company_logo: normalizeLogoUrl(response.data.company_logo)
+        };
+        setAppIdentity(normData);
+        localStorage.setItem('cams_public_settings', JSON.stringify(normData));
+        if (normData.company_name) {
+          document.title = normData.company_name + " - Cleaning Activity Monitoring System";
         }
-        if (response.data.company_logo) {
+        if (normData.company_logo) {
           const link = document.querySelector("link[rel~='icon']");
           if (link) {
-            link.href = response.data.company_logo.startsWith('http')
-              ? response.data.company_logo
-              : `/api/v1/settings/logo/image?v=${Date.now()}`;
+            link.href = normData.company_logo;
           }
         }
       }
@@ -393,8 +414,12 @@ export default function App() {
           {appIdentity.company_logo ? (
             <div style={{ width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <img 
-                src={appIdentity.company_logo} 
+                src={normalizeLogoUrl(appIdentity.company_logo)} 
                 alt="Logo" 
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = '/favicon.svg';
+                }}
                 style={{ 
                   width: '100%', 
                   height: '100%', 
