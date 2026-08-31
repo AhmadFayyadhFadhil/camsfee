@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../utils/api';
-import { Play, Camera, CheckCircle, ShieldAlert, X, Upload, Sparkles, ArrowRight } from 'lucide-react';
+import { Play, Camera, CheckCircle, ShieldAlert, X, Sparkles } from 'lucide-react';
 import { compressImage } from '../utils/imageCompressor';
 
 export default function CsAdhocTasks({ onResumeDailyTasks }) {
@@ -9,12 +9,122 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Submit Modal State
+  // Submit Modal & Live Camera States
   const [activeTask, setActiveTask] = useState(null);
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const fileInputRef = useRef(null);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
+  const [liveTime, setLiveTime] = useState('');
+  const [gpsState, setGpsState] = useState({
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    ready: false,
+    error: null,
+  });
+
+  const getGeolocation = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve({
+          latitude: null,
+          longitude: null,
+          accuracy: null,
+          ready: false,
+          error: 'Geolocation tidak didukung browser.',
+        });
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            ready: true,
+            error: null,
+          });
+        },
+        (err) => {
+          console.error('Error getting geolocation:', err);
+          resolve({
+            latitude: null,
+            longitude: null,
+            accuracy: null,
+            ready: false,
+            error: err.message || 'Gagal mendapatkan lokasi GPS.',
+          });
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    });
+  };
+
+  const getFormattedDateTime = () => {
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const day = now.getDate();
+    const month = months[now.getMonth()];
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${day} ${month} ${year} ${hours}:${minutes}:${seconds} WIB`;
+  };
+
+  const drawWatermark = (imageElement, gps) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = imageElement.naturalWidth || imageElement.width;
+    canvas.height = imageElement.naturalHeight || imageElement.height;
+    
+    ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+    
+    const overlayHeight = Math.max(64, canvas.height * 0.18);
+    const paddingX = Math.max(14, canvas.width * 0.03);
+    const paddingY = Math.max(12, canvas.height * 0.03);
+    const fontSize = Math.max(12, canvas.height * 0.034);
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(0, canvas.height - overlayHeight, canvas.width, overlayHeight);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${fontSize}px Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+    
+    const dateText = `Waktu: ${getFormattedDateTime()}`;
+    const latText = gps.ready && gps.latitude !== null ? `Lat: ${gps.latitude.toFixed(7)}` : 'Lat: -';
+    const lngText = gps.ready && gps.longitude !== null ? `Lng: ${gps.longitude.toFixed(7)}` : 'Lng: -';
+    const accuracyText = gps.ready && gps.accuracy !== null ? `Akurasi: ${gps.accuracy.toFixed(1)} m` : 'Akurasi: -';
+    const lineHeight = fontSize * 1.3;
+    
+    ctx.fillText(dateText, paddingX, canvas.height - overlayHeight + paddingY);
+    ctx.fillText(latText, paddingX, canvas.height - overlayHeight + paddingY + lineHeight);
+    ctx.fillText(lngText, paddingX, canvas.height - overlayHeight + paddingY + lineHeight * 2);
+    ctx.fillText(accuracyText, paddingX, canvas.height - overlayHeight + paddingY + lineHeight * 3);
+    
+    ctx.fillStyle = '#22c55e';
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillText('CAMS GPS Proof', canvas.width - paddingX, canvas.height - paddingY - fontSize);
+    ctx.textAlign = 'left';
+    
+    return new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        try {
+          const compressed = await compressImage(blob, 1600, 1000 * 1024);
+          resolve(compressed || blob);
+        } catch (e) {
+          resolve(blob);
+        }
+      }, 'image/jpeg', 0.85);
+    });
+  };
 
   const fetchMyAdhocTasks = async () => {
     setLoading(true);
@@ -48,36 +158,97 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     }
   };
 
+  const startLiveCamera = async () => {
+    setCameraError(null);
+    setProofFile(null);
+    setProofPreview(null);
+    setCameraActive(true);
+
+    const gps = await getGeolocation();
+    setGpsState(gps);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      });
+      setCameraStream(stream);
+
+      setTimeout(() => {
+        const videoElement = document.getElementById('adhoc-camera-video');
+        if (videoElement) {
+          videoElement.srcObject = stream;
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Error opening live camera:', err);
+      setCameraError('Gagal mengakses kamera. Pastikan izin kamera aktif pada browser Anda.');
+    }
+  };
+
+  const stopLiveCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setCameraActive(false);
+  };
+
   const handleOpenSubmitModal = (task) => {
     setActiveTask(task);
     setProofFile(null);
     setProofPreview(null);
+    setCameraError(null);
+    startLiveCamera();
   };
 
-  const handlePhotoCapture = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleCloseModal = () => {
+    stopLiveCamera();
+    setActiveTask(null);
+    setProofFile(null);
+    setProofPreview(null);
+    setCameraError(null);
+  };
+
+  const handleCaptureSnapshot = async () => {
+    const videoElement = document.getElementById('adhoc-camera-video');
+    if (!videoElement) {
+      setCameraError('Kamera tidak aktif.');
+      return;
+    }
 
     try {
-      // Kompres otomatis ke format JPEG < 1MB
-      const compressedBlob = await compressImage(file, 1600, 1000 * 1024);
-      setProofFile(compressedBlob);
-      setProofPreview(URL.createObjectURL(compressedBlob));
+      const gps = gpsState.ready ? gpsState : await getGeolocation();
+      const canvas = document.createElement('canvas');
+      canvas.width = videoElement.videoWidth || 640;
+      canvas.height = videoElement.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+      const img = new Image();
+      img.src = canvas.toDataURL('image/jpeg');
+      await new Promise(resolve => img.onload = resolve);
+
+      const watermarkedBlob = await drawWatermark(img, gps);
+      setProofFile(watermarkedBlob);
+      setProofPreview(URL.createObjectURL(watermarkedBlob));
+
+      stopLiveCamera();
     } catch (err) {
-      console.error('Compression error:', err);
-      setError('Gagal mengompresi foto. Silakan coba lagi.');
+      console.error('Error capturing snapshot:', err);
+      setCameraError('Gagal mengambil foto dari kamera.');
     }
   };
 
   const handleSubmitProof = async (e) => {
     e.preventDefault();
     if (!proofFile) {
-      setError('Wajib melampirkan 1 foto bukti penyelesaian.');
+      setCameraError('Wajib mengambil 1 foto bukti langsung dari kamera.');
       return;
     }
 
     setSubmitting(true);
-    setError(null);
+    setCameraError(null);
 
     const formData = new FormData();
     formData.append('foto_bukti', proofFile, 'bukti_adhoc.jpg');
@@ -86,9 +257,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
       const res = await api.post(`/adhoc-tasks/${activeTask.id}/submit`, formData);
       if (res.success) {
         setSuccessMsg('Tugas mendadak berhasil diserahkan! Sistem secara otomatis mengembalikan Anda ke tugas rutin harian.');
-        setActiveTask(null);
-        setProofFile(null);
-        setProofPreview(null);
+        handleCloseModal();
         fetchMyAdhocTasks();
 
         // Auto-Resume: setelah 1.5 detik panggil onResumeDailyTasks jika tersedia
@@ -99,11 +268,33 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
         }
       }
     } catch (err) {
-      setError(err.message || 'Gagal menyerahkan bukti tugas mendadak.');
+      setCameraError(err.message || 'Gagal menyerahkan bukti tugas mendadak.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Live timer ticker saat kamera aktif
+  useEffect(() => {
+    let intervalId;
+    if (activeTask && cameraActive) {
+      setLiveTime(getFormattedDateTime());
+      intervalId = setInterval(() => {
+        setLiveTime(getFormattedDateTime());
+      }, 1000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [activeTask, cameraActive]);
+
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraStream]);
 
   return (
     <div className="container-fluid">
@@ -188,14 +379,14 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                         border: task.priority === 'high' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(234, 179, 8, 0.3)'
                       }}
                     >
-                      {task.priority === 'high' ? '🚨 Prioritas Tinggi' : '⚠️ Prioritas Normal'}
+                      {task.priority === 'high' ? 'Prioritas Tinggi' : 'Prioritas Normal'}
                     </span>
                     
-                    {task.status === 'pending' && <span className="status-badge status-pending">⏳ Belum Dimulai</span>}
-                    {task.status === 'in_progress' && <span className="status-badge status-in_progress">🔵 Sedang Dikerjakan</span>}
-                    {task.status === 'submitted' && <span className="status-badge status-waiting_verification">🟡 Menunggu Verifikasi</span>}
-                    {task.status === 'verified' && <span className="status-badge status-completed">✅ Selesai</span>}
-                    {task.status === 'rejected' && <span className="status-badge status-rejected">❌ Perlu Diulang</span>}
+                    {task.status === 'pending' && <span className="status-badge status-pending">Belum Dimulai</span>}
+                    {task.status === 'in_progress' && <span className="status-badge status-in_progress">Sedang Dikerjakan</span>}
+                    {task.status === 'submitted' && <span className="status-badge status-waiting_verification">Menunggu Verifikasi</span>}
+                    {task.status === 'verified' && <span className="status-badge status-completed">Selesai</span>}
+                    {task.status === 'rejected' && <span className="status-badge status-rejected">Perlu Diulang</span>}
                   </div>
                   
                   <h3 style={{ margin: '4px 0', fontSize: '1.25rem', fontWeight: 800 }}>{task.judul}</h3>
@@ -204,7 +395,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                   </p>
                   {task.room_name && (
                     <div style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 700, background: 'rgba(14, 49, 146, 0.05)', padding: '6px 12px', borderRadius: 'var(--radius-md)', width: 'fit-content' }}>
-                      📍 Lokasi: {task.room_name} ({task.building_name})
+                      Lokasi: {task.room_name} ({task.building_name})
                     </div>
                   )}
                 </div>
@@ -224,9 +415,9 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                     <button
                       className="btn btn-success"
                       onClick={() => handleOpenSubmitModal(task)}
-                      style={{ width: '100%', fontWeight: 700 }}
+                      style={{ width: '100%', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     >
-                      <Camera size={18} /> 📷 Ambil Foto &amp; Kirim
+                      <Camera size={18} /> Ambil Foto &amp; Kirim
                     </button>
                   )}
 
@@ -248,77 +439,123 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
         </div>
       )}
 
-      {/* Modal Ambil Foto Bukti */}
+      {/* Modal Ambil Foto Bukti Langsung dari Live Camera */}
       {activeTask && (
-        <div className="confirm-backdrop" onClick={() => setActiveTask(null)}>
-          <div className="glass-panel" style={{ maxWidth: '480px', width: '92vw', padding: '24px', borderRadius: 'var(--radius-xl)', background: 'white' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+        <div className="confirm-backdrop" onClick={handleCloseModal}>
+          <div className="glass-panel" style={{ maxWidth: '480px', width: '92vw', padding: '20px', borderRadius: 'var(--radius-xl)', background: 'white' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
               <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>BUKTI PENYELESAIAN</span>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>{activeTask.judul}</h2>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>BUKTI PENYELESAIAN LANGSUNG</span>
+                <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{activeTask.judul}</h2>
               </div>
-              <button onClick={() => setActiveTask(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>
+              <button onClick={handleCloseModal} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <X size={22} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitProof}>
-              <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  ref={fileInputRef}
-                  onChange={handlePhotoCapture}
-                  style={{ display: 'none' }}
-                />
+            {cameraError && (
+              <div className="alert alert-danger" style={{ marginBottom: '14px', padding: '10px 14px', fontSize: '0.82rem' }}>
+                <ShieldAlert size={16} />
+                <span>{cameraError}</span>
+              </div>
+            )}
 
-                {proofPreview ? (
-                  <div style={{ position: 'relative', marginBottom: '12px' }}>
-                    <img
-                      src={proofPreview}
-                      alt="Bukti Foto"
-                      style={{ width: '100%', maxHeight: '260px', objectFit: 'cover', borderRadius: 'var(--radius-lg)', border: '2px solid var(--success)' }}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{ position: 'absolute', bottom: '10px', right: '10px', fontWeight: 700 }}
-                    >
-                      📷 Foto Ulang
-                    </button>
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{
-                      border: '2px dashed var(--primary)',
-                      borderRadius: 'var(--radius-xl)',
-                      padding: '36px 16px',
-                      cursor: 'pointer',
-                      background: 'rgba(14, 49, 146, 0.02)',
-                      transition: 'all 0.2s ease'
+            {!proofPreview ? (
+              <div>
+                {/* LIVE CAMERA VIEWPORT */}
+                <div style={{ 
+                  background: '#0a0e17', 
+                  border: '1px solid var(--border-color)', 
+                  borderRadius: 'var(--radius-lg)',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  aspectRatio: '4/3',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '16px'
+                }}>
+                  <video 
+                    id="adhoc-camera-video" 
+                    autoPlay 
+                    playsInline 
+                    style={{ 
+                      width: '100%', 
+                      height: '100%',
+                      objectFit: 'cover'
                     }}
-                  >
-                    <Camera size={44} color="var(--primary)" style={{ marginBottom: '10px' }} />
-                    <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--primary)' }}>Ketuk untuk Buka Kamera HP</p>
-                    <p style={{ margin: '6px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Ambil foto kondisi yang sudah bersih / diperbaiki
-                    </p>
+                  ></video>
+                  
+                  {/* Floating Overlay GPS & Time */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '10px',
+                    background: 'rgba(0,0,0,0.65)',
+                    padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.72rem',
+                    color: 'white',
+                    zIndex: 20,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    lineHeight: '1.2'
+                  }}>
+                    <div>GPS: {gpsState.ready ? `${gpsState.latitude?.toFixed(4)}, ${gpsState.longitude?.toFixed(4)}` : 'Mencari GPS...'}</div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '3px', marginTop: '2px', fontSize: '0.68rem', color: '#10b981', fontWeight: 600 }}>
+                      {liveTime}
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setActiveTask(null)} disabled={submitting} style={{ flex: 1 }}>
-                  Batal
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting || !proofFile} style={{ flex: 2, fontWeight: 700 }}>
-                  {submitting ? 'Mengirim...' : '🚀 Kirim & Selesai'}
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={handleCloseModal}
+                    style={{ flex: 1 }}
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={handleCaptureSnapshot}
+                    style={{ flex: 2, height: '44px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  >
+                    <Camera size={18} /> Ambil Foto
+                  </button>
+                </div>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={handleSubmitProof}>
+                <div style={{ position: 'relative', marginBottom: '16px' }}>
+                  <img
+                    src={proofPreview}
+                    alt="Bukti Foto"
+                    style={{ width: '100%', maxHeight: '300px', objectFit: 'cover', borderRadius: 'var(--radius-lg)', border: '2px solid var(--success)' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={startLiveCamera}
+                    style={{ position: 'absolute', bottom: '10px', right: '10px', fontWeight: 700 }}
+                  >
+                    Foto Ulang
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={handleCloseModal} disabled={submitting} style={{ flex: 1 }}>
+                    Batal
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submitting} style={{ flex: 2, height: '44px', fontWeight: 700 }}>
+                    {submitting ? 'Mengirim...' : 'Kirim & Selesai'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
