@@ -1582,11 +1582,11 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                     onChange={(e) => setScheduleInterval(e.target.value)}
                     required
                   >
-                    <option value="biweekly">⚡ Setiap 2 Minggu (14 Hari)</option>
-                    <option value="monthly">📅 1 Bulan Sekali (30 Hari)</option>
-                    <option value="bimonthly">📆 2 Bulan Sekali (60 Hari - Standar)</option>
-                    <option value="quarterly">🗓️ 3 Bulan Sekali / Triwulan (90 Hari)</option>
-                    <option value="custom">⚙️ Kustom Hari / Tanggal Khusus</option>
+                    <option value="biweekly">Setiap 2 Minggu (14 Hari)</option>
+                    <option value="monthly">1 Bulan Sekali (30 Hari)</option>
+                    <option value="bimonthly">2 Bulan Sekali (60 Hari - Standar)</option>
+                    <option value="quarterly">3 Bulan Sekali / Triwulan (90 Hari)</option>
+                    <option value="custom">Kustom Hari / Tanggal Khusus</option>
                   </select>
                 </div>
 
@@ -2213,7 +2213,7 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                             style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
                           />
                           <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#b45309' }}>
-                            ⚡ Otomatis Buat Tiket Temuan Kerusakan (Findings) untuk barang rusak / hilang
+                            Otomatis Buat Tiket Temuan Kerusakan (Findings) untuk barang rusak / hilang
                           </span>
                         </label>
                       )}
@@ -2226,7 +2226,7 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                           style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
                         />
                         <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>
-                          🔄 Sinkronisasi Master Paten (Update jumlah baseline master sesuai angka riil fisik)
+                          Sinkronisasi Master Paten (Update jumlah baseline master sesuai angka riil fisik)
                         </span>
                       </label>
                     </div>
