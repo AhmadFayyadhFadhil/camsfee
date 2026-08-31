@@ -22,6 +22,7 @@ const CleaningMaterials = lazy(() => import('./components/CleaningMaterials'));
 const SlaParameters = lazy(() => import('./components/SlaParameters'));
 const AdhocTaskSupervisor = lazy(() => import('./components/AdhocTaskSupervisor'));
 const CsAdhocTasks = lazy(() => import('./components/CsAdhocTasks'));
+import { resolveNotificationTarget } from './utils/notificationRouter';
 
 import { 
   Shield, 
@@ -373,6 +374,23 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleNotificationClick = (notif) => {
+    try {
+      if (!notif.is_read) {
+        api.patch(`/notifications/${notif.id}/read`).catch(() => {});
+        setNotifications(prev => prev.filter(n => n.id !== notif.id));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setShowNotifications(false);
+    const targetTab = resolveNotificationTarget(notif, user?.roles || []);
+    if (targetTab) {
+      selectTab(targetTab);
     }
   };
 
@@ -751,17 +769,39 @@ export default function App() {
                           borderBottom: '1px solid var(--border-color)', 
                           fontSize: '0.85rem',
                           background: 'rgba(255,255,255,0.01)',
-                          cursor: 'pointer' 
+                          cursor: 'pointer',
+                          transition: 'background 0.15s ease'
                         }}
-                        onClick={() => handleMarkAsRead(n.id)}
+                        onClick={() => handleNotificationClick(n)}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(14, 49, 146, 0.05)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.01)'; }}
                       >
                         <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{n.title}</span>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <span style={{ color: 'var(--text-primary)' }}>{n.title}</span>
+                          <button
+                            type="button"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '2px 6px',
+                              fontSize: '0.72rem',
+                              color: 'var(--primary)',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsRead(n.id);
+                            }}
+                            title="Tandai notifikasi ini sudah dibaca"
+                          >
                             <Check size={11} /> Tandai Dibaca
-                          </span>
+                          </button>
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.8rem' }}>{n.message}</p>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.8rem', lineHeight: 1.4 }}>{n.message}</p>
                       </div>
                     ))}
                     {notifications.length === 0 && (
@@ -801,52 +841,34 @@ export default function App() {
               </div>
             </div>
 
-            {/* Logout button */}
+            {/* Logout Button */}
             <button 
-              className="btn btn-secondary" 
-              onClick={handleLogout} 
-              style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px' }} 
+              className="btn btn-secondary btn-sm" 
+              onClick={handleLogout}
               title="Keluar dari sistem"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <LogOut size={16} style={{ color: 'var(--danger)' }} />
-              <span className="col-hide-mobile" style={{ fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600 }}>Keluar</span>
+              <LogOut size={16} />
+              <span className="col-hide-mobile">Keluar</span>
             </button>
           </div>
         </header>
 
-        {/* Content Body */}
+        {/* Content Body with Dynamic Routing */}
         <main className="content-body" ref={contentBodyRef}>
-          {/* Banner Alert Notification */}
           {alert && (
-            <div className={`alert alert-${alert.type}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {alert.type === 'success' ? <Check size={18} /> : <ShieldAlert size={18} />}
-                <span>{alert.message}</span>
-              </div>
-              <button 
-                onClick={() => setAlert(null)} 
-                style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
-              >
-                <X size={16} />
-              </button>
+            <div className={`alert alert-${alert.type}`} style={{ marginBottom: '20px' }}>
+              <span>{alert.message}</span>
             </div>
           )}
 
-          {/* Mount appropriate tabs */}
           <ErrorBoundary>
-            <Suspense fallback={
-              <div className="loading-state">
-                <div className="spinner" style={{ width: '32px', height: '32px' }}></div>
-                <div className="loading-state-text">Memuat halaman, mohon tunggu...</div>
-              </div>
-            }>
+            <Suspense fallback={<div className="spinner"></div>}>
               {currentTab === 'dashboard' && (
                 <Dashboard 
-                  user={user} 
-                  setCurrentTab={setCurrentTab} 
-                  setOpenScanModalOnMount={setOpenScanModalOnMount}
-                  onScanSuccess={(data) => {
-                    setScannedTaskData(data);
+                  onNavigate={(tab) => selectTab(tab)} 
+                  onNavigateWithTask={(task) => {
+                    setScannedTaskData(task);
                     setCurrentTab('tasks');
                   }} 
                 />
@@ -900,7 +922,9 @@ export default function App() {
                 <Notifications 
                   unreadCount={unreadCount} 
                   setUnreadCount={setUnreadCount} 
-                  fetchNotifications={fetchNotifications} 
+                  fetchNotifications={fetchNotifications}
+                  onNavigate={(targetTab) => selectTab(targetTab)}
+                  userRoles={user?.roles || []}
                 />
               )}
             </Suspense>

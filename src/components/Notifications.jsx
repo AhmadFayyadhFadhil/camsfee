@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Bell, Check, CheckCheck, Trash2, Info, AlertTriangle, AlertCircle, Clock } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, Info, AlertTriangle, AlertCircle, Clock, ExternalLink } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
+import { resolveNotificationTarget, getNotificationModuleLabel } from '../utils/notificationRouter';
 
-export default function Notifications({ unreadCount, setUnreadCount, fetchNotifications }) {
+export default function Notifications({ unreadCount, setUnreadCount, fetchNotifications, onNavigate, userRoles = [] }) {
   const confirm = useConfirm();
   const [notificationsList, setNotificationsList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -171,6 +172,18 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
       setError(err.message || 'Gagal menghapus semua notifikasi.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleRowClick = (notif) => {
+    if (!notif.is_read) {
+      handleMarkAsReadLocal(notif.id);
+    }
+    const targetTab = resolveNotificationTarget(notif, userRoles);
+    if (onNavigate) {
+      onNavigate(targetTab);
+    } else {
+      window.location.hash = '#' + targetTab;
     }
   };
 
@@ -405,111 +418,149 @@ export default function Notifications({ unreadCount, setUnreadCount, fetchNotifi
 
       {/* Notifications List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {notificationsList.map(n => (
-          <div 
-            key={n.id} 
-            className="glass-panel"
-            style={{ 
-              padding: '16px 18px', 
-              display: 'flex', 
-              gap: '14px', 
-              alignItems: 'center',
-              borderLeft: n.is_read ? '4px solid transparent' : '4px solid var(--primary)',
-              background: n.is_read ? '#ffffff' : 'rgba(14, 49, 146, 0.03)',
-              borderRadius: 'var(--radius-xl)',
-              border: n.is_read ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(14, 49, 146, 0.12)',
-              boxShadow: n.is_read ? 'none' : '0 2px 8px rgba(14, 49, 146, 0.04)',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <div style={{ 
-              padding: '10px', 
-              background: n.is_read ? 'rgba(0,0,0,0.03)' : 'rgba(14, 49, 146, 0.08)', 
-              borderRadius: 'var(--radius-lg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              {getNotificationIcon(n.title)}
-            </div>
-            
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <h4 style={{ 
-                  margin: 0, 
-                  fontSize: '0.96rem', 
-                  fontWeight: n.is_read ? 600 : 750, 
-                  color: n.is_read ? 'var(--text-primary)' : 'var(--primary)' 
-                }}>
-                  {n.title}
-                </h4>
-                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={13} />
-                  {formatDateTime(n.created_at)}
-                </span>
-              </div>
-              <p style={{ margin: '5px 0 0 0', fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                {n.message}
-              </p>
-            </div>
+        {notificationsList.map(n => {
+          const targetTab = resolveNotificationTarget(n, userRoles);
+          const targetLabel = getNotificationModuleLabel(targetTab);
 
-            {/* Per-Item Action Buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
-              {!n.is_read ? (
-                <button 
+          return (
+            <div 
+              key={n.id} 
+              className="glass-panel"
+              style={{ 
+                padding: '16px 18px', 
+                display: 'flex', 
+                gap: '14px', 
+                alignItems: 'center',
+                borderLeft: n.is_read ? '4px solid transparent' : '4px solid var(--primary)',
+                background: n.is_read ? '#ffffff' : 'rgba(14, 49, 146, 0.03)',
+                borderRadius: 'var(--radius-xl)',
+                border: n.is_read ? '1px solid rgba(0,0,0,0.06)' : '1px solid rgba(14, 49, 146, 0.12)',
+                boxShadow: n.is_read ? 'none' : '0 2px 8px rgba(14, 49, 146, 0.04)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onClick={() => handleRowClick(n)}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = n.is_read ? 'rgba(0,0,0,0.06)' : 'rgba(14, 49, 146, 0.12)'; }}
+            >
+              <div style={{ 
+                padding: '10px', 
+                background: n.is_read ? 'rgba(0,0,0,0.03)' : 'rgba(14, 49, 146, 0.08)', 
+                borderRadius: 'var(--radius-lg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                {getNotificationIcon(n.title)}
+              </div>
+              
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <h4 style={{ 
+                    margin: 0, 
+                    fontSize: '0.96rem', 
+                    fontWeight: n.is_read ? 600 : 750, 
+                    color: n.is_read ? 'var(--text-primary)' : 'var(--primary)' 
+                  }}>
+                    {n.title}
+                  </h4>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={13} />
+                    {formatDateTime(n.created_at)}
+                  </span>
+                </div>
+                <p style={{ margin: '5px 0 0 0', fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                  {n.message}
+                </p>
+              </div>
+
+              {/* Per-Item Action Buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
+                <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '5px',
-                    padding: '6px 12px', 
-                    fontSize: '0.8rem',
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    fontSize: '0.78rem',
                     fontWeight: 700,
-                    borderColor: 'var(--primary)',
-                    color: 'var(--primary)',
-                    background: '#ffffff',
                     borderRadius: 'var(--radius-md)'
                   }}
-                  onClick={() => handleMarkAsReadLocal(n.id)}
-                  title="Tandai notifikasi ini sudah dibaca"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRowClick(n);
+                  }}
+                  title={`Buka modul ${targetLabel}`}
                 >
-                  <Check size={14} />
-                  <span>Dibaca</span>
+                  <ExternalLink size={13} />
+                  <span className="col-hide-mobile">{targetLabel}</span>
                 </button>
-              ) : (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <Check size={13} /> Terbaca
-                </span>
-              )}
 
-              <button 
-                type="button"
-                className="btn btn-sm"
-                style={{ 
-                  padding: '6px 8px', 
-                  color: 'var(--text-muted)',
-                  border: '1px solid transparent',
-                  background: 'transparent',
-                  borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer'
-                }}
-                onClick={() => handleDeleteSingle(n.id)}
-                title="Hapus notifikasi ini"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'var(--danger)';
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--text-muted)';
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <Trash2 size={15} />
-              </button>
+                {!n.is_read ? (
+                  <button 
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '5px',
+                      padding: '6px 12px', 
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      borderColor: 'var(--primary)',
+                      color: 'var(--primary)',
+                      background: '#ffffff',
+                      borderRadius: 'var(--radius-md)'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMarkAsReadLocal(n.id);
+                    }}
+                    title="Tandai notifikasi ini sudah dibaca"
+                  >
+                    <Check size={14} />
+                    <span>Dibaca</span>
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, padding: '4px 6px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <Check size={13} /> Terbaca
+                  </span>
+                )}
+
+                <button 
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ 
+                    padding: '6px 8px', 
+                    color: 'var(--text-muted)',
+                    border: '1px solid transparent',
+                    background: 'transparent',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSingle(n.id);
+                  }}
+                  title="Hapus notifikasi ini"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = 'var(--danger)';
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {loading && notificationsList.length === 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
