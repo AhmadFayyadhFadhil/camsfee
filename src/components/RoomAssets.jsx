@@ -75,6 +75,7 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
 
   // Physical Audit Form Modal State (CS / Supervisor input)
   const [showAuditFormModal, setShowAuditFormModal] = useState(false);
+  const [editingAudit, setEditingAudit] = useState(null);
   const [auditFormRoomId, setAuditFormRoomId] = useState(initialRoomId || '');
   const [auditFormPeriod, setAuditFormPeriod] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
   const [auditFormNotes, setAuditFormNotes] = useState('');
@@ -422,6 +423,7 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
   // PHYSICAL AUDIT SUBMISSION ACTIONS (CS / Supervisor)
   // -------------------------------------------------------------
   const handleOpenAuditForm = async (roomIdToAudit = null) => {
+    setEditingAudit(null);
     const targetRoomId = roomIdToAudit || selectedRoomFilter || rooms[0]?.id;
     setAuditFormRoomId(targetRoomId);
     setAuditFormPeriod(new Date().toISOString().substring(0, 7));
@@ -431,6 +433,52 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
 
     if (targetRoomId) {
       loadAssetsForAuditForm(targetRoomId);
+    }
+  };
+
+  const handleOpenEditAudit = (audit) => {
+    setEditingAudit(audit);
+    setAuditFormRoomId(audit.room_id || '');
+    setAuditFormPeriod(audit.periode || new Date().toISOString().substring(0, 7));
+    setAuditFormNotes(audit.notes || '');
+
+    const editItems = (audit.items || []).map((item) => ({
+      room_asset_id: item.room_asset_id,
+      nama_aset: item.nama_aset || item.asset?.nama_aset || item.nama_aset_snapshot || 'Aset Ruangan',
+      kode_aset: item.kode_aset || item.asset?.kode_aset || item.kode_aset_snapshot || '',
+      jumlah_expected: item.jumlah_expected ?? 1,
+      jumlah_actual: item.jumlah_actual ?? 1,
+      kondisi: item.kondisi || 'good',
+      foto_file: null,
+      foto_preview: item.foto_bukti_url || null,
+      catatan: item.catatan || '',
+    }));
+    setAuditFormItems(editItems);
+    setShowAuditFormModal(true);
+  };
+
+  const handleDeleteAudit = async (audit) => {
+    if (
+      !(await confirm({
+        title: 'Hapus Laporan Audit',
+        message: `Apakah Anda yakin ingin menghapus data audit fisik ruangan "${audit.room_name}" (Periode: ${audit.periode})? Tindakan ini akan menghapus riwayat audit tersebut.`,
+        confirmText: 'Ya, Hapus',
+        cancelText: 'Batal',
+        type: 'danger',
+      }))
+    ) {
+      return;
+    }
+
+    try {
+      const res = await api.delete(`/room-asset-audits/${audit.id}`);
+      if (res.success) {
+        setSuccessMsg('Laporan audit fisik berhasil dihapus.');
+        fetchAuditsData();
+        if (activeSubTab === 'schedules') fetchScheduleSummary();
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus laporan audit.');
     }
   };
 
@@ -514,18 +562,31 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
         }
       });
 
-      const res = await api.post('/room-asset-audits', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      let res;
+      if (editingAudit) {
+        formData.append('_method', 'PUT');
+        res = await api.post(`/room-asset-audits/${editingAudit.id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        res = await api.post('/room-asset-audits', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
 
       if (res.success) {
-        setSuccessMsg('Laporan audit fisik aset ruangan berhasil dikirim!');
+        setSuccessMsg(
+          editingAudit
+            ? 'Laporan audit fisik berhasil diperbarui!'
+            : 'Laporan audit fisik aset ruangan berhasil dikirim!'
+        );
         setShowAuditFormModal(false);
+        setEditingAudit(null);
         if (activeSubTab === 'audits') fetchAuditsData();
         if (activeSubTab === 'schedules') fetchScheduleSummary();
       }
     } catch (err) {
-      setError(err.message || 'Gagal mengirim laporan audit aset.');
+      setError(err.message || 'Gagal menyimpan laporan audit aset.');
     } finally {
       setSubmittingAudit(false);
     }
@@ -1067,13 +1128,34 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                       </td>
                       <td>{getAuditStatusBadge(audit.status)}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleOpenVerifyModal(audit)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
-                        >
-                          <Eye size={14} /> {canManageMaster ? 'Review / Verifikasi' : 'Lihat Detail'}
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleOpenVerifyModal(audit)}
+                            title={canManageMaster ? 'Review / Verifikasi Hasil Audit' : 'Lihat Detail Audit'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                          >
+                            <Eye size={14} /> {canManageMaster ? 'Review' : 'Detail'}
+                          </button>
+                          {canManageMaster && (
+                            <>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleOpenEditAudit(audit)}
+                                title="Edit Laporan Audit"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleDeleteAudit(audit)}
+                                title="Hapus Laporan Audit"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1671,10 +1753,10 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                     letterSpacing: '0.5px',
                   }}
                 >
-                  Cek Fisik Lapangan
+                  {editingAudit ? 'Edit Laporan Audit' : 'Cek Fisik Lapangan'}
                 </span>
                 <h2 className="modal-title" style={{ marginTop: '2px' }}>
-                  Formulir Audit & Stock Opname Aset
+                  {editingAudit ? 'Edit Hasil Audit & Stock Opname' : 'Formulir Audit & Stock Opname Aset'}
                 </h2>
               </div>
               <button
@@ -1957,7 +2039,11 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                   disabled={submittingAudit || auditFormItems.length === 0}
                   style={{ fontWeight: 700 }}
                 >
-                  {submittingAudit ? 'Mengirim Laporan...' : 'Kirim Laporan Audit Fisik'}
+                  {submittingAudit
+                    ? 'Menyimpan...'
+                    : editingAudit
+                    ? 'Simpan Perubahan Audit'
+                    : 'Kirim Laporan Audit Fisik'}
                 </button>
               </div>
             </form>
