@@ -33,6 +33,8 @@ export default function Schedules() {
   const [frequency, setFrequency] = useState('daily');
   const [dayOfWeek, setDayOfWeek] = useState('');
   const [dayOfMonth, setDayOfMonth] = useState('');
+  const [targetJamMulai, setTargetJamMulai] = useState('');
+  const [targetJamSelesai, setTargetJamSelesai] = useState('');
 
   // Form Assignments State
   const [editingAssignment, setEditingAssignment] = useState(null);
@@ -210,6 +212,8 @@ export default function Schedules() {
     setFrequency('daily');
     setDayOfWeek('Monday');
     setDayOfMonth('1');
+    setTargetJamMulai('');
+    setTargetJamSelesai('');
     setShowScheduleForm(true);
     setShowAssignmentForm(false);
   };
@@ -248,6 +252,8 @@ export default function Schedules() {
     }
 
     setDayOfMonth(String(schedule.day_of_month || schedule.tanggal_bulan || '1'));
+    setTargetJamMulai(schedule.target_jam_mulai ? schedule.target_jam_mulai.substring(0, 5) : '');
+    setTargetJamSelesai(schedule.target_jam_selesai ? schedule.target_jam_selesai.substring(0, 5) : '');
     setShowScheduleForm(true);
     setShowAssignmentForm(false);
   };
@@ -320,6 +326,8 @@ export default function Schedules() {
       frekuensi: frequencyMap[frequency] || frequency,
       hari_minggu: frequency === 'weekly' ? dayMap[dayOfWeek] : null,
       tanggal_bulan: frequency === 'monthly' ? parseInt(dayOfMonth) : null,
+      target_jam_mulai: targetJamMulai ? `${targetJamMulai}:00` : null,
+      target_jam_selesai: targetJamSelesai ? `${targetJamSelesai}:00` : null,
       item_ids: selectedTemplateItemIds
     };
 
@@ -892,6 +900,42 @@ export default function Schedules() {
                       />
                     </div>
                   )}
+                </div>
+
+                {/* TARGET WAKTU / RUNDOWN DISIPLIN */}
+                <div style={{ background: 'rgba(14, 49, 146, 0.03)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(14, 49, 146, 0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label className="form-label" style={{ fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={15} style={{ color: 'var(--primary)' }} /> Target Jam Pengerjaan (Rundown CS)
+                    </label>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      Opsional • Panduan Disiplin CS
+                    </span>
+                  </div>
+
+                  <div className="grid-2-cols" style={{ gap: '12px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Jam Mulai</label>
+                      <input 
+                        type="time" 
+                        className="form-control" 
+                        value={targetJamMulai} 
+                        onChange={(e) => setTargetJamMulai(e.target.value)} 
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Jam Selesai</label>
+                      <input 
+                        type="time" 
+                        className="form-control" 
+                        value={targetJamSelesai} 
+                        onChange={(e) => setTargetJamSelesai(e.target.value)} 
+                      />
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '6px', display: 'block' }}>
+                    Jam ini akan tampil sebagai target waktu pengerjaan di akun CS agar alur pembersihan teratur.
+                  </span>
                 </div>
               </div>
 
