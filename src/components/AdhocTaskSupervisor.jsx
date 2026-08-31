@@ -479,24 +479,21 @@ export default function AdhocTaskSupervisor() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}><div className="spinner"></div></div>
       ) : tasks.length === 0 ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-muted)' }}>
           <ListTodo size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
-          <p>Tidak ada data penugasan.</p>
+          <p style={{ margin: 0, fontSize: '0.95rem' }}>Tidak ada data penugasan yang sesuai dengan filter.</p>
         </div>
       ) : (
-        <div className="glass-panel" style={{ borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+        <div className="glass-panel" style={{ borderRadius: 'var(--radius-lg)', overflowX: 'auto' }}>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
             <thead>
               <tr>
-                <th>Judul & Tipe</th>
-                <th>Waktu Acara / Target</th>
-                <th>Ruangan & Gedung</th>
-                <th>Petugas CS</th>
-                <th>Kebutuhan</th>
-                <th>Foto Bukti</th>
-                <th>Prioritas</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Aksi</th>
+                <th style={{ minWidth: '260px', padding: '12px 16px' }}>Penugasan & Ruangan</th>
+                <th style={{ minWidth: '180px', padding: '12px 16px' }}>Jadwal / Waktu Acara</th>
+                <th style={{ minWidth: '140px', padding: '12px 16px' }}>Petugas CS</th>
+                <th style={{ minWidth: '150px', padding: '12px 16px' }}>Progress & Bukti</th>
+                <th style={{ minWidth: '140px', padding: '12px 16px' }}>Status</th>
+                <th style={{ minWidth: '130px', textAlign: 'right', padding: '12px 16px' }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -506,69 +503,99 @@ export default function AdhocTaskSupervisor() {
                 const photoCount = (task.has_foto_bukti_persiapan ? 1 : 0) + (task.has_foto_bukti_cleanup ? 1 : 0);
 
                 return (
-                  <tr key={task.id}>
-                    <td>
-                      <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{task.judul}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block' }}>
-                        {task.task_type === 'scheduled_event' ? 'Persiapan Meeting' : 'Tugas Mendadak'} • Dibuat: {task.creator_name}
-                      </span>
+                  <tr key={task.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    {/* 1. Penugasan & Ruangan */}
+                    <td style={{ padding: '14px 16px', verticalAlign: 'middle' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                        {task.judul}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {task.room_name && (
+                          <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                            {task.room_name} ({task.building_name})
+                          </span>
+                        )}
+                        <span>•</span>
+                        <span>{task.task_type === 'scheduled_event' ? 'Persiapan Meeting' : 'Tugas Mendadak'}</span>
+                        <span>•</span>
+                        <span style={{ color: 'var(--text-muted)' }}>Oleh: {task.creator_name}</span>
+                      </div>
                     </td>
-                    <td>
+
+                    {/* 2. Jadwal / Waktu Acara */}
+                    <td style={{ padding: '14px 16px', verticalAlign: 'middle' }}>
                       {task.event_start_time ? (
                         <div>
-                          <strong style={{ fontSize: '0.85rem', color: 'var(--primary)' }}>Mulai: {task.event_start_time}</strong>
+                          <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--primary)' }}>
+                            Mulai: {task.event_start_time}
+                          </div>
                           {task.due_datetime && (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                               Target: {task.due_datetime}
-                            </span>
+                            </div>
                           )}
                         </div>
                       ) : task.due_datetime ? (
-                        <div>
-                          <strong style={{ fontSize: '0.85rem' }}>{task.due_datetime}</strong>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                          Target: {task.due_datetime}
                         </div>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>Langsung</span>
+                        <span style={{ color: 'var(--text-muted)' }}>Langsung Hari Ini</span>
                       )}
                     </td>
-                    <td>
-                      {task.room_name ? (
-                        <>
-                          <span style={{ fontWeight: 600 }}>{task.room_name}</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>
-                            {task.building_name} ({task.room_code})
-                          </span>
-                        </>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>Semua Area</span>
-                      )}
+
+                    {/* 3. Petugas CS & Prioritas */}
+                    <td style={{ padding: '14px 16px', verticalAlign: 'middle' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                        {task.cs_name || 'Belum Ditunjuk'}
+                      </div>
+                      <div>{getPriorityBadge(task.priority)}</div>
                     </td>
-                    <td><span style={{ fontWeight: 600 }}>{task.cs_name || '-'}</span></td>
-                    <td>
+
+                    {/* 4. Progress & Foto Bukti */}
+                    <td style={{ padding: '14px 16px', verticalAlign: 'middle' }}>
                       {total > 0 ? (
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: done === total ? '#166534' : 'var(--text-secondary)' }}>
-                          {done}/{total} Siap
-                        </span>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: done === total ? '#166534' : 'var(--text-primary)', marginBottom: '4px' }}>
+                          {done}/{total} Kebutuhan Siap
+                        </div>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                          Tanpa Checklist
+                        </div>
                       )}
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: photoCount === 2 ? '#166534' : photoCount === 1 ? '#d97706' : 'var(--text-muted)' }}>
+                        {task.requires_cleanup ? `${photoCount}/2 Foto Bukti` : `${photoCount}/1 Foto Bukti`}
+                      </div>
                     </td>
-                    <td>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: photoCount === 2 ? '#166534' : photoCount === 1 ? '#d97706' : 'var(--text-muted)' }}>
-                        {task.requires_cleanup ? `${photoCount}/2 Foto` : `${photoCount}/1 Foto`}
-                      </span>
+
+                    {/* 5. Status */}
+                    <td style={{ padding: '14px 16px', verticalAlign: 'middle' }}>
+                      {getStatusBadge(task)}
                     </td>
-                    <td>{getPriorityBadge(task.priority)}</td>
-                    <td>{getStatusBadge(task)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '6px' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => handleOpenReview(task)} title="Detail / Review">
+
+                    {/* 6. Aksi */}
+                    <td style={{ padding: '14px 16px', textAlign: 'right', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                        <button 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => handleOpenReview(task)} 
+                          title="Detail & Verifikasi"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                        >
                           <Eye size={13} /> {task.status === 'submitted' ? 'Review' : 'Detail'}
                         </button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => handleOpenEdit(task)} title="Edit">
+                        <button 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => handleOpenEdit(task)} 
+                          title="Edit Penugasan"
+                        >
                           <Edit2 size={13} />
                         </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDeleteTask(task)} title="Hapus">
+                        <button 
+                          className="btn btn-danger btn-sm" 
+                          onClick={() => handleDeleteTask(task)} 
+                          title="Hapus Penugasan"
+                        >
                           <Trash2 size={13} />
                         </button>
                       </div>
