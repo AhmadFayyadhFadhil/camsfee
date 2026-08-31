@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { 
   Play, 
@@ -24,6 +24,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
 
   // Submit Modal & Live Camera States
   const [activeTask, setActiveTask] = useState(null);
+  const [submitStage, setSubmitStage] = useState('setup'); // 'setup' | 'cleanup'
   const [modalChecklist, setModalChecklist] = useState([]);
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState(null);
@@ -90,7 +91,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     return `${day} ${month} ${year} ${hours}:${minutes}:${seconds} WIB`;
   };
 
-  const drawWatermark = (imageElement, gps) => {
+  const drawWatermark = (imageElement, gps, stageLabel = 'Bukti Pelaksanaan') => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     
@@ -111,7 +112,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     ctx.font = `${fontSize}px Arial, sans-serif`;
     ctx.textBaseline = 'top';
     
-    const dateText = `Waktu: ${getFormattedDateTime()}`;
+    const dateText = `Waktu: ${getFormattedDateTime()} [${stageLabel}]`;
     const latText = gps.ready && gps.latitude !== null ? `Lat: ${gps.latitude.toFixed(7)}` : 'Lat: -';
     const lngText = gps.ready && gps.longitude !== null ? `Lng: ${gps.longitude.toFixed(7)}` : 'Lng: -';
     const accuracyText = gps.ready && gps.accuracy !== null ? `Akurasi: ${gps.accuracy.toFixed(1)} m` : 'Akurasi: -';
@@ -176,7 +177,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     try {
       const res = await api.post(`/adhoc-tasks/${taskId}/start`);
       if (res.success) {
-        setSuccessMsg('Tugas dimulai. Silakan persiapkan kebutuhan ruangan dan ambil foto bukti setelah selesai.');
+        setSuccessMsg('Tugas dimulai. Silakan persiapkan kebutuhan ruangan dan ambil foto bukti.');
         fetchMyAdhocTasks();
       }
     } catch (err) {
@@ -184,8 +185,9 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     }
   };
 
-  const handleOpenSubmitModal = async (task) => {
+  const handleOpenSubmitModal = async (task, stage = 'setup') => {
     setActiveTask(task);
+    setSubmitStage(stage);
     setModalChecklist(
       task.checklist_items && task.checklist_items.length > 0
         ? JSON.parse(JSON.stringify(task.checklist_items))
@@ -195,7 +197,6 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     setProofPreview(null);
     setCameraError(null);
 
-    // Get GPS
     const gps = await getGeolocation();
     setGpsState(gps);
 
@@ -271,15 +272,15 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
       const rawBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
       if (!rawBlob) throw new Error('Gagal mengambil gambar dari kamera.');
 
-      // Watermark
       const imgObj = new Image();
       imgObj.src = URL.createObjectURL(rawBlob);
       await new Promise((resolve) => {
         imgObj.onload = resolve;
       });
 
-      const watermarkedBlob = await drawWatermark(imgObj, gpsState);
-      const watermarkedFile = new File([watermarkedBlob], `adhoc_proof_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const stageText = submitStage === 'cleanup' ? 'Tahap 2: Perapihan Pasca-Meeting' : 'Tahap 1: Persiapan Ruangan';
+      const watermarkedBlob = await drawWatermark(imgObj, gpsState, stageText);
+      const watermarkedFile = new File([watermarkedBlob], `adhoc_${submitStage}_${Date.now()}.jpg`, { type: 'image/jpeg' });
 
       setProofFile(watermarkedFile);
       setProofPreview(URL.createObjectURL(watermarkedBlob));
@@ -301,25 +302,45 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     setError(null);
     try {
       const formData = new FormData();
-      formData.append('foto_bukti', proofFile);
 
-      if (modalChecklist.length > 0) {
-        modalChecklist.forEach((item, idx) => {
-          formData.append(`checklist_items[${idx}][id]`, item.id);
-          formData.append(`checklist_items[${idx}][task]`, item.task);
-          formData.append(`checklist_items[${idx}][is_done]`, item.is_done ? '1' : '0');
-          if (item.done_at) {
-            formData.append(`checklist_items[${idx}][done_at]`, item.done_at);
-          }
-        });
-      }
+      if (submitStage === 'cleanup') {
+        formData.append('foto_bukti_cleanup', proofFile);
+        const res = await api.postFormData(`/adhoc-tasks/${activeTask.id}/submit-cleanup`, formData);
+        if (res.success) {
+          setSuccessMsg('Foto perapihan pasca-meeting berhasil diserahkan ke Supervisor untuk verifikasi akhir.');
+          handleCloseModal();
+          fetchMyAdhocTasks();
+          if (onResumeDailyTasks) onResumeDailyTasks();
+        }
+      } else {
+        // Stage 1: Setup
+        formData.append('foto_bukti', proofFile);
+        if (modalChecklist.length > 0) {
+          modalChecklist.forEach((item, idx) => {
+            formData.append(`checklist_items[${idx}][id]`, item.id);
+            formData.append(`checklist_items[${idx}][task]`, item.task);
+            formData.append(`checklist_items[${idx}][is_done]`, item.is_done ? '1' : '0');
+            if (item.done_at) {
+              formData.append(`checklist_items[${idx}][done_at]`, item.done_at);
+            }
+          });
+        }
 
-      const res = await api.postFormData(`/adhoc-tasks/${activeTask.id}/submit`, formData);
-      if (res.success) {
-        setSuccessMsg('Laporan tugas berhasil diserahkan ke Supervisor untuk diverifikasi.');
-        handleCloseModal();
-        fetchMyAdhocTasks();
-        if (onResumeDailyTasks) onResumeDailyTasks();
+        const endpoint = (activeTask.task_type === 'scheduled_event' || activeTask.requires_cleanup)
+          ? `/adhoc-tasks/${activeTask.id}/submit-setup`
+          : `/adhoc-tasks/${activeTask.id}/submit`;
+
+        const res = await api.postFormData(endpoint, formData);
+        if (res.success) {
+          setSuccessMsg(
+            activeTask.task_type === 'scheduled_event' && activeTask.requires_cleanup
+              ? 'Laporan persiapan ruangan berhasil dikirim! Ruangan kini berstatus Siap Pakai. Setelah meeting selesai, silakan ambil Foto Bukti 2 (Perapihan).'
+              : 'Laporan tugas berhasil dikirim ke Supervisor.'
+          );
+          handleCloseModal();
+          fetchMyAdhocTasks();
+          if (onResumeDailyTasks) onResumeDailyTasks();
+        }
       }
     } catch (err) {
       setError(err.message || 'Gagal mengirim laporan tugas.');
@@ -328,17 +349,18 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
     }
   };
 
-  // Filter tasks by tab
   const todayStr = new Date().toISOString().slice(0, 10);
   const filteredTasks = tasks.filter((task) => {
     if (activeTab === 'all') return true;
     if (activeTab === 'upcoming') {
-      return task.task_type === 'scheduled_event' && task.due_datetime && task.due_datetime.slice(0, 10) > todayStr;
+      const taskDate = task.event_start_time?.slice(0, 10) || task.due_datetime?.slice(0, 10);
+      return task.task_type === 'scheduled_event' && taskDate && taskDate > todayStr;
     }
     // today
     if (task.task_type === 'immediate') return true;
     if (task.task_type === 'scheduled_event') {
-      return !task.due_datetime || task.due_datetime.slice(0, 10) <= todayStr;
+      const taskDate = task.event_start_time?.slice(0, 10) || task.due_datetime?.slice(0, 10);
+      return !taskDate || taskDate <= todayStr;
     }
     return true;
   });
@@ -350,7 +372,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
         <div>
           <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>Tugas Khusus & Acara</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Daftar tugas insidental dan persiapan ruang meeting khusus yang ditugaskan kepada Anda
+            Daftar penugasan persiapan ruang meeting dan tugas insidental yang ditugaskan kepada Anda
           </p>
         </div>
       </div>
@@ -384,7 +406,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
             borderBottom: activeTab === 'today' ? '3px solid var(--primary)' : '3px solid transparent',
           }}
         >
-          Tugas Aktif Hari Ini ({tasks.filter(t => t.task_type === 'immediate' || !t.due_datetime || t.due_datetime.slice(0, 10) <= todayStr).length})
+          Tugas Hari Ini ({tasks.filter(t => t.task_type === 'immediate' || !t.event_start_time || t.event_start_time.slice(0, 10) <= todayStr).length})
         </button>
         <button
           className="tab-button"
@@ -402,7 +424,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
             gap: '6px',
           }}
         >
-          <CalendarDays size={16} /> Jadwal Acara / Meeting Mendatang ({tasks.filter(t => t.task_type === 'scheduled_event' && t.due_datetime && t.due_datetime.slice(0, 10) > todayStr).length})
+          <CalendarDays size={16} /> Jadwal Acara / Meeting Mendatang ({tasks.filter(t => t.task_type === 'scheduled_event' && t.event_start_time && t.event_start_time.slice(0, 10) > todayStr).length})
         </button>
         <button
           className="tab-button"
@@ -435,6 +457,8 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
           {filteredTasks.map((task) => {
             const total = task.checklist_items?.length || 0;
             const done = task.checklist_items?.filter((i) => i.is_done).length || 0;
+            const is2Stage = task.task_type === 'scheduled_event' || task.requires_cleanup;
+            const isSetupDone = task.stage === 'setup_submitted' || task.has_foto_bukti_persiapan;
 
             return (
               <div
@@ -462,7 +486,14 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                       </span>
 
                       {task.status === 'pending' && <span className="status-badge status-pending">Belum Dimulai</span>}
-                      {task.status === 'in_progress' && <span className="status-badge status-in_progress">Sedang Dikerjakan</span>}
+                      {task.status === 'in_progress' && isSetupDone && is2Stage && (
+                        <span className="status-badge" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                          Ruangan Siap (Menunggu Acara)
+                        </span>
+                      )}
+                      {task.status === 'in_progress' && (!isSetupDone || !is2Stage) && (
+                        <span className="status-badge status-in_progress">Sedang Dikerjakan</span>
+                      )}
                       {task.status === 'submitted' && <span className="status-badge status-waiting_verification">Menunggu Verifikasi</span>}
                       {task.status === 'verified' && <span className="status-badge status-completed">Disetujui / Selesai</span>}
                       {task.status === 'rejected' && <span className="status-badge status-rejected">Perlu Perbaikan</span>}
@@ -482,10 +513,16 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                           <span><strong>{task.room_name}</strong> ({task.building_name})</span>
                         </div>
                       )}
+                      {task.event_start_time && (
+                        <div style={{ background: '#eff6ff', color: 'var(--primary)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                          <Clock size={14} />
+                          <span>Mulai Acara: {task.event_start_time}</span>
+                        </div>
+                      )}
                       {task.due_datetime && (
                         <div style={{ background: '#fef3c7', color: '#92400e', padding: '6px 10px', borderRadius: 'var(--radius-sm)', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
                           <Clock size={14} />
-                          <span>Target Selesai: {task.due_datetime}</span>
+                          <span>Target Persiapan: {task.due_datetime}</span>
                         </div>
                       )}
                       {total > 0 && (
@@ -497,8 +534,8 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '180px' }}>
+                  {/* Actions / 2-Stage Buttons */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
                     {task.status === 'pending' && (
                       <button
                         className="btn btn-primary"
@@ -509,14 +546,31 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                       </button>
                     )}
 
-                    {(task.status === 'in_progress' || task.status === 'rejected') && (
+                    {/* TAHAP 1: AMBIL FOTO PERSIAPAN */}
+                    {(task.status === 'in_progress' || task.status === 'rejected') && !isSetupDone && (
                       <button
-                        className="btn btn-success"
-                        onClick={() => handleOpenSubmitModal(task)}
+                        className="btn btn-primary"
+                        onClick={() => handleOpenSubmitModal(task, 'setup')}
                         style={{ width: '100%', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                       >
-                        <Camera size={16} /> {task.checklist_items?.length > 0 ? 'Checklist & Kirim Foto' : 'Ambil Foto Bukti'}
+                        <Camera size={16} /> 1. Selesai Persiapan (Foto 1)
                       </button>
+                    )}
+
+                    {/* TAHAP 2: AMBIL FOTO PERAPIHAN PASCA MEETING */}
+                    {task.status === 'in_progress' && isSetupDone && is2Stage && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ fontSize: '0.78rem', color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
+                          Bukti 1 (Persiapan) terkirim. Ambil Foto 2 setelah acara bubar:
+                        </div>
+                        <button
+                          className="btn btn-success"
+                          onClick={() => handleOpenSubmitModal(task, 'cleanup')}
+                          style={{ width: '100%', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                          <Camera size={16} /> 2. Rapikan Pasca-Meeting (Foto 2)
+                        </button>
+                      </div>
                     )}
 
                     {task.status === 'submitted' && (
@@ -527,7 +581,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
 
                     {task.status === 'verified' && (
                       <div style={{ color: '#15803d', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid #bbf7d0' }}>
-                        <CheckCircle size={16} /> Disetujui / Ruangan Siap
+                        <CheckCircle size={16} /> Disetujui / Selesai Tuntas
                       </div>
                     )}
                   </div>
@@ -539,7 +593,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: CHECKLIST KEBUTUHAN & AMBIL FOTO BUKTI */}
+      {/* MODAL: AMBIL FOTO BUKTI (TAHAP 1 / TAHAP 2) */}
       {/* ========================================================================= */}
       {activeTask && (
         <div className="confirm-backdrop" onClick={handleCloseModal}>
@@ -551,15 +605,15 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
             <div className="modal-header">
               <div>
                 <span style={{ fontSize: '0.72rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Pelaksanaan Penugasan
+                  {submitStage === 'cleanup' ? 'Tahap 2: Perapihan Pasca-Meeting' : 'Tahap 1: Persiapan Ruangan'}
                 </span>
                 <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>{activeTask.judul}</h2>
               </div>
               <button onClick={handleCloseModal} className="modal-close-btn"><X size={20} /></button>
             </div>
 
-            {/* Checklist Persiapan Ruangan jika ada */}
-            {modalChecklist.length > 0 && (
+            {/* Checklist Persiapan Ruangan (hanya pada tahap 1) */}
+            {submitStage === 'setup' && modalChecklist.length > 0 && (
               <div style={{ marginBottom: '18px', background: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <strong style={{ fontSize: '0.88rem' }}>Centang Kebutuhan yang Sudah Disiapkan:</strong>
@@ -599,6 +653,13 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
               </div>
             )}
 
+            {/* Petunjuk jika tahap 2 cleanup */}
+            {submitStage === 'cleanup' && (
+              <div style={{ marginBottom: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 14px', borderRadius: 'var(--radius-md)', fontSize: '0.88rem', color: '#166534' }}>
+                <strong>Pembersihan Selesai:</strong> Pastikan sampah sudah dibuang, kursi dan meja dirapikan kembali ke posisi standar, AC/lampu dimatikan (jika diperlukan), dan ruangan kembali bersih & wangi.
+              </div>
+            )}
+
             {cameraError && (
               <div className="alert alert-danger" style={{ marginBottom: '14px', padding: '10px 14px', fontSize: '0.82rem' }}>
                 <ShieldAlert size={16} />
@@ -609,7 +670,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
             {!proofPreview ? (
               <div>
                 <strong style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem' }}>
-                  Ambil Foto Bukti Kondisi Ruangan:
+                  {submitStage === 'cleanup' ? 'Ambil Foto Bukti Ruangan Kembali Rapi:' : 'Ambil Foto Bukti Ruangan Siap:'}
                 </strong>
                 <div style={{ 
                   background: '#0a0e17', 
@@ -648,7 +709,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" className="btn btn-secondary" onClick={handleCloseModal} disabled={submitting} style={{ flex: 1 }}>Batal</button>
                   <button type="submit" className="btn btn-primary" disabled={submitting} style={{ flex: 2, height: '44px', fontWeight: 700 }}>
-                    {submitting ? 'Mengirim...' : 'Kirim Laporan Persiapan'}
+                    {submitting ? 'Mengirim...' : submitStage === 'cleanup' ? 'Kirim Laporan Akhir' : 'Kirim Laporan Persiapan'}
                   </button>
                 </div>
               </form>

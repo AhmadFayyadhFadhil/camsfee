@@ -7,14 +7,14 @@ import {
   ShieldAlert, 
   Clock, 
   Eye, 
-  User, 
   Search,
   CalendarDays,
   ListTodo,
   Trash2,
   Edit2,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Camera
 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 
@@ -51,13 +51,13 @@ function SecureAdhocPhoto({ src, alt }) {
   }, [src]);
 
   if (loading) {
-    return <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', borderRadius: '8px' }}>Memuat foto bukti...</div>;
+    return <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', borderRadius: '8px', fontSize: '0.85rem' }}>Memuat foto bukti...</div>;
   }
   if (error || !imgUrl) {
-    return <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', borderRadius: '8px' }}>Gagal memuat foto bukti</div>;
+    return <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', borderRadius: '8px', fontSize: '0.85rem' }}>Gagal memuat foto</div>;
   }
 
-  return <img src={imgUrl} alt={alt} style={{ width: '100%', maxHeight: '380px', objectFit: 'contain', borderRadius: '8px' }} />;
+  return <img src={imgUrl} alt={alt} style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '8px', background: '#0f172a' }} />;
 }
 
 export default function AdhocTaskSupervisor() {
@@ -79,15 +79,16 @@ export default function AdhocTaskSupervisor() {
   // Create / Edit Modal State
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [taskType, setTaskType] = useState('immediate');
+  const [taskType, setTaskType] = useState('scheduled_event');
+  const [requiresCleanup, setRequiresCleanup] = useState(true);
   const [modalBuildingId, setModalBuildingId] = useState('');
   const [roomId, setRoomId] = useState('');
   const [csUserId, setCsUserId] = useState('');
   const [judul, setJudul] = useState('');
   const [deskripsi, setDeskripsi] = useState('');
   const [priority, setPriority] = useState('medium');
-  const [dueDatetime, setDueDatetime] = useState('');
   const [eventStartTime, setEventStartTime] = useState('');
+  const [dueDatetime, setDueDatetime] = useState('');
   const [checklistItems, setChecklistItems] = useState([
     { id: 1, task: '', is_done: false }
   ]);
@@ -144,9 +145,10 @@ export default function AdhocTaskSupervisor() {
     }
   }, [error]);
 
-  const handleOpenCreate = (type = 'immediate') => {
+  const handleOpenCreate = (type = 'scheduled_event') => {
     setEditingTask(null);
     setTaskType(type);
+    setRequiresCleanup(type === 'scheduled_event');
     const initialBId = buildings[0]?.id || '';
     setModalBuildingId(initialBId);
     const availRooms = rooms.filter((r) => r.building_id === initialBId || r.building?.id === initialBId);
@@ -161,8 +163,8 @@ export default function AdhocTaskSupervisor() {
     const yyyy = tomorrow.getFullYear();
     const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
     const dd = String(tomorrow.getDate()).padStart(2, '0');
-    setDueDatetime(`${yyyy}-${mm}-${dd}T08:30`);
     setEventStartTime(`${yyyy}-${mm}-${dd}T09:00`);
+    setDueDatetime(`${yyyy}-${mm}-${dd}T08:30`);
 
     setChecklistItems(
       type === 'scheduled_event'
@@ -180,6 +182,7 @@ export default function AdhocTaskSupervisor() {
   const handleOpenEdit = (task) => {
     setEditingTask(task);
     setTaskType(task.task_type || 'immediate');
+    setRequiresCleanup(task.requires_cleanup !== false);
     const targetRoom = rooms.find((r) => r.id === task.room_id);
     const bId = targetRoom?.building_id || targetRoom?.building?.id || '';
     setModalBuildingId(bId);
@@ -188,8 +191,8 @@ export default function AdhocTaskSupervisor() {
     setJudul(task.judul || '');
     setDeskripsi(task.deskripsi || '');
     setPriority(task.priority || 'medium');
-    setDueDatetime(task.due_datetime ? task.due_datetime.replace(' ', 'T') : '');
     setEventStartTime(task.event_start_time ? task.event_start_time.replace(' ', 'T') : '');
+    setDueDatetime(task.due_datetime ? task.due_datetime.replace(' ', 'T') : '');
     setChecklistItems(
       task.checklist_items && task.checklist_items.length > 0
         ? task.checklist_items
@@ -241,8 +244,9 @@ export default function AdhocTaskSupervisor() {
       deskripsi: deskripsi.trim(),
       priority: priority,
       task_type: taskType,
-      due_datetime: taskType === 'scheduled_event' && dueDatetime ? dueDatetime.replace('T', ' ') + ':00' : null,
+      requires_cleanup: taskType === 'scheduled_event' ? requiresCleanup : false,
       event_start_time: taskType === 'scheduled_event' && eventStartTime ? eventStartTime.replace('T', ' ') + ':00' : null,
+      due_datetime: taskType === 'scheduled_event' && dueDatetime ? dueDatetime.replace('T', ' ') + ':00' : null,
       checklist_items: cleanChecklist,
     };
 
@@ -319,15 +323,21 @@ export default function AdhocTaskSupervisor() {
     }
   };
 
-  const getStatusBadge = (st) => {
-    switch (st) {
-      case 'pending': return <span className="status-badge status-pending">Belum Dimulai</span>;
-      case 'in_progress': return <span className="status-badge status-in_progress">Sedang Dikerjakan</span>;
-      case 'submitted': return <span className="status-badge status-waiting_verification">Menunggu Verifikasi</span>;
-      case 'verified': return <span className="status-badge status-completed">Disetujui / Siap</span>;
-      case 'rejected': return <span className="status-badge status-rejected">Perlu Perbaikan</span>;
-      default: return <span>{st}</span>;
+  const getStatusBadge = (task) => {
+    if (task.status === 'verified') return <span className="status-badge status-completed">Disetujui / Selesai</span>;
+    if (task.status === 'rejected') return <span className="status-badge status-rejected">Perlu Perbaikan</span>;
+    if (task.status === 'submitted') return <span className="status-badge status-waiting_verification">Menunggu Verifikasi</span>;
+
+    // In Progress with Stage
+    if (task.stage === 'setup_submitted') {
+      return (
+        <span className="status-badge" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+          Ruangan Siap (Menunggu Acara)
+        </span>
+      );
     }
+    if (task.status === 'in_progress') return <span className="status-badge status-in_progress">Sedang Dikerjakan</span>;
+    return <span className="status-badge status-pending">Belum Dimulai</span>;
   };
 
   const getPriorityBadge = (pr) => {
@@ -479,10 +489,11 @@ export default function AdhocTaskSupervisor() {
             <thead>
               <tr>
                 <th>Judul & Tipe</th>
-                <th>Target Waktu</th>
+                <th>Waktu Acara / Target</th>
                 <th>Ruangan & Gedung</th>
                 <th>Petugas CS</th>
                 <th>Kebutuhan</th>
+                <th>Foto Bukti</th>
                 <th>Prioritas</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Aksi</th>
@@ -492,6 +503,8 @@ export default function AdhocTaskSupervisor() {
               {tasks.map((task) => {
                 const total = task.checklist_items?.length || 0;
                 const done = task.checklist_items?.filter((i) => i.is_done).length || 0;
+                const photoCount = (task.has_foto_bukti_persiapan ? 1 : 0) + (task.has_foto_bukti_cleanup ? 1 : 0);
+
                 return (
                   <tr key={task.id}>
                     <td>
@@ -501,14 +514,18 @@ export default function AdhocTaskSupervisor() {
                       </span>
                     </td>
                     <td>
-                      {task.due_datetime ? (
+                      {task.event_start_time ? (
                         <div>
-                          <strong style={{ fontSize: '0.85rem' }}>{task.due_datetime}</strong>
-                          {task.event_start_time && (
+                          <strong style={{ fontSize: '0.85rem', color: 'var(--primary)' }}>Mulai: {task.event_start_time}</strong>
+                          {task.due_datetime && (
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>
-                              Mulai: {task.event_start_time}
+                              Target: {task.due_datetime}
                             </span>
                           )}
+                        </div>
+                      ) : task.due_datetime ? (
+                        <div>
+                          <strong style={{ fontSize: '0.85rem' }}>{task.due_datetime}</strong>
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>Langsung</span>
@@ -536,8 +553,13 @@ export default function AdhocTaskSupervisor() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
                       )}
                     </td>
+                    <td>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: photoCount === 2 ? '#166534' : photoCount === 1 ? '#d97706' : 'var(--text-muted)' }}>
+                        {task.requires_cleanup ? `${photoCount}/2 Foto` : `${photoCount}/1 Foto`}
+                      </span>
+                    </td>
                     <td>{getPriorityBadge(task.priority)}</td>
-                    <td>{getStatusBadge(task.status)}</td>
+                    <td>{getStatusBadge(task)}</td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '6px' }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => handleOpenReview(task)} title="Detail / Review">
@@ -591,11 +613,11 @@ export default function AdhocTaskSupervisor() {
                 {!editingTask && (
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <label style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-lg)', border: taskType === 'scheduled_event' ? '2px solid var(--primary)' : '1px solid var(--border-color)', background: taskType === 'scheduled_event' ? '#eff6ff' : '#ffffff', cursor: 'pointer' }}>
-                      <input type="radio" name="taskType" value="scheduled_event" checked={taskType === 'scheduled_event'} onChange={() => setTaskType('scheduled_event')} />
+                      <input type="radio" name="taskType" value="scheduled_event" checked={taskType === 'scheduled_event'} onChange={() => { setTaskType('scheduled_event'); setRequiresCleanup(true); }} />
                       <strong style={{ color: 'var(--primary)', marginLeft: '6px' }}>Persiapan Meeting (Terjadwal)</strong>
                     </label>
                     <label style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-lg)', border: taskType === 'immediate' ? '2px solid var(--primary)' : '1px solid var(--border-color)', background: taskType === 'immediate' ? '#eff6ff' : '#ffffff', cursor: 'pointer' }}>
-                      <input type="radio" name="taskType" value="immediate" checked={taskType === 'immediate'} onChange={() => setTaskType('immediate')} />
+                      <input type="radio" name="taskType" value="immediate" checked={taskType === 'immediate'} onChange={() => { setTaskType('immediate'); setRequiresCleanup(false); }} />
                       <strong style={{ color: 'var(--primary)', marginLeft: '6px' }}>Tugas Mendadak (Langsung)</strong>
                     </label>
                   </div>
@@ -603,52 +625,62 @@ export default function AdhocTaskSupervisor() {
 
                 {/* Jadwal jika scheduled */}
                 {taskType === 'scheduled_event' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-lg)' }}>
-                    <div>
-                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
-                        Waktu Mulai Acara / Meeting *
-                      </label>
-                      <input
-                        type="datetime-local"
-                        className="form-control"
-                        value={eventStartTime}
-                        onChange={(e) => {
-                          const newEventTime = e.target.value;
-                          setEventStartTime(newEventTime);
-                          // Auto set target persiapan 30 menit sebelum acara jika belum diatur
-                          if (newEventTime) {
-                            const d = new Date(newEventTime);
-                            d.setMinutes(d.getMinutes() - 30);
-                            const yyyy = d.getFullYear();
-                            const mm = String(d.getMonth() + 1).padStart(2, '0');
-                            const dd = String(d.getDate()).padStart(2, '0');
-                            const hh = String(d.getHours()).padStart(2, '0');
-                            const min = String(d.getMinutes()).padStart(2, '0');
-                            setDueDatetime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
-                          }
-                        }}
-                        required={taskType === 'scheduled_event'}
-                      />
-                      <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginTop: '2px' }}>
-                        Kapan meeting atau acara dimulai.
-                      </small>
+                  <div style={{ background: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                          Waktu Mulai Acara / Meeting *
+                        </label>
+                        <input
+                          type="datetime-local"
+                          className="form-control"
+                          value={eventStartTime}
+                          onChange={(e) => {
+                            const newEventTime = e.target.value;
+                            setEventStartTime(newEventTime);
+                            if (newEventTime) {
+                              const d = new Date(newEventTime);
+                              d.setMinutes(d.getMinutes() - 30);
+                              const yyyy = d.getFullYear();
+                              const mm = String(d.getMonth() + 1).padStart(2, '0');
+                              const dd = String(d.getDate()).padStart(2, '0');
+                              const hh = String(d.getHours()).padStart(2, '0');
+                              const min = String(d.getMinutes()).padStart(2, '0');
+                              setDueDatetime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
+                            }
+                          }}
+                          required={taskType === 'scheduled_event'}
+                        />
+                        <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginTop: '2px' }}>
+                          Kapan meeting atau acara dimulai.
+                        </small>
+                      </div>
+
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                          Target Selesai Persiapan Ruangan (Opsional)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          className="form-control"
+                          value={dueDatetime}
+                          onChange={(e) => setDueDatetime(e.target.value)}
+                        />
+                        <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginTop: '2px' }}>
+                          Batas waktu CS selesai mempersiapkan ruangan (default: 30 mnt sebelum acara).
+                        </small>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem' }}>
-                        Target Selesai Persiapan Ruangan *
-                      </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>
                       <input
-                        type="datetime-local"
-                        className="form-control"
-                        value={dueDatetime}
-                        onChange={(e) => setDueDatetime(e.target.value)}
-                        required={taskType === 'scheduled_event'}
+                        type="checkbox"
+                        checked={requiresCleanup}
+                        onChange={(e) => setRequiresCleanup(e.target.checked)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
                       />
-                      <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginTop: '2px' }}>
-                        Batas waktu CS selesai mempersiapkan ruangan.
-                      </small>
-                    </div>
+                      <span>Memerlukan 2 Tahap Foto (Foto 1: Selesai Persiapan, Foto 2: Perapihan Pasca-Meeting)</span>
+                    </label>
                   </div>
                 )}
 
@@ -733,13 +765,13 @@ export default function AdhocTaskSupervisor() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: DETAIL & VERIFIKASI LAPORAN */}
+      {/* MODAL 2: DETAIL & VERIFIKASI LAPORAN 2-TAHAP */}
       {/* ========================================================================= */}
       {reviewingTask && (
         <div className="modal-backdrop" onClick={() => setReviewingTask(null)}>
           <div 
             className="glass-panel" 
-            style={{ maxWidth: '720px', width: '94vw', maxHeight: '92vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }} 
+            style={{ maxWidth: '840px', width: '95vw', maxHeight: '92vh', overflowY: 'auto', padding: '28px', borderRadius: 'var(--radius-2xl)', background: '#ffffff' }} 
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
@@ -750,11 +782,11 @@ export default function AdhocTaskSupervisor() {
               <button className="modal-close-btn" onClick={() => setReviewingTask(null)}><X size={20} /></button>
             </div>
 
-            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-lg)', marginBottom: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '0.85rem' }}>
+            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: 'var(--radius-lg)', marginBottom: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', fontSize: '0.85rem' }}>
               <div><span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>RUANGAN</span><strong>{reviewingTask.room_name || 'Semua Area'}</strong></div>
               <div><span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>PETUGAS CS</span><strong>{reviewingTask.cs_name}</strong></div>
-              <div><span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>TARGET WAKTU</span><strong>{reviewingTask.due_datetime || 'Langsung'}</strong></div>
-              <div><span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>STATUS</span>{getStatusBadge(reviewingTask.status)}</div>
+              <div><span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>WAKTU ACARA</span><strong>{reviewingTask.event_start_time || reviewingTask.due_datetime || 'Langsung'}</strong></div>
+              <div><span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>STATUS</span>{getStatusBadge(reviewingTask)}</div>
             </div>
 
             <div style={{ background: '#f9fafb', padding: '12px 14px', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '0.88rem' }}>
@@ -764,10 +796,10 @@ export default function AdhocTaskSupervisor() {
             {/* Checklist items review */}
             {reviewingTask.checklist_items && reviewingTask.checklist_items.length > 0 && (
               <div style={{ marginBottom: '18px' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 10px 0' }}>Daftar Kebutuhan yang Disiapkan CS:</h4>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 10px 0' }}>Checklist Kebutuhan yang Disiapkan CS:</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {reviewingTask.checklist_items.map((item, idx) => (
-                    <div key={item.id || idx} style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: item.is_done ? '#f0fdf4' : '#fef2f2', border: item.is_done ? '1px solid #bbf7d0' : '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={item.id || idx} style={{ padding: '8px 12px', borderRadius: 'var(--radius-md)', background: item.is_done ? '#f0fdf4' : '#fef2f2', border: item.is_done ? '1px solid #bbf7d0' : '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {item.is_done ? <CheckCircle2 size={16} color="#16a34a" /> : <AlertTriangle size={16} color="#dc2626" />}
                         <span style={{ fontWeight: 600, color: item.is_done ? '#166534' : '#991b1b', fontSize: '0.88rem' }}>{item.task}</span>
@@ -779,13 +811,49 @@ export default function AdhocTaskSupervisor() {
               </div>
             )}
 
-            {/* Foto Bukti */}
-            {reviewingTask.has_foto_bukti && (
-              <div style={{ marginBottom: '18px' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 10px 0' }}>Foto Bukti Hasil Kerja CS:</h4>
-                <SecureAdhocPhoto src={reviewingTask.foto_bukti_url} alt="Foto Bukti" />
+            {/* 2 FOTO BUKTI BERDAMPINGAN */}
+            <div style={{ marginBottom: '18px' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 12px 0' }}>
+                Foto Bukti Pelaksanaan (Sebelum & Sesudah Acara):
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                {/* Foto 1: Persiapan */}
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '12px', background: '#fafafa' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <strong style={{ fontSize: '0.85rem', color: 'var(--primary)' }}>1. Foto Persiapan Ruangan</strong>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      {reviewingTask.setup_submitted_at ? new Date(reviewingTask.setup_submitted_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                    </span>
+                  </div>
+                  {reviewingTask.has_foto_bukti_persiapan ? (
+                    <SecureAdhocPhoto src={reviewingTask.foto_bukti_persiapan_url} alt="Foto Persiapan" />
+                  ) : (
+                    <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', borderRadius: '8px', fontSize: '0.85rem' }}>
+                      Belum ada foto persiapan
+                    </div>
+                  )}
+                </div>
+
+                {/* Foto 2: Perapihan Pasca Acara */}
+                {reviewingTask.requires_cleanup !== false && (
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '12px', background: '#fafafa' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#16a34a' }}>2. Foto Perapihan Pasca-Meeting</strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        {reviewingTask.cleanup_submitted_at ? new Date(reviewingTask.cleanup_submitted_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                      </span>
+                    </div>
+                    {reviewingTask.has_foto_bukti_cleanup ? (
+                      <SecureAdhocPhoto src={reviewingTask.foto_bukti_cleanup_url} alt="Foto Perapihan" />
+                    ) : (
+                      <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', color: '#94a3b8', borderRadius: '8px', fontSize: '0.85rem' }}>
+                        {reviewingTask.stage === 'setup_submitted' ? 'Menunggu meeting selesai & CS merapikan' : 'Belum ada foto perapihan'}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Verifikasi Section */}
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '16px' }}>
@@ -794,7 +862,7 @@ export default function AdhocTaskSupervisor() {
               <div className="modal-footer" style={{ marginTop: '16px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setReviewingTask(null)} disabled={verifying}>Tutup</button>
                 <button type="button" className="btn btn-danger" onClick={() => handleVerifySubmit('rejected')} disabled={verifying} style={{ fontWeight: 600 }}>Tolak / Minta Perbaikan</button>
-                <button type="button" className="btn btn-success" onClick={() => handleVerifySubmit('verified')} disabled={verifying} style={{ fontWeight: 700 }}>Setujui / Ruangan Siap</button>
+                <button type="button" className="btn btn-success" onClick={() => handleVerifySubmit('verified')} disabled={verifying} style={{ fontWeight: 700 }}>Setujui / Ruangan Selesai Tuntas</button>
               </div>
             </div>
           </div>
