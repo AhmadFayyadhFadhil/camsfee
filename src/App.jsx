@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import api from './utils/api';
 import Login from './components/Login';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Buildings = lazy(() => import('./components/Buildings'));
@@ -795,76 +796,78 @@ export default function App() {
           )}
 
           {/* Mount appropriate tabs */}
-          <Suspense fallback={
-            <div className="loading-state">
-              <div className="spinner" style={{ width: '32px', height: '32px' }}></div>
-              <div className="loading-state-text">⏳ Memuat halaman, mohon tunggu...</div>
-            </div>
-          }>
-            {currentTab === 'dashboard' && (
-              <Dashboard 
-                user={user} 
-                setCurrentTab={setCurrentTab} 
-                setOpenScanModalOnMount={setOpenScanModalOnMount}
-                onScanSuccess={(data) => {
-                  setScannedTaskData(data);
-                  setCurrentTab('tasks');
-                }} 
-              />
-            )}
-            {currentTab === 'buildings' && <Buildings />}
-            {currentTab === 'rooms' && <Rooms />}
-            {currentTab === 'checklist_templates' && <ChecklistTemplates />}
-            {currentTab === 'room_assets' && <RoomAssets />}
-            {currentTab === 'cleaning_materials' && <CleaningMaterials />}
-            {currentTab === 'sla_parameters' && <SlaParameters />}
-            {currentTab === 'adhoc_tasks' && <AdhocTaskSupervisor />}
-            {currentTab === 'cs_adhoc' && (
-              <CsAdhocTasks onResumeDailyTasks={() => selectTab('tasks')} />
-            )}
-            {currentTab === 'users' && (
-              <UsersList 
-                currentUser={user} 
-                isSupervisor={isSupervisor} 
-                isAdmin={isAdmin} 
-              />
-            )}
-            {currentTab === 'schedules' && <Schedules />}
-            {currentTab === 'tasks' && (
-              <CsTasks 
-                scannedTaskData={scannedTaskData}
-                setScannedTaskData={setScannedTaskData}
-                openScanModalOnMount={openScanModalOnMount}
-                setOpenScanModalOnMount={setOpenScanModalOnMount}
-                onOpenAdhocTasks={() => selectTab('cs_adhoc')}
-                onNavigateDashboard={() => selectTab('dashboard')}
-              />
-            )}
-            {currentTab === 'verifications' && <Verifications />}
-            {currentTab === 'findings' && <Findings user={user} isOb={isOb} />}
-            {currentTab === 'audit_logs' && <AuditLogs />}
-            {currentTab === 'profile' && (
-              <Profile 
-                user={user} 
-                onUserUpdated={(updated) => {
-                  setUser((prev) => ({ ...prev, ...updated }));
-                }} 
-              />
-            )}
-            {currentTab === 'reports' && <Reports />}
-            {currentTab === 'app_settings' && (
-              <AppSettings 
-                onSettingsUpdated={fetchPublicSettings} 
-              />
-            )}
-            {currentTab === 'notifications_panel' && (
-              <Notifications 
-                unreadCount={unreadCount} 
-                setUnreadCount={setUnreadCount} 
-                fetchNotifications={fetchNotifications} 
-              />
-            )}
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={
+              <div className="loading-state">
+                <div className="spinner" style={{ width: '32px', height: '32px' }}></div>
+                <div className="loading-state-text">⏳ Memuat halaman, mohon tunggu...</div>
+              </div>
+            }>
+              {currentTab === 'dashboard' && (
+                <Dashboard 
+                  user={user} 
+                  setCurrentTab={setCurrentTab} 
+                  setOpenScanModalOnMount={setOpenScanModalOnMount}
+                  onScanSuccess={(data) => {
+                    setScannedTaskData(data);
+                    setCurrentTab('tasks');
+                  }} 
+                />
+              )}
+              {currentTab === 'buildings' && <Buildings />}
+              {currentTab === 'rooms' && <Rooms />}
+              {currentTab === 'checklist_templates' && <ChecklistTemplates />}
+              {currentTab === 'room_assets' && <RoomAssets />}
+              {currentTab === 'cleaning_materials' && <CleaningMaterials />}
+              {currentTab === 'sla_parameters' && <SlaParameters />}
+              {currentTab === 'adhoc_tasks' && <AdhocTaskSupervisor />}
+              {currentTab === 'cs_adhoc' && (
+                <CsAdhocTasks onResumeDailyTasks={() => selectTab('tasks')} />
+              )}
+              {currentTab === 'users' && (
+                <UsersList 
+                  currentUser={user} 
+                  isSupervisor={isSupervisor} 
+                  isAdmin={isAdmin} 
+                />
+              )}
+              {currentTab === 'schedules' && <Schedules />}
+              {currentTab === 'tasks' && (
+                <CsTasks 
+                  scannedTaskData={scannedTaskData}
+                  setScannedTaskData={setScannedTaskData}
+                  openScanModalOnMount={openScanModalOnMount}
+                  setOpenScanModalOnMount={setOpenScanModalOnMount}
+                  onOpenAdhocTasks={() => selectTab('cs_adhoc')}
+                  onNavigateDashboard={() => selectTab('dashboard')}
+                />
+              )}
+              {currentTab === 'verifications' && <Verifications />}
+              {currentTab === 'findings' && <Findings user={user} isOb={isOb} />}
+              {currentTab === 'audit_logs' && <AuditLogs />}
+              {currentTab === 'profile' && (
+                <Profile 
+                  user={user} 
+                  onUserUpdated={(updated) => {
+                    setUser((prev) => ({ ...prev, ...updated }));
+                  }} 
+                />
+              )}
+              {currentTab === 'reports' && <Reports />}
+              {currentTab === 'app_settings' && (
+                <AppSettings 
+                  onSettingsUpdated={fetchPublicSettings} 
+                />
+              )}
+              {currentTab === 'notifications_panel' && (
+                <Notifications 
+                  unreadCount={unreadCount} 
+                  setUnreadCount={setUnreadCount} 
+                  fetchNotifications={fetchNotifications} 
+                />
+              )}
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

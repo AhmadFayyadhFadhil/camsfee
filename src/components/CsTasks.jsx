@@ -18,7 +18,8 @@ import {
   Filter,
   X,
   Building2,
-  RotateCcw
+  RotateCcw,
+  Clock
 } from 'lucide-react';
 import { compressImage } from '../utils/imageCompressor';
 
