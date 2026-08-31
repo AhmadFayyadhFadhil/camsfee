@@ -6,7 +6,6 @@ import {
   Trash2, 
   Check, 
   X, 
-  ShieldAlert, 
   Box, 
   Calendar, 
   Clock, 
@@ -17,14 +16,21 @@ import {
   Eye, 
   Camera, 
   Search,
-  SlidersHorizontal,
   Building2,
-  FolderOpen
+  FolderOpen,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  Sparkles,
+  Info,
+  ShieldCheck,
+  AlertOctagon,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import { compressImage } from '../utils/imageCompressor';
 
-export default function RoomAssets({ initialRoomId = null, user = null }) {
+export default function RoomAssets({ initialBuildingId = null, user = null }) {
   const confirm = useConfirm();
 
   // Role detection
@@ -34,28 +40,44 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
   const isCs = currentUser.roles && (currentUser.roles.includes('cs') || currentUser.roles.includes('cleaning_service'));
   const canManageMaster = isAdmin || isSupervisor;
 
-  // Sub-Tab State
-  const [activeSubTab, setActiveSubTab] = useState('rooms'); // 'rooms' | 'audits'
+  // Sub-Tab State: 'buildings' (Gedung & Aset) vs 'audits' (Riwayat & Verifikasi Audit)
+  const [activeSubTab, setActiveSubTab] = useState('buildings');
 
   // Master Data State
   const [buildings, setBuildings] = useState([]);
-  const [rooms, setRooms] = useState([]);
+  const [summaryStats, setSummaryStats] = useState({
+    total_buildings: 0,
+    up_to_date: 0,
+    due_soon: 0,
+    overdue: 0,
+    never_audited: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  // Tab 1: Building & Room Selection Filter
-  const [activeBuildingId, setActiveBuildingId] = useState(''); // '' = Semua Gedung
-  const [roomSearch, setRoomSearch] = useState('');
-  const [statusAuditFilter, setStatusAuditFilter] = useState('');
+  // Search & Filters for Buildings
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState(''); // '', 'up_to_date', 'due_soon', 'overdue', 'never_audited'
 
-  // Modal 1: Kelola Master Aset Ruangan
+  // Modal 1: Audit Gedung Terpadu
+  const [showAuditBuildingModal, setShowAuditBuildingModal] = useState(false);
+  const [selectedBuildingForAudit, setSelectedBuildingForAudit] = useState(null);
+  const [buildingTree, setBuildingTree] = useState(null);
+  const [loadingBuildingTree, setLoadingBuildingTree] = useState(false);
+  const [auditPeriod, setAuditPeriod] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
+  const [auditNotes, setAuditNotes] = useState('');
+  const [auditItemsState, setAuditItemsState] = useState({}); // { [assetId]: { actual: number, condition: 'good'|'damaged'|'missing', notes: '', file: null, preview: '' } }
+  const [submittingAudit, setSubmittingAudit] = useState(false);
+
+  // Modal 2: Kelola Ruangan & Master Aset Gedung
   const [showManageAssetsModal, setShowManageAssetsModal] = useState(false);
-  const [selectedRoomForAssets, setSelectedRoomForAssets] = useState(null);
+  const [selectedBuildingForAssets, setSelectedBuildingForAssets] = useState(null);
+  const [activeRoomInModal, setActiveRoomInModal] = useState(null);
   const [roomAssetsList, setRoomAssetsList] = useState([]);
   const [loadingRoomAssets, setLoadingRoomAssets] = useState(false);
 
-  // Form Tambah/Edit Master Aset di dalam Modal Kelola Aset
+  // Form Tambah / Edit Master Aset
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
   const [assetFormItems, setAssetFormItems] = useState([
@@ -63,23 +85,13 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
   ]);
   const [savingAsset, setSavingAsset] = useState(false);
 
-  // Modal 2: Pengaturan Jadwal Audit Ruangan
+  // Modal 3: Pengaturan Siklus & Jadwal Audit Gedung
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [selectedRoomForSchedule, setSelectedRoomForSchedule] = useState(null);
+  const [selectedBuildingForSchedule, setSelectedBuildingForSchedule] = useState(null);
   const [scheduleInterval, setScheduleInterval] = useState('bimonthly');
   const [scheduleIntervalDays, setScheduleIntervalDays] = useState(60);
   const [scheduleNextDue, setScheduleNextDue] = useState('');
   const [savingSchedule, setSavingSchedule] = useState(false);
-
-  // Modal 3: Formulir Cek Fisik / Audit Ruangan
-  const [showAuditFormModal, setShowAuditFormModal] = useState(false);
-  const [selectedRoomForAudit, setSelectedRoomForAudit] = useState(null);
-  const [editingAudit, setEditingAudit] = useState(null);
-  const [auditFormPeriod, setAuditFormPeriod] = useState(new Date().toISOString().substring(0, 7)); // YYYY-MM
-  const [auditFormNotes, setAuditFormNotes] = useState('');
-  const [auditFormItems, setAuditFormItems] = useState([]);
-  const [auditFormLoadingAssets, setAuditFormLoadingAssets] = useState(false);
-  const [submittingAudit, setSubmittingAudit] = useState(false);
 
   // Tab 2: Riwayat Audit State & Filter
   const [audits, setAudits] = useState([]);
@@ -104,30 +116,26 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
 
   const generateAssetCode = () => `AST-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // 1. Fetch Buildings & Rooms with assets count and audit status
-  const fetchBuildingsAndRooms = async () => {
-    setLoading(true);
+  // 1. Fetch Summary Data Gedung & Aset
+  const fetchBuildingsData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [buildingsRes, roomsRes] = await Promise.all([
-        api.get('/buildings?is_active=true&per_page=200'),
-        api.get('/rooms?is_active=true&per_page=500')
-      ]);
-
-      if (buildingsRes.success) {
-        setBuildings(buildingsRes.data.data || buildingsRes.data || []);
-      }
-      if (roomsRes.success) {
-        setRooms(roomsRes.data.data || roomsRes.data || []);
+      const res = await api.get('/building-asset-audits/summary');
+      if (res.success) {
+        setBuildings(res.data.buildings || []);
+        if (res.data.summary) {
+          setSummaryStats(res.data.summary);
+        }
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat data gedung dan ruangan.');
+      if (showLoading) setError(err.message || 'Gagal memuat rekap audit aset per gedung.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
-  // 2. Fetch Audits History
+  // 2. Fetch Riwayat Audit
   const fetchAuditsData = async () => {
     setAuditsLoading(true);
     try {
@@ -149,7 +157,7 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
   };
 
   useEffect(() => {
-    fetchBuildingsAndRooms();
+    fetchBuildingsData(true);
   }, []);
 
   useEffect(() => {
@@ -178,388 +186,153 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
     }
   }, [error]);
 
-  // Determine audit status of a room (aman / due soon / overdue / none)
-  const getRoomAuditStatus = (room) => {
-    if (!room.next_asset_audit_due) {
-      return { status: 'never', label: 'Belum Dijadwalkan', class: 'status-pending' };
+  // Determine audit status badge
+  const getBuildingAuditStatusBadge = (b) => {
+    const status = b.audit_status || 'pending';
+    if (!b.next_asset_audit_due || status === 'never_audited' || status === 'pending') {
+      return { label: 'Belum Dijadwalkan', class: 'status-pending' };
     }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(room.next_asset_audit_due);
-    dueDate.setHours(0, 0, 0, 0);
+    if (status === 'overdue') {
+      return { label: 'Terlewat / Overdue', class: 'status-rejected' };
+    }
+    if (status === 'due_soon') {
+      return { label: 'Jatuh Tempo Segera', class: 'status-waiting_verification' };
+    }
+    return { label: 'Aman / Up-to-date', class: 'status-completed' };
+  };
 
-    const diffDays = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) {
-      return { status: 'overdue', label: 'Terlewat / Overdue', class: 'status-rejected' };
-    } else if (diffDays <= 7) {
-      return { status: 'due_soon', label: `Jatuh Tempo (${diffDays} hari lagi)`, class: 'status-waiting_verification' };
-    } else {
-      return { status: 'up_to_date', label: 'Aman / Up-to-date', class: 'status-completed' };
+  const getIntervalLabel = (interval, days) => {
+    switch (interval) {
+      case 'biweekly': return '2 Minggu Sekali';
+      case 'monthly': return '1 Bulan Sekali';
+      case 'bimonthly': return '2 Bulan Sekali';
+      case 'quarterly': return '3 Bulan Sekali (Kuartal)';
+      case 'semi_annually': return '6 Bulan Sekali (Semester)';
+      case 'custom': return `Setiap ${days || 60} Hari`;
+      default: return '2 Bulan Sekali';
     }
   };
 
-  // Filtered rooms based on Active Building, Room Search, and Audit Status Filter
-  const filteredRooms = useMemo(() => {
-    return rooms.filter((room) => {
-      // 1. Building match
-      if (activeBuildingId) {
-        const roomBuildingId = room.building_id || room.building?.id;
-        if (roomBuildingId !== activeBuildingId) return false;
+  // Filtered Buildings
+  const filteredBuildings = useMemo(() => {
+    return buildings.filter(b => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = (b.nama_gedung || '').toLowerCase().includes(q);
+        const matchCode = (b.kode_gedung || '').toLowerCase().includes(q);
+        const matchAddr = (b.alamat || '').toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchAddr) return false;
       }
 
-      // 2. Room Search
-      if (roomSearch.trim()) {
-        const q = roomSearch.toLowerCase();
-        const roomName = (room.nama_ruangan || room.name || '').toLowerCase();
-        const roomCode = (room.kode_ruangan || room.code || '').toLowerCase();
-        const buildingName = (room.nama_gedung || room.building?.nama_gedung || '').toLowerCase();
-        if (!roomName.includes(q) && !roomCode.includes(q) && !buildingName.includes(q)) {
+      if (statusFilter) {
+        if (statusFilter === 'never_audited') {
+          if (b.audit_status !== 'never_audited' && b.audit_status !== 'pending' && b.next_asset_audit_due) return false;
+        } else if (b.audit_status !== statusFilter) {
           return false;
         }
       }
 
-      // 3. Status Audit Filter
-      if (statusAuditFilter) {
-        const auditStatus = getRoomAuditStatus(room).status;
-        if (statusAuditFilter !== auditStatus) return false;
-      }
-
       return true;
     });
-  }, [rooms, activeBuildingId, roomSearch, statusAuditFilter]);
+  }, [buildings, searchQuery, statusFilter]);
 
-  // Count rooms per building for pill badges
-  const buildingRoomCounts = useMemo(() => {
-    const counts = {};
-    rooms.forEach((r) => {
-      const bId = r.building_id || r.building?.id;
-      if (bId) counts[bId] = (counts[bId] || 0) + 1;
-    });
-    return counts;
-  }, [rooms]);
+  // --- HANDLER AUDIT GEDUNG ---
+  const handleOpenAuditBuilding = async (building) => {
+    setSelectedBuildingForAudit(building);
+    setShowAuditBuildingModal(true);
+    setLoadingBuildingTree(true);
+    setError(null);
+    setAuditPeriod(new Date().toISOString().substring(0, 7));
+    setAuditNotes('');
+    setAuditItemsState({});
 
-  // -------------------------------------------------------------
-  // 1. KELOLA MASTER ASET RUANGAN
-  // -------------------------------------------------------------
-  const handleOpenManageAssets = async (room) => {
-    setSelectedRoomForAssets(room);
-    setShowManageAssetsModal(true);
-    setShowAssetForm(false);
-    setEditingAsset(null);
-    loadAssetsForRoom(room.id);
-  };
-
-  const loadAssetsForRoom = async (roomId) => {
-    setLoadingRoomAssets(true);
     try {
-      const res = await api.get(`/room-assets?room_id=${encodeURIComponent(roomId)}&per_page=150`);
+      const res = await api.get(`/buildings/${building.id}/assets-tree`);
       if (res.success) {
-        setRoomAssetsList(res.data.data || res.data || []);
+        const tree = res.data;
+        setBuildingTree(tree);
+
+        // Inisialisasi state checklist aset
+        const initialMap = {};
+        (tree.rooms || []).forEach(room => {
+          (room.assets || []).forEach(asset => {
+            initialMap[asset.id] = {
+              room_id: room.id,
+              room_name: room.nama_ruangan,
+              asset_id: asset.id,
+              nama_aset: asset.nama_aset,
+              kode_aset: asset.kode_aset,
+              expected: parseInt(asset.jumlah) || 1,
+              actual: parseInt(asset.jumlah) || 1,
+              condition: 'good',
+              notes: '',
+              file: null,
+              preview: ''
+            };
+          });
+        });
+        setAuditItemsState(initialMap);
       }
     } catch (err) {
-      setError('Gagal memuat master aset ruangan ini.');
+      setError(err.message || 'Gagal memuat pohon data aset gedung.');
     } finally {
-      setLoadingRoomAssets(false);
+      setLoadingBuildingTree(false);
     }
   };
 
-  const handleOpenAddNewAsset = () => {
-    setEditingAsset(null);
-    setAssetFormItems([
-      { id: `item-${Date.now()}-1`, nama_aset: '', kode_aset: generateAssetCode(), jumlah: 1, status: 'active' }
-    ]);
-    setShowAssetForm(true);
-  };
-
-  const handleOpenEditAsset = (asset) => {
-    setEditingAsset(asset);
-    setAssetFormItems([
-      {
-        id: asset.id,
-        nama_aset: asset.nama_aset || '',
-        kode_aset: asset.kode_aset || '',
-        jumlah: asset.jumlah ?? 1,
-        status: asset.status || 'active',
-      }
-    ]);
-    setShowAssetForm(true);
-  };
-
-  const handleAddAssetRow = () => {
-    setAssetFormItems((prev) => [
+  const handleUpdateAuditItem = (assetId, field, value) => {
+    setAuditItemsState(prev => ({
       ...prev,
-      {
-        id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        nama_aset: '',
-        kode_aset: generateAssetCode(),
-        jumlah: 1,
-        status: 'active',
+      [assetId]: {
+        ...prev[assetId],
+        [field]: value
       }
-    ]);
-  };
-
-  const handleRemoveAssetRow = (index) => {
-    const updated = assetFormItems.filter((_, i) => i !== index);
-    setAssetFormItems(
-      updated.length > 0
-        ? updated
-        : [{ id: `item-${Date.now()}`, nama_aset: '', kode_aset: generateAssetCode(), jumlah: 1, status: 'active' }]
-    );
-  };
-
-  const handleAssetFormItemChange = (index, field, value) => {
-    const updated = [...assetFormItems];
-    updated[index][field] = value;
-    setAssetFormItems(updated);
-  };
-
-  const handleSaveAssetForm = async (e) => {
-    e.preventDefault();
-    if (!selectedRoomForAssets) return;
-
-    setSavingAsset(true);
-    setError(null);
-
-    try {
-      if (editingAsset) {
-        const item = assetFormItems[0];
-        const payload = {
-          room_id: selectedRoomForAssets.id,
-          nama_aset: item.nama_aset.trim(),
-          kode_aset: item.kode_aset.trim(),
-          jumlah: item.jumlah ? Math.max(1, parseInt(item.jumlah) || 1) : 1,
-          status: item.status || 'active',
-        };
-        const res = await api.put(`/room-assets/${editingAsset.id}`, payload);
-        if (res.success) {
-          setSuccessMsg('Master aset berhasil diperbarui.');
-          setShowAssetForm(false);
-          setEditingAsset(null);
-          loadAssetsForRoom(selectedRoomForAssets.id);
-        }
-      } else {
-        const validItems = assetFormItems.filter(
-          (i) => i.nama_aset && i.nama_aset.trim() !== '' && i.kode_aset && i.kode_aset.trim() !== ''
-        );
-        if (validItems.length === 0) {
-          setError('Minimal isi 1 baris nama dan kode aset.');
-          setSavingAsset(false);
-          return;
-        }
-
-        const payload = {
-          room_id: selectedRoomForAssets.id,
-          assets: validItems.map((i) => ({
-            nama_aset: i.nama_aset.trim(),
-            kode_aset: i.kode_aset.trim(),
-            jumlah: i.jumlah ? Math.max(1, parseInt(i.jumlah) || 1) : 1,
-            status: i.status || 'active',
-          })),
-        };
-
-        const res = await api.post('/room-assets', payload);
-        if (res.success) {
-          setSuccessMsg(`${validItems.length} master aset berhasil ditambahkan ke ruangan ini.`);
-          setShowAssetForm(false);
-          loadAssetsForRoom(selectedRoomForAssets.id);
-        }
-      }
-    } catch (err) {
-      setError(err.message || 'Gagal menyimpan data master aset.');
-    } finally {
-      setSavingAsset(false);
-    }
-  };
-
-  const handleDeleteMasterAsset = async (asset) => {
-    if (
-      !(await confirm({
-        title: 'Hapus Master Aset',
-        message: `Hapus master aset "${asset.nama_aset}" (${asset.kode_aset}) dari ruangan ini?`,
-        confirmText: 'Ya, Hapus',
-        cancelText: 'Batal',
-        type: 'danger',
-      }))
-    ) {
-      return;
-    }
-
-    try {
-      const res = await api.delete(`/room-assets/${asset.id}`);
-      if (res.success) {
-        setSuccessMsg('Master aset berhasil dihapus.');
-        if (selectedRoomForAssets) loadAssetsForRoom(selectedRoomForAssets.id);
-      }
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus master aset.');
-    }
-  };
-
-  // -------------------------------------------------------------
-  // 2. ATUR JADWAL AUDIT RUANGAN
-  // -------------------------------------------------------------
-  const handleOpenScheduleModal = (room) => {
-    setSelectedRoomForSchedule(room);
-    setScheduleInterval(room.asset_audit_interval || 'bimonthly');
-    setScheduleIntervalDays(room.asset_audit_interval_days || 60);
-    setScheduleNextDue(room.next_asset_audit_due || '');
-    setShowScheduleModal(true);
-  };
-
-  const handleSaveSchedule = async (e) => {
-    e.preventDefault();
-    if (!selectedRoomForSchedule) return;
-
-    setSavingSchedule(true);
-    setError(null);
-    try {
-      const payload = {
-        asset_audit_interval: scheduleInterval,
-        asset_audit_interval_days: scheduleInterval === 'custom' ? parseInt(scheduleIntervalDays) || 60 : undefined,
-        next_asset_audit_due: scheduleNextDue || null,
-      };
-
-      const res = await api.put(`/rooms/${selectedRoomForSchedule.id}/asset-audit-schedule`, payload);
-      if (res.success) {
-        setSuccessMsg(`Jadwal audit ruangan ${selectedRoomForSchedule.nama_ruangan || selectedRoomForSchedule.name} berhasil disimpan!`);
-        setShowScheduleModal(false);
-        fetchBuildingsAndRooms();
-      }
-    } catch (err) {
-      setError(err.message || 'Gagal menyimpan jadwal audit ruangan.');
-    } finally {
-      setSavingSchedule(false);
-    }
-  };
-
-  // -------------------------------------------------------------
-  // 3. FORMULIR AUDIT FISIK RUANGAN (CS & SUPERVISOR)
-  // -------------------------------------------------------------
-  const handleOpenAuditForm = async (room) => {
-    setEditingAudit(null);
-    setSelectedRoomForAudit(room);
-    setAuditFormPeriod(new Date().toISOString().substring(0, 7));
-    setAuditFormNotes('');
-    setAuditFormItems([]);
-    setShowAuditFormModal(true);
-
-    // Load room assets for checklist
-    setAuditFormLoadingAssets(true);
-    try {
-      const res = await api.get(`/room-assets?room_id=${encodeURIComponent(room.id)}&per_page=150`);
-      if (res.success) {
-        const rawAssets = res.data.data || res.data || [];
-        const initialFormItems = rawAssets.map((asset) => ({
-          room_asset_id: asset.id,
-          nama_aset: asset.nama_aset,
-          kode_aset: asset.kode_aset,
-          jumlah_expected: asset.jumlah ?? 1,
-          jumlah_actual: asset.jumlah ?? 1,
-          kondisi: 'good',
-          foto_file: null,
-          foto_preview: null,
-          catatan: '',
-        }));
-        setAuditFormItems(initialFormItems);
-      }
-    } catch (err) {
-      setError('Gagal memuat master aset ruangan ini untuk audit.');
-    } finally {
-      setAuditFormLoadingAssets(false);
-    }
-  };
-
-  const handleOpenEditAudit = (audit) => {
-    setEditingAudit(audit);
-    const targetRoom = rooms.find((r) => r.id === audit.room_id) || {
-      id: audit.room_id,
-      nama_ruangan: audit.room_name,
-      nama_gedung: audit.building_name,
-      kode_ruangan: audit.room_code,
-    };
-    setSelectedRoomForAudit(targetRoom);
-    setAuditFormPeriod(audit.periode || new Date().toISOString().substring(0, 7));
-    setAuditFormNotes(audit.notes || '');
-
-    const editItems = (audit.items || []).map((item) => ({
-      room_asset_id: item.room_asset_id,
-      nama_aset: item.nama_aset || item.asset?.nama_aset || item.nama_aset_snapshot || 'Aset Ruangan',
-      kode_aset: item.kode_aset || item.asset?.kode_aset || item.kode_aset_snapshot || '',
-      jumlah_expected: item.jumlah_expected ?? 1,
-      jumlah_actual: item.jumlah_actual ?? 1,
-      kondisi: item.kondisi || 'good',
-      foto_file: null,
-      foto_preview: item.foto_bukti_url || null,
-      catatan: item.catatan || '',
     }));
-    setAuditFormItems(editItems);
-    setShowAuditFormModal(true);
   };
 
-  const handleDeleteAudit = async (audit) => {
-    if (
-      !(await confirm({
-        title: 'Hapus Laporan Audit',
-        message: `Hapus riwayat audit fisik ruangan "${audit.room_name}" periode ${audit.periode}?`,
-        confirmText: 'Ya, Hapus',
-        cancelText: 'Batal',
-        type: 'danger',
-      }))
-    ) {
-      return;
-    }
-
+  const handleAuditItemPhoto = async (assetId, file) => {
+    if (!file) return;
     try {
-      const res = await api.delete(`/room-asset-audits/${audit.id}`);
-      if (res.success) {
-        setSuccessMsg('Laporan audit fisik berhasil dihapus.');
-        fetchAuditsData();
-      }
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus laporan audit.');
+      const compressed = await compressImage(file, 1600, 1000 * 1024);
+      const preview = URL.createObjectURL(compressed || file);
+      setAuditItemsState(prev => ({
+        ...prev,
+        [assetId]: {
+          ...prev[assetId],
+          file: compressed || file,
+          preview
+        }
+      }));
+    } catch (e) {
+      const preview = URL.createObjectURL(file);
+      setAuditItemsState(prev => ({
+        ...prev,
+        [assetId]: {
+          ...prev[assetId],
+          file,
+          preview
+        }
+      }));
     }
   };
 
-  const handleAuditItemChange = (index, field, value) => {
-    const updated = [...auditFormItems];
-    updated[index][field] = value;
-    setAuditFormItems(updated);
-  };
+  const handleSubmitAuditBuilding = async (e) => {
+    e.preventDefault();
+    if (!selectedBuildingForAudit) return;
 
-  const handleAuditItemPhotoChange = async (index, file) => {
-    if (!file) {
-      const updated = [...auditFormItems];
-      updated[index].foto_file = null;
-      updated[index].foto_preview = null;
-      setAuditFormItems(updated);
+    const itemsList = Object.values(auditItemsState);
+    if (itemsList.length === 0) {
+      setError('Gedung ini belum memiliki aset yang terdaftar untuk diaudit.');
       return;
     }
-    const compressed = await compressImage(file, 1600, 1000 * 1024);
-    const finalFile = compressed instanceof File ? compressed : new File([compressed || file], file.name || `audit_${Date.now()}.jpg`, { type: 'image/jpeg' });
-    const updated = [...auditFormItems];
-    updated[index].foto_file = finalFile;
-    updated[index].foto_preview = URL.createObjectURL(compressed || file);
-    setAuditFormItems(updated);
-  };
 
-  const handleQuickFillAllGood = () => {
-    const updated = auditFormItems.map((item) => ({
-      ...item,
-      jumlah_actual: item.jumlah_expected,
-      kondisi: 'good',
-      catatan: '',
-    }));
-    setAuditFormItems(updated);
-    setSuccessMsg('Semua barang ditandai sesuai & kondisi baik!');
-  };
-
-  const handleSubmitAuditReport = async (e) => {
-    e.preventDefault();
-    if (!selectedRoomForAudit) return;
-
-    if (auditFormItems.length === 0) {
-      setError('Ruangan ini belum memiliki master aset yang terdaftar.');
+    if (!(await confirm({
+      title: 'Kirim Laporan Audit Fisik Gedung',
+      message: `Apakah Anda yakin ingin mengirim laporan audit fisik untuk seluruh ruangan di Gedung ${selectedBuildingForAudit.nama_gedung}?`,
+      confirmText: 'Ya, Kirim Laporan',
+      cancelText: 'Batal',
+      type: 'info'
+    }))) {
       return;
     }
 
@@ -568,58 +341,219 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
 
     try {
       const formData = new FormData();
-      formData.append('room_id', selectedRoomForAudit.id);
-      formData.append('periode', auditFormPeriod);
-      if (auditFormNotes) formData.append('notes', auditFormNotes);
+      formData.append('building_id', selectedBuildingForAudit.id);
+      formData.append('periode', auditPeriod);
+      if (auditNotes) formData.append('notes', auditNotes);
 
-      auditFormItems.forEach((item, index) => {
-        formData.append(`items[${index}][room_asset_id]`, item.room_asset_id);
-        formData.append(`items[${index}][jumlah_actual]`, item.jumlah_actual ?? 0);
-        formData.append(`items[${index}][kondisi]`, item.kondisi);
-        if (item.catatan) formData.append(`items[${index}][catatan]`, item.catatan);
-        if (item.foto_file) {
-          formData.append(`items.${index}.foto_bukti`, item.foto_file);
+      itemsList.forEach((item, index) => {
+        formData.append(`items[${index}][room_asset_id]`, item.asset_id);
+        formData.append(`items[${index}][room_id]`, item.room_id);
+        formData.append(`items[${index}][jumlah_actual]`, item.actual);
+        formData.append(`items[${index}][kondisi]`, item.condition);
+        if (item.notes) formData.append(`items[${index}][catatan]`, item.notes);
+        if (item.file) {
+          formData.append(`items[${index}][foto_bukti]`, item.file);
         }
       });
 
-      let res;
-      if (editingAudit) {
-        formData.append('_method', 'PUT');
-        res = await api.post(`/room-asset-audits/${editingAudit.id}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      } else {
-        res = await api.post('/room-asset-audits', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      }
-
+      const res = await api.post('/room-asset-audits', formData);
       if (res.success) {
-        setSuccessMsg(
-          editingAudit
-            ? 'Laporan audit fisik berhasil diperbarui!'
-            : 'Laporan audit fisik aset ruangan berhasil dikirim!'
-        );
-        setShowAuditFormModal(false);
-        setEditingAudit(null);
-        fetchBuildingsAndRooms();
-        if (activeSubTab === 'audits') fetchAuditsData();
+        setSuccessMsg(`Laporan audit aset untuk Gedung ${selectedBuildingForAudit.nama_gedung} berhasil diserahkan!`);
+        setShowAuditBuildingModal(false);
+        fetchBuildingsData(false);
       }
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan laporan audit aset.');
+      setError(err.message || 'Gagal mengirim laporan audit aset gedung.');
     } finally {
       setSubmittingAudit(false);
     }
   };
 
-  // -------------------------------------------------------------
-  // 4. VERIFIKASI HASIL AUDIT (SUPERVISOR)
-  // -------------------------------------------------------------
+  // --- HANDLER KELOLA MASTER ASET GEDUNG ---
+  const handleOpenManageAssets = async (building) => {
+    setSelectedBuildingForAssets(building);
+    setShowManageAssetsModal(true);
+    setActiveRoomInModal(null);
+    setRoomAssetsList([]);
+    setShowAssetForm(false);
+    setEditingAsset(null);
+
+    // Auto select first room if available
+    if (building.rooms && building.rooms.length > 0) {
+      handleSelectRoomForAssets(building.rooms[0]);
+    }
+  };
+
+  const handleSelectRoomForAssets = async (room) => {
+    setActiveRoomInModal(room);
+    setLoadingRoomAssets(true);
+    setShowAssetForm(false);
+    setEditingAsset(null);
+    try {
+      const res = await api.get(`/room-assets?room_id=${room.id}`);
+      if (res.success) {
+        setRoomAssetsList(res.data.data || res.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching room assets:', err);
+    } finally {
+      setLoadingRoomAssets(false);
+    }
+  };
+
+  const handleOpenAddAssetForm = () => {
+    setEditingAsset(null);
+    setAssetFormItems([
+      { id: 'item-1', nama_aset: '', kode_aset: generateAssetCode(), jumlah: 1, status: 'active' }
+    ]);
+    setShowAssetForm(true);
+  };
+
+  const handleOpenEditAsset = (asset) => {
+    setEditingAsset(asset);
+    setAssetFormItems([
+      { id: 'edit-1', nama_aset: asset.nama_aset, kode_aset: asset.kode_aset, jumlah: asset.jumlah || 1, status: asset.status || 'active' }
+    ]);
+    setShowAssetForm(true);
+  };
+
+  const handleAddAssetRow = () => {
+    setAssetFormItems(prev => [
+      ...prev,
+      { id: `item-${Date.now()}`, nama_aset: '', kode_aset: generateAssetCode(), jumlah: 1, status: 'active' }
+    ]);
+  };
+
+  const handleRemoveAssetRow = (id) => {
+    if (assetFormItems.length <= 1) return;
+    setAssetFormItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleAssetFieldChange = (id, field, value) => {
+    setAssetFormItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleSaveAssets = async (e) => {
+    e.preventDefault();
+    if (!activeRoomInModal) return;
+
+    for (const item of assetFormItems) {
+      if (!item.nama_aset.trim()) {
+        setError('Harap isi nama seluruh aset.');
+        return;
+      }
+      if (!item.kode_aset.trim()) {
+        setError('Harap isi kode untuk seluruh aset.');
+        return;
+      }
+    }
+
+    setSavingAsset(true);
+    setError(null);
+
+    try {
+      if (editingAsset) {
+        const item = assetFormItems[0];
+        const res = await api.put(`/room-assets/${editingAsset.id}`, {
+          nama_aset: item.nama_aset,
+          kode_aset: item.kode_aset,
+          jumlah: parseInt(item.jumlah) || 1,
+          status: item.status,
+        });
+        if (res.success) {
+          setSuccessMsg(`Aset '${item.nama_aset}' berhasil diperbarui.`);
+          setShowAssetForm(false);
+          setEditingAsset(null);
+          handleSelectRoomForAssets(activeRoomInModal);
+          fetchBuildingsData(false);
+        }
+      } else {
+        for (const item of assetFormItems) {
+          await api.post('/room-assets', {
+            room_id: activeRoomInModal.id,
+            nama_aset: item.nama_aset,
+            kode_aset: item.kode_aset,
+            jumlah: parseInt(item.jumlah) || 1,
+            status: item.status,
+          });
+        }
+        setSuccessMsg(`Berhasil menambahkan ${assetFormItems.length} aset baru ke ruang ${activeRoomInModal.nama_ruangan}.`);
+        setShowAssetForm(false);
+        handleSelectRoomForAssets(activeRoomInModal);
+        fetchBuildingsData(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menyimpan data aset.');
+    } finally {
+      setSavingAsset(false);
+    }
+  };
+
+  const handleDeleteAsset = async (asset) => {
+    if (!(await confirm({
+      title: 'Hapus Aset Ruangan',
+      message: `Apakah Anda yakin ingin menghapus aset '${asset.nama_aset}' (${asset.kode_aset}) dari ruang ${activeRoomInModal?.nama_ruangan}?`,
+      confirmText: 'Ya, Hapus',
+      cancelText: 'Batal',
+      type: 'danger'
+    }))) {
+      return;
+    }
+
+    try {
+      const res = await api.delete(`/room-assets/${asset.id}`);
+      if (res.success) {
+        setSuccessMsg(`Aset '${asset.nama_aset}' berhasil dihapus.`);
+        handleSelectRoomForAssets(activeRoomInModal);
+        fetchBuildingsData(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus aset.');
+    }
+  };
+
+  // --- HANDLER SIKLUS AUDIT GEDUNG ---
+  const handleOpenScheduleModal = (building) => {
+    setSelectedBuildingForSchedule(building);
+    setScheduleInterval(building.asset_audit_interval || 'bimonthly');
+    setScheduleIntervalDays(building.asset_audit_interval_days || 60);
+    setScheduleNextDue(building.next_asset_audit_due || '');
+    setShowScheduleModal(true);
+  };
+
+  const handleSaveBuildingSchedule = async (e) => {
+    e.preventDefault();
+    if (!selectedBuildingForSchedule) return;
+
+    setSavingSchedule(true);
+    setError(null);
+
+    try {
+      const payload = {
+        asset_audit_interval: scheduleInterval,
+        asset_audit_interval_days: scheduleInterval === 'custom' ? parseInt(scheduleIntervalDays) : undefined,
+        next_asset_audit_due: scheduleNextDue || undefined,
+      };
+
+      const res = await api.put(`/buildings/${selectedBuildingForSchedule.id}/asset-audit-schedule`, payload);
+      if (res.success) {
+        setSuccessMsg(`Jadwal siklus audit Gedung ${selectedBuildingForSchedule.nama_gedung} berhasil diperbarui.`);
+        setShowScheduleModal(false);
+        fetchBuildingsData(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal memperbarui siklus audit gedung.');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  // --- HANDLER VERIFIKASI AUDIT (SUPERVISOR) ---
   const handleOpenVerifyModal = (audit) => {
     setSelectedAuditForVerify(audit);
     setVerifyStatus('approved');
     setVerifyNotes('');
-    setAutoCreateFindings(Boolean(audit.has_discrepancy));
+    setAutoCreateFindings(audit.has_discrepancy);
     setSyncMasterBaseline(false);
     setVerifyNextDueDate('');
     setShowVerifyModal(true);
@@ -629,24 +563,35 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
     e.preventDefault();
     if (!selectedAuditForVerify) return;
 
+    const actionText = verifyStatus === 'approved' ? 'menyetujui' : 'menolak';
+    if (!(await confirm({
+      title: `${verifyStatus === 'approved' ? 'Setujui' : 'Tolak'} Laporan Audit`,
+      message: `Apakah Anda yakin ingin ${actionText} laporan audit fisik ini?`,
+      confirmText: verifyStatus === 'approved' ? 'Ya, Setujui' : 'Ya, Tolak',
+      cancelText: 'Batal',
+      type: verifyStatus === 'approved' ? 'info' : 'danger'
+    }))) {
+      return;
+    }
+
     setSubmittingVerify(true);
     setError(null);
 
     try {
       const payload = {
         status: verifyStatus,
-        verification_notes: verifyNotes || null,
-        auto_create_findings: verifyStatus === 'approved' ? autoCreateFindings : false,
-        sync_master_baseline: verifyStatus === 'approved' ? syncMasterBaseline : false,
-        next_due_date: verifyNextDueDate || null,
+        verification_notes: verifyNotes,
+        auto_create_findings: autoCreateFindings,
+        sync_master_baseline: syncMasterBaseline,
+        next_due_date: verifyNextDueDate || undefined,
       };
 
       const res = await api.post(`/room-asset-audits/${selectedAuditForVerify.id}/verify`, payload);
       if (res.success) {
-        setSuccessMsg(`Hasil audit berhasil di-${verifyStatus === 'approved' ? 'setujui' : 'tolak'}!`);
+        setSuccessMsg(`Hasil audit aset berhasil di-${verifyStatus === 'approved' ? 'setujui' : 'tolak'}.`);
         setShowVerifyModal(false);
         fetchAuditsData();
-        fetchBuildingsAndRooms();
+        fetchBuildingsData(false);
       }
     } catch (err) {
       setError(err.message || 'Gagal memverifikasi audit.');
@@ -655,316 +600,286 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
     }
   };
 
-  // Helpers
-  const formatIntervalLabel = (interval, days) => {
-    switch (interval) {
-      case 'biweekly':
-        return '2 Minggu Sekali';
-      case 'monthly':
-        return '1 Bulan Sekali';
-      case 'bimonthly':
-        return '2 Bulan Sekali';
-      case 'quarterly':
-        return '3 Bulan Sekali';
-      case 'custom':
-        return `Setiap ${days || 60} Hari`;
-      default:
-        return '2 Bulan Sekali';
-    }
-  };
-
-  const getConditionBadge = (cond) => {
-    switch (cond) {
-      case 'good':
-      case 'active':
-        return <span className="status-badge status-completed">Baik</span>;
-      case 'damaged':
-        return <span className="status-badge status-rejected">Rusak</span>;
-      case 'missing':
-        return <span className="status-badge status-overdue">Hilang</span>;
-      case 'repaired':
-        return <span className="status-badge status-waiting_verification">Diperbaiki</span>;
-      default:
-        return <span className="status-badge status-pending">{cond}</span>;
-    }
-  };
-
-  const getAuditStatusBadge = (st) => {
-    switch (st) {
-      case 'approved':
-        return <span className="status-badge status-completed">Disetujui</span>;
-      case 'rejected':
-        return <span className="status-badge status-rejected">Ditolak</span>;
-      case 'submitted':
-      default:
-        return <span className="status-badge status-waiting_verification">Menunggu Review</span>;
-    }
-  };
-
   return (
-    <div className="container-fluid">
-      {/* Header */}
-      <div className="flex-header" style={{ marginBottom: '18px' }}>
+    <div className="room-assets-container">
+      
+      {/* HEADER UTAMA */}
+      <div className="page-header" style={{ marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>
-            {canManageMaster ? 'Aset Ruangan & Stock Opname' : 'Audit Fisik Aset Ruangan'}
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Box className="text-primary" size={28} />
+            Aset &amp; Peralatan Fisik Gedung
           </h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Pilih gedung di bawah untuk melihat daftar ruangan, kelola inventaris, dan melakukan audit fisik berkala.
+          <p className="page-subtitle" style={{ margin: '4px 0 0', color: 'var(--text-secondary)' }}>
+            Pemeriksaan fisik (stock opname), jadwal audit berkala, dan inventaris aset per gedung.
           </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              if (activeSubTab === 'buildings') fetchBuildingsData(true);
+              else fetchAuditsData();
+            }}
+            disabled={loading || auditsLoading}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+          >
+            <RefreshCw size={14} className={(loading || auditsLoading) ? 'animate-spin' : ''} />
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* Global Alerts */}
+      {/* ALERT NOTIFIKASI */}
       {successMsg && (
-        <div className="alert alert-success">
-          <Check size={18} />
+        <div className="alert alert-success" style={{ marginBottom: '20px' }}>
+          <CheckCircle2 size={18} />
           <span>{successMsg}</span>
         </div>
       )}
+
       {error && (
-        <div className="alert alert-danger">
-          <ShieldAlert size={18} />
+        <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
+          <AlertTriangle size={18} />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Main Sub-Tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '8px',
-          borderBottom: '2px solid var(--border-color)',
-          marginBottom: '20px',
-          overflowX: 'auto',
-          paddingBottom: '2px',
-        }}
-      >
+      {/* SUB-TABS NAVIGASI */}
+      <div className="custom-tabs" style={{ marginBottom: '20px', borderBottom: '2px solid var(--border-color)', display: 'flex', gap: '8px' }}>
         <button
           type="button"
-          className="tab-button"
-          onClick={() => setActiveSubTab('rooms')}
+          onClick={() => setActiveSubTab('buildings')}
+          className={`tab-btn ${activeSubTab === 'buildings' ? 'active' : ''}`}
           style={{
-            padding: '10px 18px',
+            padding: '10px 20px',
+            fontWeight: 700,
+            fontSize: '0.95rem',
             border: 'none',
             background: 'none',
             cursor: 'pointer',
-            fontWeight: activeSubTab === 'rooms' ? 700 : 500,
-            color: activeSubTab === 'rooms' ? 'var(--primary)' : 'var(--text-secondary)',
-            borderBottom: activeSubTab === 'rooms' ? '3px solid var(--primary)' : '3px solid transparent',
+            borderBottom: activeSubTab === 'buildings' ? '3px solid var(--primary)' : '3px solid transparent',
+            color: activeSubTab === 'buildings' ? 'var(--primary)' : 'var(--text-secondary)',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '8px',
-            fontSize: '0.95rem',
+            gap: '8px'
           }}
         >
-          <Building2 size={17} /> 1. Ruangan & Aset per Gedung
+          <Building2 size={18} />
+          1. Audit &amp; Aset per Gedung ({buildings.length})
         </button>
 
         <button
           type="button"
-          className="tab-button"
           onClick={() => setActiveSubTab('audits')}
+          className={`tab-btn ${activeSubTab === 'audits' ? 'active' : ''}`}
           style={{
-            padding: '10px 18px',
+            padding: '10px 20px',
+            fontWeight: 700,
+            fontSize: '0.95rem',
             border: 'none',
             background: 'none',
             cursor: 'pointer',
-            fontWeight: activeSubTab === 'audits' ? 700 : 500,
-            color: activeSubTab === 'audits' ? 'var(--primary)' : 'var(--text-secondary)',
             borderBottom: activeSubTab === 'audits' ? '3px solid var(--primary)' : '3px solid transparent',
+            color: activeSubTab === 'audits' ? 'var(--primary)' : 'var(--text-secondary)',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '8px',
-            fontSize: '0.95rem',
+            gap: '8px'
           }}
         >
-          <ClipboardCheck size={17} /> 2. Riwayat & Verifikasi Audit
+          <ClipboardCheck size={18} />
+          2. Riwayat &amp; Verifikasi Audit
         </button>
       </div>
 
       {/* ========================================================================= */}
-      {/* SUB-TAB 1: DAFTAR RUANGAN & ASET BERBASIS GEDUNG */}
+      {/* TAB 1: DAFTAR GEDUNG & AUDIT ASET */}
       {/* ========================================================================= */}
-      {activeSubTab === 'rooms' && (
-        <>
-          {/* SEARCH & FILTER BAR */}
-          <div
-            className="glass-panel"
-            style={{
-              padding: '14px 16px',
-              borderRadius: 'var(--radius-md)',
-              marginBottom: '20px',
-              display: 'flex',
-              gap: '12px',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-            }}
-          >
-            {/* 1. Cari Nama / Kode Ruangan */}
-            <div style={{ position: 'relative', flex: 1, minWidth: '220px', maxWidth: '340px' }}>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Cari nama atau kode ruangan..."
-                value={roomSearch}
-                onChange={(e) => setRoomSearch(e.target.value)}
-                style={{ paddingLeft: '32px' }}
-              />
-              <Search
-                size={16}
-                style={{
-                  position: 'absolute',
-                  left: '10px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
-                }}
-              />
+      {activeSubTab === 'buildings' && (
+        <div>
+          
+          {/* STATS CARDS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-lg)', background: 'rgba(14, 49, 146, 0.1)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Building2 size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Total Gedung Terdaftar</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>{summaryStats.total_buildings} Gedung</div>
+              </div>
             </div>
 
-            {/* 2. Dropdown Filter Gedung */}
-            <select
-              className="form-control"
-              value={activeBuildingId}
-              onChange={(e) => setActiveBuildingId(e.target.value)}
-              style={{ maxWidth: '220px', fontWeight: 600 }}
-            >
-              <option value="">Semua Gedung ({buildings.length})</option>
-              {buildings.map((b) => {
-                const count = buildingRoomCounts[b.id] || 0;
-                return (
-                  <option key={b.id} value={b.id}>
-                    {b.nama_gedung || b.name} ({count} Ruangan)
-                  </option>
-                );
-              })}
-            </select>
+            <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-lg)', background: 'rgba(15, 118, 110, 0.1)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ShieldCheck size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Siklus Audit Aman</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{summaryStats.up_to_date} Gedung</div>
+              </div>
+            </div>
 
-            {/* 3. Dropdown Filter Status Siklus Audit */}
-            <select
-              className="form-control"
-              value={statusAuditFilter}
-              onChange={(e) => setStatusAuditFilter(e.target.value)}
-              style={{ maxWidth: '220px' }}
-            >
-              <option value="">Semua Status Siklus Audit</option>
-              <option value="up_to_date">Aman / Up-to-date</option>
-              <option value="due_soon">Mendekati Jatuh Tempo</option>
-              <option value="overdue">Terlewat / Overdue</option>
-              <option value="never">Belum Dijadwalkan</option>
-            </select>
+            <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-lg)', background: 'rgba(234, 179, 8, 0.15)', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Jatuh Tempo Segera</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#b45309' }}>{summaryStats.due_soon} Gedung</div>
+              </div>
+            </div>
 
-            {/* Reset Button */}
-            {(activeBuildingId || roomSearch || statusAuditFilter) && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setActiveBuildingId('');
-                  setRoomSearch('');
-                  setStatusAuditFilter('');
-                }}
-              >
-                Reset Filter
-              </button>
-            )}
-
-            <div style={{ marginLeft: 'auto', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Menampilkan <strong>{filteredRooms.length}</strong> ruangan
+            <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-lg)', background: 'rgba(225, 29, 72, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertOctagon size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Terlewat / Overdue</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--danger)' }}>{summaryStats.overdue} Gedung</div>
+              </div>
             </div>
           </div>
 
-          {/* 3. ROOMS TABLE / LIST */}
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <div className="spinner"></div>
+          {/* FILTER & SEARCH BAR */}
+          <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '280px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Cari nama gedung, kode, atau alamat..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ paddingLeft: '36px' }}
+                  />
+                </div>
+
+                <select
+                  className="form-control"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{ width: 'auto', minWidth: '200px' }}
+                >
+                  <option value="">Semua Status Siklus</option>
+                  <option value="up_to_date">Aman / Up-to-date</option>
+                  <option value="due_soon">Jatuh Tempo Segera</option>
+                  <option value="overdue">Terlewat / Overdue</option>
+                  <option value="never_audited">Belum Dijadwalkan</option>
+                </select>
+              </div>
+
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Menampilkan <strong>{filteredBuildings.length}</strong> gedung
+              </div>
             </div>
-          ) : filteredRooms.length === 0 ? (
-            <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              <FolderOpen size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
-              <p>Tidak ada ruangan yang sesuai dengan pilihan gedung atau filter pencarian.</p>
+          </div>
+
+          {/* TABEL / KARTU GEDUNG */}
+          {loading ? (
+            <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <div className="spinner" style={{ width: '36px', height: '36px', margin: '0 auto 14px' }}></div>
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Memuat daftar gedung &amp; inventaris aset...</div>
             </div>
           ) : (
-            <div className="glass-panel" style={{ borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>
-              <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+            <div className="table-responsive glass-panel" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+              <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Ruangan & Gedung</th>
-                    <th>Lantai / Lokasi</th>
-                    <th>Siklus Audit</th>
+                    <th>Gedung &amp; Lokasi</th>
+                    <th>Ruangan &amp; Aset</th>
+                    <th>Siklus Audit Gedung</th>
                     <th>Batas Jatuh Tempo</th>
                     <th>Status Siklus</th>
-                    <th style={{ textAlign: 'right' }}>Aksi Ruangan</th>
+                    <th style={{ textAlign: 'right' }}>Aksi Gedung</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRooms.map((room) => {
-                    const auditStatus = getRoomAuditStatus(room);
+                  {filteredBuildings.map(b => {
+                    const badge = getBuildingAuditStatusBadge(b);
+                    const intervalLabel = getIntervalLabel(b.asset_audit_interval, b.asset_audit_interval_days);
 
                     return (
-                      <tr key={room.id}>
+                      <tr key={b.id}>
                         <td>
-                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                            {room.nama_ruangan || room.name}
-                          </span>
-                          <span style={{ color: 'var(--primary)', fontSize: '0.78rem', display: 'block', fontWeight: 600 }}>
-                            {room.nama_gedung || room.building?.nama_gedung || 'Gedung'} ({room.kode_ruangan || room.code})
-                          </span>
+                          <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Building2 size={18} />
+                            {b.nama_gedung}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Kode: <strong style={{ color: 'var(--text-secondary)' }}>{b.kode_gedung}</strong> {b.alamat ? `• ${b.alamat}` : ''}
+                          </div>
                         </td>
+
                         <td>
-                          <span style={{ color: 'var(--text-secondary)' }}>
-                            {room.lantai || room.floor ? `Lantai ${room.lantai || room.floor}` : '-'}
-                          </span>
+                          <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                            {b.rooms_count} Ruangan
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {b.total_assets} Jenis Aset ({b.total_units} Unit Fisik)
+                          </div>
                         </td>
+
                         <td>
-                          <span style={{ fontWeight: 500 }}>
-                            {formatIntervalLabel(room.asset_audit_interval, room.asset_audit_interval_days)}
-                          </span>
+                          <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{intervalLabel}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Audit terakhir: {b.last_asset_audit_at ? new Date(b.last_asset_audit_at).toLocaleDateString('id-ID') : 'Belum pernah'}
+                          </div>
                         </td>
+
                         <td>
-                          {room.next_asset_audit_due ? (
-                            <span style={{ fontWeight: 600 }}>
-                              {room.next_asset_audit_due}
+                          {b.next_asset_audit_due ? (
+                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                              {new Date(b.next_asset_audit_due).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>-</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>-</span>
                           )}
                         </td>
+
                         <td>
-                          <span className={`status-badge ${auditStatus.class}`}>
-                            {auditStatus.label}
+                          <span className={`status-badge ${badge.class}`}>
+                            {badge.label}
                           </span>
                         </td>
+
                         <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                            {/* Tombol 1: Cek / Audit Fisik Ruangan */}
+                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             <button
+                              type="button"
                               className="btn btn-primary btn-sm"
-                              onClick={() => handleOpenAuditForm(room)}
-                              title="Lakukan Cek / Audit Fisik Ruangan Ini"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700 }}
+                              onClick={() => handleOpenAuditBuilding(b)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                              title="Lakukan audit fisik seluruh ruangan di gedung ini"
                             >
-                              <ClipboardCheck size={14} /> Audit Fisik
+                              <ClipboardCheck size={15} />
+                              Audit Gedung
                             </button>
 
-                            {/* Tombol 2: Kelola Master Aset Ruangan */}
                             <button
+                              type="button"
                               className="btn btn-secondary btn-sm"
-                              onClick={() => handleOpenManageAssets(room)}
-                              title="Lihat & Kelola Master Aset Ruangan Ini"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                              onClick={() => handleOpenManageAssets(b)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                              title="Kelola master aset tiap ruangan di gedung ini"
                             >
-                              <Box size={14} /> Kelola Aset
+                              <Box size={15} />
+                              Kelola Aset
                             </button>
 
-                            {/* Tombol 3: Atur Jadwal Audit (Supervisor / Admin) */}
                             {canManageMaster && (
                               <button
+                                type="button"
                                 className="btn btn-secondary btn-sm"
-                                onClick={() => handleOpenScheduleModal(room)}
-                                title="Atur Siklus / Jadwal Audit Ruangan Ini"
+                                onClick={() => handleOpenScheduleModal(b)}
+                                style={{ padding: '6px 8px' }}
+                                title="Atur siklus & tanggal jatuh tempo audit gedung"
                               >
-                                <Calendar size={14} />
+                                <Calendar size={15} />
                               </button>
                             )}
                           </div>
@@ -972,560 +887,812 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                       </tr>
                     );
                   })}
+
+                  {filteredBuildings.length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                        <Building2 size={36} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
+                        <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Tidak Ada Gedung yang Ditemukan</h4>
+                        <p style={{ margin: 0, fontSize: '0.85rem' }}>Silakan sesuaikan kata kunci pencarian atau filter status siklus audit.</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           )}
-        </>
+
+        </div>
       )}
 
       {/* ========================================================================= */}
-      {/* SUB-TAB 2: RIWAYAT & HASIL AUDIT FISIK (LOG & VERIFIKASI) */}
+      {/* TAB 2: RIWAYAT & VERIFIKASI AUDIT */}
       {/* ========================================================================= */}
       {activeSubTab === 'audits' && (
-        <>
-          {/* Filters for Audits */}
-          <div
-            className="glass-panel"
-            style={{
-              padding: '16px',
-              borderRadius: 'var(--radius-md)',
-              marginBottom: '20px',
-              display: 'flex',
-              gap: '12px',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-            }}
-          >
-            <select
-              className="form-control"
-              value={auditBuildingFilter}
-              onChange={(e) => setAuditBuildingFilter(e.target.value)}
-              style={{ maxWidth: '200px', fontWeight: 600 }}
-            >
-              <option value="">Semua Gedung ({buildings.length})</option>
-              {buildings.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.nama_gedung || b.name}
-                </option>
-              ))}
-            </select>
+        <div>
+          {/* FILTER BAR TAB 2 */}
+          <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Cari nama gedung, catatan, atau auditor..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  style={{ paddingLeft: '36px' }}
+                />
+              </div>
 
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Cari ruangan, auditor..."
-              value={auditSearch}
-              onChange={(e) => setAuditSearch(e.target.value)}
-              style={{ maxWidth: '220px' }}
-            />
-
-            <select
-              className="form-control"
-              value={auditStatusFilter}
-              onChange={(e) => setAuditStatusFilter(e.target.value)}
-              style={{ maxWidth: '170px' }}
-            >
-              <option value="">Semua Status Approval</option>
-              <option value="submitted">Menunggu Review</option>
-              <option value="approved">Disetujui</option>
-              <option value="rejected">Ditolak</option>
-            </select>
-
-            <select
-              className="form-control"
-              value={auditDiscrepancyFilter}
-              onChange={(e) => setAuditDiscrepancyFilter(e.target.value)}
-              style={{ maxWidth: '180px' }}
-            >
-              <option value="">Semua Kondisi Audit</option>
-              <option value="true">Ada Selisih / Rusak</option>
-              <option value="false">Sesuai & Lengkap</option>
-            </select>
-
-            {(auditBuildingFilter || auditStatusFilter || auditDiscrepancyFilter || auditSearch) && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setAuditBuildingFilter('');
-                  setAuditStatusFilter('');
-                  setAuditDiscrepancyFilter('');
-                  setAuditSearch('');
-                }}
+              <select
+                className="form-control"
+                value={auditBuildingFilter}
+                onChange={(e) => setAuditBuildingFilter(e.target.value)}
+                style={{ width: 'auto', minWidth: '180px' }}
               >
-                Reset Filter
-              </button>
-            )}
+                <option value="">Semua Gedung</option>
+                {buildings.map(b => (
+                  <option key={b.id} value={b.id}>{b.nama_gedung}</option>
+                ))}
+              </select>
+
+              <select
+                className="form-control"
+                value={auditStatusFilter}
+                onChange={(e) => setAuditStatusFilter(e.target.value)}
+                style={{ width: 'auto', minWidth: '160px' }}
+              >
+                <option value="">Semua Status</option>
+                <option value="submitted">Menunggu Verifikasi</option>
+                <option value="approved">Disetujui</option>
+                <option value="rejected">Ditolak</option>
+              </select>
+
+              <select
+                className="form-control"
+                value={auditDiscrepancyFilter}
+                onChange={(e) => setAuditDiscrepancyFilter(e.target.value)}
+                style={{ width: 'auto', minWidth: '180px' }}
+              >
+                <option value="">Semua Kondisi Fisik</option>
+                <option value="true">Ada Kerusakan / Selisih</option>
+                <option value="false">Sesuai &amp; Lengkap</option>
+              </select>
+            </div>
           </div>
 
-          {/* Audits Table */}
+          {/* TABEL RIWAYAT AUDIT */}
           {auditsLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px' }}>
-              <div className="spinner"></div>
-            </div>
-          ) : audits.length === 0 ? (
-            <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              <ClipboardCheck size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
-              <p>Belum ada riwayat laporan audit fisik aset yang sesuai filter.</p>
+            <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <div className="spinner" style={{ width: '36px', height: '36px', margin: '0 auto 14px' }}></div>
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Memuat riwayat audit aset...</div>
             </div>
           ) : (
-            <div className="glass-panel" style={{ borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>
-              <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+            <div className="table-responsive glass-panel" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+              <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Tanggal & Periode</th>
-                    <th>Ruangan & Gedung</th>
+                    <th>Gedung / Ruangan</th>
+                    <th>Periode &amp; Tanggal</th>
                     <th>Petugas Auditor</th>
-                    <th style={{ textAlign: 'center' }}>Total Paten vs Fisik</th>
-                    <th>Kesesuaian Fisik</th>
-                    <th>Status Approval</th>
+                    <th>Hasil Temuan Fisik</th>
+                    <th>Status Verifikasi</th>
                     <th style={{ textAlign: 'right' }}>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {audits.map((audit) => (
-                    <tr key={audit.id}>
-                      <td>
-                        <span style={{ fontWeight: 600 }}>{audit.audit_date}</span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>
-                          Periode: {audit.periode}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontWeight: 600 }}>{audit.room_name}</span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', display: 'block' }}>
-                          {audit.building_name} ({audit.room_code})
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontWeight: 500 }}>{audit.auditor_name || 'Petugas CS'}</span>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            color: audit.has_discrepancy ? '#dc2626' : '#166534',
-                          }}
-                        >
-                          {audit.total_actual} / {audit.total_expected} Unit
-                        </span>
-                      </td>
-                      <td>
-                        {audit.has_discrepancy ? (
-                          <span className="status-badge status-rejected">Ada Selisih / Kerusakan</span>
-                        ) : (
-                          <span className="status-badge status-completed">Lengkap & Sesuai</span>
-                        )}
-                      </td>
-                      <td>{getAuditStatusBadge(audit.status)}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => handleOpenVerifyModal(audit)}
-                            title={canManageMaster ? 'Review / Verifikasi Hasil Audit' : 'Lihat Detail Audit'}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
-                          >
-                            <Eye size={14} /> {canManageMaster ? 'Review' : 'Detail'}
-                          </button>
-                          {canManageMaster && (
-                            <>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => handleOpenEditAudit(audit)}
-                                title="Edit Laporan Audit"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                className="btn btn-danger btn-sm"
-                                onClick={() => handleDeleteAudit(audit)}
-                                title="Hapus Laporan Audit"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </>
+                  {audits.map(a => {
+                    const statusClass = a.status === 'approved' ? 'status-completed' : a.status === 'rejected' ? 'status-rejected' : 'status-waiting_verification';
+                    const statusLabel = a.status === 'approved' ? 'Disetujui' : a.status === 'rejected' ? 'Ditolak' : 'Menunggu Verifikasi';
+                    const targetTitle = a.building_name ? `Gedung ${a.building_name}` : (a.room_name ? `Ruang ${a.room_name}` : 'Gedung Terkait');
+
+                    return (
+                      <tr key={a.id}>
+                        <td>
+                          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                            {targetTitle}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            {a.items?.length || 0} item aset diperiksa
+                          </div>
+                        </td>
+
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{a.periode}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {a.audit_date ? new Date(a.audit_date).toLocaleDateString('id-ID') : '-'}
+                          </div>
+                        </td>
+
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.auditor_name || 'Petugas CS'}</div>
+                        </td>
+
+                        <td>
+                          {a.has_discrepancy ? (
+                            <span className="status-badge status-rejected" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <AlertTriangle size={12} />
+                              Ada Kerusakan / Selisih
+                            </span>
+                          ) : (
+                            <span className="status-badge status-completed" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Check size={12} />
+                              Lengkap &amp; Sesuai Paten
+                            </span>
                           )}
-                        </div>
+                        </td>
+
+                        <td>
+                          <span className={`status-badge ${statusClass}`}>
+                            {statusLabel}
+                          </span>
+                          {a.verifier_name && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              oleh {a.verifier_name}
+                            </div>
+                          )}
+                        </td>
+
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleOpenVerifyModal(a)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                          >
+                            <Eye size={14} />
+                            {canManageMaster && a.status === 'submitted' ? 'Tinjau & Verifikasi' : 'Lihat Detail'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {audits.length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                        <ClipboardCheck size={36} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
+                        <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Belum Ada Riwayat Audit</h4>
+                        <p style={{ margin: 0, fontSize: '0.85rem' }}>Laporan audit fisik gedung yang diserahkan akan tampil di sini.</p>
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 1: KELOLA MASTER ASET RUANGAN (Melihat & Input Aset Ruangan) */}
+      {/* MODAL 1: FORMULIR AUDIT FISIK GEDUNG TERPADU */}
       {/* ========================================================================= */}
-      {showManageAssetsModal && selectedRoomForAssets && (
-        <div className="modal-backdrop" onClick={() => setShowManageAssetsModal(false)}>
-          <div
-            className="glass-panel"
-            style={{
-              maxWidth: '860px',
-              width: '94vw',
-              maxHeight: '92vh',
-              overflowY: 'auto',
-              padding: '28px',
-              borderRadius: 'var(--radius-2xl)',
-              background: '#ffffff',
-            }}
-            onClick={(e) => e.stopPropagation()}
+      {showAuditBuildingModal && selectedBuildingForAudit && (
+        <div className="modal-overlay" onClick={() => !submittingAudit && setShowAuditBuildingModal(false)}>
+          <div 
+            className="modal-content" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '960px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
           >
             <div className="modal-header">
               <div>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  Master Inventaris Paten
-                </span>
-                <h2 className="modal-title" style={{ marginTop: '2px' }}>
-                  {selectedRoomForAssets.nama_ruangan || selectedRoomForAssets.name} ({selectedRoomForAssets.kode_ruangan || selectedRoomForAssets.code})
-                </h2>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Gedung: <strong>{selectedRoomForAssets.nama_gedung || selectedRoomForAssets.building?.nama_gedung || 'Gedung'}</strong>
-                </span>
+                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ClipboardCheck className="text-primary" size={22} />
+                  Formulir Audit Fisik: Gedung {selectedBuildingForAudit.nama_gedung}
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Kode: {selectedBuildingForAudit.kode_gedung} • Periksa seluruh fisik aset ruangan di gedung ini
+                </div>
               </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setShowManageAssetsModal(false)}
-                title="Tutup"
+              <button 
+                type="button" 
+                className="btn-icon" 
+                onClick={() => setShowAuditBuildingModal(false)}
+                disabled={submittingAudit}
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* Sub-form input aset jika tombol tambah diklik */}
-            {showAssetForm && canManageMaster ? (
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '18px',
-                  marginBottom: '20px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: 'var(--primary)' }}>
-                    {editingAsset ? 'Edit Data Aset' : 'Tambah Aset Baru di Ruangan Ini'}
-                  </h4>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setShowAssetForm(false)}
-                  >
-                    Batal Input
-                  </button>
+            <form onSubmit={handleSubmitAuditBuilding} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+              <div className="modal-body" style={{ overflowY: 'auto', padding: '20px', flex: 1 }}>
+                
+                {/* PERIODE AUDIT */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '20px', background: 'rgba(14, 49, 146, 0.03)', padding: '14px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(14, 49, 146, 0.08)' }}>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem' }}>Periode Audit (Bulan &amp; Tahun) *</label>
+                    <input
+                      type="month"
+                      className="form-control"
+                      value={auditPeriod}
+                      onChange={(e) => setAuditPeriod(e.target.value)}
+                      required
+                      disabled={submittingAudit}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.88rem' }}>Catatan Umum Audit Gedung (Opsional)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Contoh: Audit triwulan selesai seluruh lantai..."
+                      value={auditNotes}
+                      onChange={(e) => setAuditNotes(e.target.value)}
+                      disabled={submittingAudit}
+                    />
+                  </div>
                 </div>
 
-                <form onSubmit={handleSaveAssetForm}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {assetFormItems.map((item, index) => (
-                      <div
-                        key={item.id || index}
+                {loadingBuildingTree ? (
+                  <div style={{ padding: '40px', textAlign: 'center' }}>
+                    <div className="spinner" style={{ width: '32px', height: '32px', margin: '0 auto 12px' }}></div>
+                    <div>Memuat daftar ruangan &amp; aset di gedung ini...</div>
+                  </div>
+                ) : (
+                  <div>
+                    {(!buildingTree || !buildingTree.rooms || buildingTree.rooms.length === 0) ? (
+                      <div className="alert alert-warning">
+                        <AlertTriangle size={18} />
+                        <span>Gedung ini belum memiliki ruangan aktif. Silakan tambahkan ruangan terlebih dahulu di menu Kelola Ruangan.</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {buildingTree.rooms.map((room, rIdx) => {
+                          const roomAssets = room.assets || [];
+
+                          return (
+                            <div 
+                              key={room.id} 
+                              style={{ 
+                                background: 'white', 
+                                border: '1.5px solid var(--border-color)', 
+                                borderRadius: 'var(--radius-xl)', 
+                                overflow: 'hidden',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                              }}
+                            >
+                              {/* HEADER RUANGAN */}
+                              <div style={{ padding: '12px 18px', background: 'rgba(14, 49, 146, 0.04)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800 }}>
+                                    {rIdx + 1}
+                                  </span>
+                                  <div>
+                                    <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>{room.nama_ruangan}</strong>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                                      Kode: {room.kode_ruangan} • Lantai: {room.lantai || '1'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className="status-badge status-in_progress" style={{ fontSize: '0.75rem' }}>
+                                  {roomAssets.length} Aset Terdaftar
+                                </span>
+                              </div>
+
+                              {/* DAFTAR ASET RUANGAN */}
+                              <div style={{ padding: '14px 18px' }}>
+                                {roomAssets.length === 0 ? (
+                                  <div style={{ padding: '14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', background: '#f8fafc', borderRadius: 'var(--radius-md)' }}>
+                                    Belum ada master aset terdaftar di ruangan ini.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                    {roomAssets.map((asset) => {
+                                      const state = auditItemsState[asset.id] || {
+                                        actual: parseInt(asset.jumlah) || 1,
+                                        condition: 'good',
+                                        notes: '',
+                                        preview: ''
+                                      };
+                                      const isDiscrepant = state.actual !== (parseInt(asset.jumlah) || 1) || state.condition !== 'good';
+
+                                      return (
+                                        <div 
+                                          key={asset.id}
+                                          style={{
+                                            padding: '14px 16px',
+                                            borderRadius: 'var(--radius-lg)',
+                                            border: isDiscrepant ? '1.5px solid var(--danger)' : '1px solid var(--border-color)',
+                                            background: isDiscrepant ? 'rgba(225, 29, 72, 0.02)' : '#ffffff',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '10px'
+                                          }}
+                                        >
+                                          {/* ROW 1: INFO & JUMLAH */}
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                            <div>
+                                              <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>{asset.nama_aset}</strong>
+                                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: '6px' }}>({asset.kode_aset})</span>
+                                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                                Paten Master: <strong>{asset.jumlah || 1} Unit</strong>
+                                              </div>
+                                            </div>
+
+                                            {/* JUMLAH AKTUAL INPUT */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Jumlah Riil Fisik:</label>
+                                              <input
+                                                type="number"
+                                                className="form-control"
+                                                min="0"
+                                                value={state.actual}
+                                                onChange={(e) => handleUpdateAuditItem(asset.id, 'actual', parseInt(e.target.value) || 0)}
+                                                style={{ width: '80px', textAlign: 'center', fontWeight: 800 }}
+                                                disabled={submittingAudit}
+                                              />
+                                            </div>
+                                          </div>
+
+                                          {/* ROW 2: KONDISI FISIK BUTTONS */}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Kondisi Fisik:</span>
+                                            <div style={{ display: 'inline-flex', gap: '6px' }}>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleUpdateAuditItem(asset.id, 'condition', 'good')}
+                                                className={`btn btn-sm ${state.condition === 'good' ? 'btn-success' : 'btn-secondary'}`}
+                                                style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                disabled={submittingAudit}
+                                              >
+                                                <Check size={13} /> Bagus (Good)
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleUpdateAuditItem(asset.id, 'condition', 'damaged')}
+                                                className={`btn btn-sm ${state.condition === 'damaged' ? 'btn-danger' : 'btn-secondary'}`}
+                                                style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                disabled={submittingAudit}
+                                              >
+                                                <AlertTriangle size={13} /> Rusak (Damaged)
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleUpdateAuditItem(asset.id, 'condition', 'missing')}
+                                                className={`btn btn-sm ${state.condition === 'missing' ? 'btn-danger' : 'btn-secondary'}`}
+                                                style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                disabled={submittingAudit}
+                                              >
+                                                <X size={13} /> Hilang (Missing)
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          {/* ROW 3: CATATAN & FOTO BUKTI */}
+                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '4px' }}>
+                                            <input
+                                              type="text"
+                                              className="form-control form-control-sm"
+                                              placeholder="Catatan kondisi/kerusakan jika ada..."
+                                              value={state.notes}
+                                              onChange={(e) => handleUpdateAuditItem(asset.id, 'notes', e.target.value)}
+                                              disabled={submittingAudit}
+                                            />
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                                                <Camera size={14} />
+                                                {state.preview ? 'Ganti Foto' : 'Ambil Foto Bukti'}
+                                                <input
+                                                  type="file"
+                                                  accept="image/*"
+                                                  capture="environment"
+                                                  style={{ display: 'none' }}
+                                                  onChange={(e) => handleAuditItemPhoto(asset.id, e.target.files[0])}
+                                                  disabled={submittingAudit}
+                                                />
+                                              </label>
+                                              {state.preview && (
+                                                <img
+                                                  src={state.preview}
+                                                  alt="Preview"
+                                                  style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: '1px solid var(--border-color)' }}
+                                                  onClick={() => setPreviewPhotoUrl(state.preview)}
+                                                  title="Klik untuk perbesar foto"
+                                                />
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+
+              <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAuditBuildingModal(false)}
+                  disabled={submittingAudit}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submittingAudit || loadingBuildingTree || !buildingTree}
+                  style={{ fontWeight: 800, minWidth: '180px' }}
+                >
+                  {submittingAudit ? 'Menyimpan...' : '🚀 Kirim Laporan Audit Gedung'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: KELOLA RUANGAN & MASTER ASET GEDUNG */}
+      {/* ========================================================================= */}
+      {showManageAssetsModal && selectedBuildingForAssets && (
+        <div className="modal-overlay" onClick={() => setShowManageAssetsModal(false)}>
+          <div 
+            className="modal-content" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '980px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+          >
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Box className="text-primary" size={22} />
+                  Kelola Aset: Gedung {selectedBuildingForAssets.nama_gedung}
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Pilih ruangan di bawah untuk menambah, mengedit, atau menghapus master data aset fisik.
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="btn-icon" 
+                onClick={() => setShowManageAssetsModal(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ overflowY: 'auto', padding: '20px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              
+              {/* SIDEBAR PILIH RUANGAN */}
+              <div style={{ width: '260px', flexShrink: 0, borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem' }}>Daftar Ruangan di Gedung Ini:</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '420px', overflowY: 'auto' }}>
+                  {(selectedBuildingForAssets.rooms || []).map(r => {
+                    const isSelected = activeRoomInModal?.id === r.id;
+                    return (
+                      <button
+                        type="button"
+                        key={r.id}
+                        onClick={() => handleSelectRoomForAssets(r)}
                         style={{
-                          background: '#ffffff',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: 'var(--radius-md)',
-                          padding: '12px',
-                          display: 'grid',
-                          gridTemplateColumns: editingAsset ? '1fr' : 'repeat(auto-fit, minmax(160px, 1fr))',
-                          gap: '10px',
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          borderRadius: 'var(--radius-lg)',
+                          border: isSelected ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: isSelected ? 'rgba(14, 49, 146, 0.08)' : '#ffffff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          transition: 'all 0.2s ease'
                         }}
                       >
                         <div>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '3px', display: 'block' }}>
-                            Nama Aset *
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="Contoh: AC Panasonic 2PK"
-                            value={item.nama_aset}
-                            onChange={(e) => handleAssetFormItemChange(index, 'nama_aset', e.target.value)}
-                            required
-                          />
+                          <strong style={{ fontSize: '0.88rem', color: isSelected ? 'var(--primary)' : 'var(--text-primary)', display: 'block' }}>
+                            {r.nama_ruangan}
+                          </strong>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kode: {r.kode_ruangan}</span>
                         </div>
-
-                        <div>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '3px', display: 'block' }}>
-                            Kode Aset *
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="Contoh: AST-1029"
-                            value={item.kode_aset}
-                            onChange={(e) => handleAssetFormItemChange(index, 'kode_aset', e.target.value)}
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '3px', display: 'block' }}>
-                            Jumlah Paten *
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            className="form-control"
-                            value={item.jumlah}
-                            onChange={(e) => handleAssetFormItemChange(index, 'jumlah', e.target.value)}
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '3px', display: 'block' }}>
-                            Kondisi *
-                          </label>
-                          <select
-                            className="form-control form-select"
-                            value={item.status}
-                            onChange={(e) => handleAssetFormItemChange(index, 'status', e.target.value)}
-                            required
-                          >
-                            <option value="active">Baik / Normal</option>
-                            <option value="damaged">Rusak</option>
-                            <option value="repaired">Dalam Perbaikan</option>
-                          </select>
-                        </div>
-                      </div>
-                    ))}
-
-                    {!editingAsset && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={handleAddAssetRow}
-                        style={{ alignSelf: 'flex-start' }}
-                      >
-                        <Plus size={14} /> Tambah Baris Barang Lain
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                    <button
-                      type="submit"
-                      className="btn btn-primary btn-sm"
-                      disabled={savingAsset}
-                      style={{ fontWeight: 700 }}
-                    >
-                      {savingAsset ? 'Menyimpan...' : 'Simpan Master Aset'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            ) : null}
-
-            {/* Header Tindakan */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <strong style={{ fontSize: '0.92rem' }}>
-                Daftar Master Aset ({roomAssetsList.length} Barang Terdaftar)
-              </strong>
-              {canManageMaster && !showAssetForm && (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={handleOpenAddNewAsset}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
-                >
-                  <Plus size={14} /> Tambah Aset di Ruangan Ini
-                </button>
-              )}
-            </div>
-
-            {/* Tabel Aset di Ruangan Ini */}
-            {loadingRoomAssets ? (
-              <div style={{ textAlign: 'center', padding: '30px' }}>
-                <div className="spinner"></div>
-              </div>
-            ) : roomAssetsList.length === 0 ? (
-              <div style={{ padding: '30px', textAlign: 'center', background: '#f9fafb', borderRadius: 'var(--radius-lg)', color: 'var(--text-muted)' }}>
-                <Box size={40} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                <p style={{ margin: 0, fontSize: '0.88rem' }}>
-                  Belum ada master aset yang terdaftar di ruangan ini.
-                </p>
-              </div>
-            ) : (
-              <table className="data-table" style={{ width: '100%', fontSize: '0.88rem' }}>
-                <thead>
-                  <tr>
-                    <th>Kode Aset</th>
-                    <th>Nama Aset</th>
-                    <th style={{ textAlign: 'center' }}>Jumlah Paten</th>
-                    <th>Status Kondisi</th>
-                    {canManageMaster && <th style={{ textAlign: 'right' }}>Aksi</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {roomAssetsList.map((asset) => (
-                    <tr key={asset.id}>
-                      <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{asset.kode_aset}</td>
-                      <td style={{ fontWeight: 500 }}>{asset.nama_aset}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 700 }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            background: '#eff6ff',
-                            color: '#1e40af',
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            fontSize: '0.82rem',
-                          }}
-                        >
-                          {asset.jumlah ?? 1} Unit
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isSelected ? 'var(--primary)' : 'var(--text-secondary)' }}>
+                          {r.total_assets || r.assets?.length || 0}
                         </span>
-                      </td>
-                      <td>{getConditionBadge(asset.status)}</td>
-                      {canManageMaster && (
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '5px' }}>
+                      </button>
+                    );
+                  })}
+
+                  {(!selectedBuildingForAssets.rooms || selectedBuildingForAssets.rooms.length === 0) && (
+                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      Belum ada ruangan.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* KONTEN ASET RUANGAN TERPILIH */}
+              <div style={{ flex: 1, minWidth: '300px' }}>
+                {activeRoomInModal ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+                          Aset di Ruang: <span style={{ color: 'var(--primary)' }}>{activeRoomInModal.nama_ruangan}</span>
+                        </h4>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Kode: {activeRoomInModal.kode_ruangan} • Lantai {activeRoomInModal.lantai || '1'}</div>
+                      </div>
+
+                      {canManageMaster && !showAssetForm && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={handleOpenAddAssetForm}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                        >
+                          <Plus size={15} /> Tambah Aset
+                        </button>
+                      )}
+                    </div>
+
+                    {/* FORM TAMBAH / EDIT ASET */}
+                    {showAssetForm && (
+                      <div className="glass-panel" style={{ padding: '16px 18px', borderRadius: 'var(--radius-xl)', marginBottom: '20px', background: 'rgba(14, 49, 146, 0.02)', border: '1.5px solid rgba(14, 49, 146, 0.2)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <strong style={{ fontSize: '0.95rem', color: 'var(--primary)' }}>
+                            {editingAsset ? `Edit Aset: ${editingAsset.nama_aset}` : 'Tambah Master Aset Baru'}
+                          </strong>
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            onClick={() => setShowAssetForm(false)}
+                            style={{ padding: '4px' }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleSaveAssets}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {assetFormItems.map((item, idx) => (
+                              <div key={item.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr)) 80px 40px', gap: '8px', alignItems: 'center' }}>
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  placeholder="Nama Aset (cth: Meja Kerja)"
+                                  value={item.nama_aset}
+                                  onChange={(e) => handleAssetFieldChange(item.id, 'nama_aset', e.target.value)}
+                                  required
+                                />
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  placeholder="Kode Aset"
+                                  value={item.kode_aset}
+                                  onChange={(e) => handleAssetFieldChange(item.id, 'kode_aset', e.target.value)}
+                                  required
+                                />
+                                <input
+                                  type="number"
+                                  className="form-control form-control-sm"
+                                  placeholder="Jumlah"
+                                  min="1"
+                                  value={item.jumlah}
+                                  onChange={(e) => handleAssetFieldChange(item.id, 'jumlah', e.target.value)}
+                                  style={{ textAlign: 'center' }}
+                                  required
+                                />
+                                {!editingAsset && assetFormItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="btn-icon"
+                                    onClick={() => handleRemoveAssetRow(item.id)}
+                                    style={{ color: 'var(--danger)', height: '34px', width: '34px' }}
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {!editingAsset && (
                             <button
+                              type="button"
                               className="btn btn-secondary btn-sm"
-                              onClick={() => handleOpenEditAsset(asset)}
-                              title="Edit"
+                              onClick={handleAddAssetRow}
+                              style={{ marginTop: '10px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             >
-                              <Edit2 size={13} />
+                              <Plus size={13} /> Tambah Baris Aset Lain
+                            </button>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setShowAssetForm(false)}
+                              disabled={savingAsset}
+                            >
+                              Batal
                             </button>
                             <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleDeleteMasterAsset(asset)}
-                              title="Hapus"
+                              type="submit"
+                              className="btn btn-primary btn-sm"
+                              disabled={savingAsset}
+                              style={{ fontWeight: 700 }}
                             >
-                              <Trash2 size={13} />
+                              {savingAsset ? 'Menyimpan...' : 'Simpan Aset'}
                             </button>
                           </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                        </form>
+                      </div>
+                    )}
 
-            <div className="modal-footer" style={{ marginTop: '20px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowManageAssetsModal(false)}>
-                Tutup
-              </button>
+                    {/* TABEL ASET RUANGAN */}
+                    {loadingRoomAssets ? (
+                      <div style={{ padding: '30px', textAlign: 'center' }}>
+                        <div className="spinner" style={{ width: '28px', height: '28px', margin: '0 auto 10px' }}></div>
+                        <div style={{ fontSize: '0.85rem' }}>Memuat daftar aset...</div>
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Nama &amp; Kode Aset</th>
+                              <th>Jumlah Paten</th>
+                              <th>Status</th>
+                              {canManageMaster && <th style={{ textAlign: 'right' }}>Aksi</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {roomAssetsList.map(a => (
+                              <tr key={a.id}>
+                                <td>
+                                  <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{a.nama_aset}</strong>
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{a.kode_aset}</div>
+                                </td>
+                                <td>
+                                  <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>{a.jumlah || 1}</span> Unit
+                                </td>
+                                <td>
+                                  <span className={`status-badge ${a.status === 'damaged' ? 'status-rejected' : 'status-completed'}`} style={{ fontSize: '0.72rem' }}>
+                                    {a.status === 'damaged' ? 'Rusak' : 'Aktif'}
+                                  </span>
+                                </td>
+                                {canManageMaster && (
+                                  <td style={{ textAlign: 'right' }}>
+                                    <div style={{ display: 'inline-flex', gap: '4px' }}>
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => handleOpenEditAsset(a)}
+                                        style={{ padding: '4px 8px' }}
+                                        title="Edit aset"
+                                      >
+                                        <Edit2 size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => handleDeleteAsset(a)}
+                                        style={{ padding: '4px 8px', color: 'var(--danger)' }}
+                                        title="Hapus aset"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+
+                            {roomAssetsList.length === 0 && (
+                              <tr>
+                                <td colSpan={canManageMaster ? 4 : 3} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                  Belum ada aset terdaftar di ruangan ini. Tekan tombol <strong>"Tambah Aset"</strong> di atas.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    Pilih ruangan di panel kiri untuk melihat dan mengelola asetnya.
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: ATUR JADWAL AUDIT RUANGAN (Supervisor / Admin) */}
+      {/* MODAL 3: PENGATURAN SIKLUS AUDIT GEDUNG */}
       {/* ========================================================================= */}
-      {showScheduleModal && selectedRoomForSchedule && (
-        <div className="modal-backdrop" onClick={() => setShowScheduleModal(false)}>
-          <div
-            className="glass-panel"
-            style={{
-              maxWidth: '500px',
-              width: '92vw',
-              padding: '28px',
-              borderRadius: 'var(--radius-2xl)',
-              background: '#ffffff',
-            }}
-            onClick={(e) => e.stopPropagation()}
+      {showScheduleModal && selectedBuildingForSchedule && (
+        <div className="modal-overlay" onClick={() => !savingSchedule && setShowScheduleModal(false)}>
+          <div 
+            className="modal-content" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '520px', width: '90%' }}
           >
             <div className="modal-header">
               <div>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  Pengaturan Siklus Audit
-                </span>
-                <h2 className="modal-title" style={{ marginTop: '2px' }}>
-                  {selectedRoomForSchedule.nama_ruangan || selectedRoomForSchedule.name}
-                </h2>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Gedung: {selectedRoomForSchedule.nama_gedung || selectedRoomForSchedule.building?.nama_gedung || ''}
-                </span>
+                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar className="text-primary" size={20} />
+                  Siklus Audit: {selectedBuildingForSchedule.nama_gedung}
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Atur frekuensi berkala audit stock opname aset fisik gedung ini.
+                </div>
               </div>
-              <button
-                type="button"
-                className="modal-close-btn"
+              <button 
+                type="button" 
+                className="btn-icon" 
                 onClick={() => setShowScheduleModal(false)}
-                title="Tutup"
+                disabled={savingSchedule}
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSchedule}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>
-                    Frekuensi / Interval Pengecekan *
-                  </label>
+            <form onSubmit={handleSaveBuildingSchedule}>
+              <div className="modal-body" style={{ padding: '20px' }}>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Interval Siklus Audit *</label>
                   <select
-                    className="form-control form-select"
+                    className="form-control"
                     value={scheduleInterval}
                     onChange={(e) => setScheduleInterval(e.target.value)}
-                    required
+                    disabled={savingSchedule}
                   >
-                    <option value="biweekly">Setiap 2 Minggu (14 Hari)</option>
-                    <option value="monthly">1 Bulan Sekali (30 Hari)</option>
-                    <option value="bimonthly">2 Bulan Sekali (60 Hari - Standar)</option>
-                    <option value="quarterly">3 Bulan Sekali / Triwulan (90 Hari)</option>
-                    <option value="custom">Kustom Hari / Tanggal Khusus</option>
+                    <option value="monthly">1 Bulan Sekali (Bulanan)</option>
+                    <option value="bimonthly">2 Bulan Sekali (Dwibulanan - Rekomendasi)</option>
+                    <option value="quarterly">3 Bulan Sekali (Triwulan)</option>
+                    <option value="semi_annually">6 Bulan Sekali (Semester)</option>
+                    <option value="biweekly">2 Minggu Sekali</option>
+                    <option value="custom">Kustom Hari</option>
                   </select>
                 </div>
 
                 {scheduleInterval === 'custom' && (
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 700 }}>
-                      Jumlah Hari Interval *
-                    </label>
+                  <div className="form-group" style={{ marginBottom: '16px' }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Interval dalam Hari *</label>
                     <input
                       type="number"
+                      className="form-control"
                       min="1"
                       max="365"
-                      className="form-control"
                       value={scheduleIntervalDays}
                       onChange={(e) => setScheduleIntervalDays(e.target.value)}
-                      placeholder="Misal: 45"
+                      disabled={savingSchedule}
                       required
                     />
                   </div>
                 )}
 
-                <div className="form-group" style={{ margin: 0 }}>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label className="form-label" style={{ fontWeight: 700 }}>
-                    Target Jatuh Tempo Audit Berikutnya (Next Due Date)
+                    Batas Tanggal Jatuh Tempo Berikutnya (Opsional)
                   </label>
                   <input
                     type="date"
                     className="form-control"
                     value={scheduleNextDue}
                     onChange={(e) => setScheduleNextDue(e.target.value)}
+                    disabled={savingSchedule}
                   />
-                  <small style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '4px', display: 'block' }}>
-                    * Biarkan kosong jika ingin sistem menghitung otomatis berdasarkan interval di atas.
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
+                    * Jika dikosongkan, sistem akan menghitung otomatis berdasarkan interval yang Anda pilih.
                   </small>
                 </div>
               </div>
 
-              <div className="modal-footer" style={{ marginTop: '20px' }}>
+              <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -1534,305 +1701,13 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
                 >
                   Batal
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={savingSchedule} style={{ fontWeight: 700 }}>
-                  {savingSchedule ? 'Menyimpan...' : 'Simpan Pengaturan Jadwal'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 3: FORMULIR AUDIT FISIK RUANGAN (CS & SUPERVISOR) */}
-      {/* ========================================================================= */}
-      {showAuditFormModal && selectedRoomForAudit && (
-        <div className="modal-backdrop" onClick={() => setShowAuditFormModal(false)}>
-          <div
-            className="glass-panel"
-            style={{
-              maxWidth: '820px',
-              width: '94vw',
-              maxHeight: '92vh',
-              overflowY: 'auto',
-              padding: '28px',
-              borderRadius: 'var(--radius-2xl)',
-              background: '#ffffff',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  {editingAudit ? 'Edit Laporan Audit' : 'Cek Fisik Lapangan'}
-                </span>
-                <h2 className="modal-title" style={{ marginTop: '2px' }}>
-                  {selectedRoomForAudit.nama_ruangan || selectedRoomForAudit.name} ({selectedRoomForAudit.kode_ruangan || selectedRoomForAudit.code})
-                </h2>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Gedung: {selectedRoomForAudit.nama_gedung || selectedRoomForAudit.building?.nama_gedung || ''}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setShowAuditFormModal(false)}
-                title="Tutup"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitAuditReport}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                <div className="form-group" style={{ margin: 0, maxWidth: '240px' }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>
-                    Periode Audit *
-                  </label>
-                  <input
-                    type="month"
-                    className="form-control"
-                    value={auditFormPeriod}
-                    onChange={(e) => setAuditFormPeriod(e.target.value)}
-                    required
-                  />
-                </div>
-
-                {/* Quick Action Button */}
-                {auditFormItems.length > 0 && (
-                  <div
-                    style={{
-                      background: '#f0fdf4',
-                      border: '1px solid #bbf7d0',
-                      padding: '12px 16px',
-                      borderRadius: 'var(--radius-lg)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '10px',
-                    }}
-                  >
-                    <div>
-                      <strong style={{ color: '#166534', fontSize: '0.9rem', display: 'block' }}>
-                        Semua Barang Lengkap & Tidak Ada Masalah?
-                      </strong>
-                      <span style={{ fontSize: '0.78rem', color: '#15803d' }}>
-                        Klik tombol di samping untuk otomatis mengisi semua item sebagai lengkap & baik.
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-success btn-sm"
-                      onClick={handleQuickFillAllGood}
-                      style={{ fontWeight: 700 }}
-                    >
-                      <Check size={15} /> Semua Sesuai & Lengkap (1-Klik)
-                    </button>
-                  </div>
-                )}
-
-                {/* Items Checklist Table */}
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700, marginBottom: '10px', display: 'block' }}>
-                    Pemeriksaan Fisik per Barang ({auditFormItems.length} Item Terdaftar di Master)
-                  </label>
-
-                  {auditFormLoadingAssets ? (
-                    <div style={{ textAlign: 'center', padding: '24px' }}>
-                      <div className="spinner"></div>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                        Memuat master aset ruangan...
-                      </p>
-                    </div>
-                  ) : auditFormItems.length === 0 ? (
-                    <div
-                      style={{
-                        padding: '24px',
-                        textAlign: 'center',
-                        background: '#f9fafb',
-                        borderRadius: 'var(--radius-lg)',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      <p style={{ margin: 0, fontSize: '0.88rem' }}>
-                        Belum ada master aset yang terdaftar di ruangan ini. Hubungi Supervisor untuk input master aset terlebih dahulu.
-                      </p>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {auditFormItems.map((item, index) => {
-                        const isDiscrepancy =
-                          item.jumlah_actual !== item.jumlah_expected || item.kondisi !== 'good';
-
-                        return (
-                          <div
-                            key={item.room_asset_id}
-                            style={{
-                              background: isDiscrepancy ? '#fffbeb' : '#f9fafb',
-                              border: isDiscrepancy ? '1.5px solid #fde047' : '1px solid var(--border-color)',
-                              borderRadius: 'var(--radius-lg)',
-                              padding: '14px 16px',
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '10px',
-                                flexWrap: 'wrap',
-                                gap: '8px',
-                              }}
-                            >
-                              <div>
-                                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                                  {item.nama_aset}
-                                </span>
-                                <span style={{ fontSize: '0.78rem', color: 'var(--primary)', marginLeft: '8px', fontWeight: 600 }}>
-                                  ({item.kode_aset})
-                                </span>
-                              </div>
-
-                              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                                Standar Paten: <strong>{item.jumlah_expected} Unit</strong>
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                                gap: '10px',
-                                alignItems: 'center',
-                              }}
-                            >
-                              <div>
-                                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '3px', display: 'block' }}>
-                                  Jumlah Riil Fisik *
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="form-control"
-                                  value={item.jumlah_actual}
-                                  onChange={(e) =>
-                                    handleAuditItemChange(index, 'jumlah_actual', parseInt(e.target.value) || 0)
-                                  }
-                                  required
-                                  style={{
-                                    fontWeight: 700,
-                                    borderColor: item.jumlah_actual !== item.jumlah_expected ? '#eab308' : undefined,
-                                  }}
-                                />
-                              </div>
-
-                              <div>
-                                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '3px', display: 'block' }}>
-                                  Kondisi Fisik *
-                                </label>
-                                <select
-                                  className="form-control form-select"
-                                  value={item.kondisi}
-                                  onChange={(e) => handleAuditItemChange(index, 'kondisi', e.target.value)}
-                                  required
-                                  style={{
-                                    fontWeight: 600,
-                                    color: item.kondisi === 'good' ? '#166534' : '#991b1b',
-                                  }}
-                                >
-                                  <option value="good">Baik / Lengkap</option>
-                                  <option value="damaged">Rusak</option>
-                                  <option value="missing">Hilang / Tidak Ada</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '3px', display: 'block' }}>
-                                  Foto Bukti {isDiscrepancy ? '(Dianjurkan)' : '(Opsional)'}
-                                </label>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="form-control"
-                                  style={{ fontSize: '0.75rem', padding: '5px' }}
-                                  onChange={(e) => handleAuditItemPhotoChange(index, e.target.files[0] || null)}
-                                />
-                              </div>
-                            </div>
-
-                            {isDiscrepancy && (
-                              <div style={{ marginTop: '10px' }}>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  placeholder="Keterangan kendala (misal: 1 unit dibawa ke Ruang B, baut kendur, dll)..."
-                                  value={item.catatan}
-                                  onChange={(e) => handleAuditItemChange(index, 'catatan', e.target.value)}
-                                  style={{ fontSize: '0.82rem' }}
-                                />
-                              </div>
-                            )}
-
-                            {item.foto_preview && (
-                              <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <img
-                                  src={item.foto_preview}
-                                  alt="Preview"
-                                  style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px' }}
-                                />
-                                <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Foto terpilih</span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 700 }}>
-                    Catatan Umum Audit (Opsional)
-                  </label>
-                  <textarea
-                    className="form-control"
-                    rows="2"
-                    placeholder="Catatan tambahan mengenai kondisi umum ruangan..."
-                    value={auditFormNotes}
-                    onChange={(e) => setAuditFormNotes(e.target.value)}
-                  ></textarea>
-                </div>
-              </div>
-
-              <div className="modal-footer" style={{ marginTop: '20px' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowAuditFormModal(false)}
-                  disabled={submittingAudit}
-                >
-                  Batal
-                </button>
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={submittingAudit || auditFormItems.length === 0}
+                  disabled={savingSchedule}
                   style={{ fontWeight: 700 }}
                 >
-                  {submittingAudit
-                    ? 'Menyimpan...'
-                    : editingAudit
-                    ? 'Simpan Perubahan Audit'
-                    : 'Kirim Laporan Audit Fisik'}
+                  {savingSchedule ? 'Menyimpan...' : 'Simpan Pengaturan'}
                 </button>
               </div>
             </form>
@@ -1841,356 +1716,229 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: DETAIL & VERIFIKASI HASIL AUDIT (SUPERVISOR & ADMIN) */}
+      {/* MODAL 4: DETAIL & VERIFIKASI AUDIT (SUPERVISOR) */}
       {/* ========================================================================= */}
       {showVerifyModal && selectedAuditForVerify && (
-        <div className="modal-backdrop" onClick={() => setShowVerifyModal(false)}>
-          <div
-            className="glass-panel"
-            style={{
-              maxWidth: '860px',
-              width: '94vw',
-              maxHeight: '92vh',
-              overflowY: 'auto',
-              padding: '28px',
-              borderRadius: 'var(--radius-2xl)',
-              background: '#ffffff',
-            }}
-            onClick={(e) => e.stopPropagation()}
+        <div className="modal-overlay" onClick={() => !submittingVerify && setShowVerifyModal(false)}>
+          <div 
+            className="modal-content" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '880px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
           >
             <div className="modal-header">
               <div>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  Detail & Verifikasi Stock Opname
-                </span>
-                <h2 className="modal-title" style={{ marginTop: '2px' }}>
-                  Hasil Audit: {selectedAuditForVerify.room_name} ({selectedAuditForVerify.periode})
-                </h2>
+                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ClipboardCheck className="text-primary" size={22} />
+                  Detail Laporan Audit: {selectedAuditForVerify.building_name ? `Gedung ${selectedAuditForVerify.building_name}` : `Ruang ${selectedAuditForVerify.room_name}`}
+                </h3>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Periode: {selectedAuditForVerify.periode} • Tanggal: {selectedAuditForVerify.audit_date} • Auditor: {selectedAuditForVerify.auditor_name || 'Petugas CS'}
+                </div>
               </div>
-              <button
-                type="button"
-                className="modal-close-btn"
+              <button 
+                type="button" 
+                className="btn-icon" 
                 onClick={() => setShowVerifyModal(false)}
-                title="Tutup"
+                disabled={submittingVerify}
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '16px',
-                marginBottom: '18px',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '12px',
-                fontSize: '0.85rem',
-              }}
-            >
-              <div>
-                <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>RUANGAN</span>
-                <strong>{selectedAuditForVerify.room_name} ({selectedAuditForVerify.room_code})</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>GEDUNG</span>
-                <strong>{selectedAuditForVerify.building_name}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>PETUGAS AUDITOR</span>
-                <strong>{selectedAuditForVerify.auditor_name || 'Petugas CS'}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>TANGGAL PELAKSANAAN</span>
-                <strong>{selectedAuditForVerify.audit_date}</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>TOTAL BARANG</span>
-                <strong>{selectedAuditForVerify.total_actual} Fisik / {selectedAuditForVerify.total_expected} Paten</strong>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>STATUS KESESUAIAN</span>
+            <form onSubmit={handleSubmitVerify} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+              <div className="modal-body" style={{ overflowY: 'auto', padding: '20px', flex: 1 }}>
+                
+                {/* DISCREPANCY HIGHLIGHT */}
                 {selectedAuditForVerify.has_discrepancy ? (
-                  <span className="status-badge status-rejected">Ada Selisih / Kerusakan</span>
-                ) : (
-                  <span className="status-badge status-completed">Sesuai & Lengkap</span>
-                )}
-              </div>
-            </div>
-
-            {selectedAuditForVerify.notes && (
-              <div
-                style={{
-                  background: 'rgba(14, 49, 146, 0.04)',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.85rem',
-                  marginBottom: '16px',
-                }}
-              >
-                <strong>Catatan Auditor:</strong> {selectedAuditForVerify.notes}
-              </div>
-            )}
-
-            <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 10px 0' }}>
-              Perbandingan Aset Paten vs Fisik Lapangan
-            </h4>
-            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
-              <table className="data-table" style={{ width: '100%', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr>
-                    <th>Nama & Kode Barang</th>
-                    <th style={{ textAlign: 'center' }}>Paten</th>
-                    <th style={{ textAlign: 'center' }}>Fisik</th>
-                    <th>Kondisi</th>
-                    <th>Foto Bukti</th>
-                    <th>Catatan Petugas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedAuditForVerify.items?.map((item) => {
-                    const isDiff =
-                      item.jumlah_actual !== item.jumlah_expected || item.kondisi !== 'good';
-
-                    return (
-                      <tr
-                        key={item.id}
-                        style={{
-                          background: isDiff ? '#fffbeb' : undefined,
-                        }}
-                      >
-                        <td>
-                          <strong>{item.nama_aset}</strong>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>
-                            {item.kode_aset}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.jumlah_expected} Unit</td>
-                        <td style={{ textAlign: 'center', fontWeight: 700, color: isDiff ? '#dc2626' : '#166534' }}>
-                          {item.jumlah_actual} Unit
-                        </td>
-                        <td>{getConditionBadge(item.kondisi)}</td>
-                        <td>
-                          {item.foto_bukti_url ? (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              onClick={() => setPreviewPhotoUrl(item.foto_bukti_url)}
-                            >
-                              <Camera size={12} /> Lihat Foto
-                            </button>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>-</span>
-                          )}
-                        </td>
-                        <td style={{ color: item.catatan ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                          {item.catatan || '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {canManageMaster && (
-              <form onSubmit={handleSubmitVerify} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 12px 0', color: 'var(--primary)' }}>
-                  Keputusan Verifikasi Supervisor
-                </h4>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <label
-                      style={{
-                        flex: 1,
-                        padding: '12px',
-                        borderRadius: 'var(--radius-lg)',
-                        border: verifyStatus === 'approved' ? '2px solid #16a34a' : '1px solid var(--border-color)',
-                        background: verifyStatus === 'approved' ? '#f0fdf4' : '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="verifyStatus"
-                        value="approved"
-                        checked={verifyStatus === 'approved'}
-                        onChange={() => setVerifyStatus('approved')}
-                      />
-                      <strong style={{ color: '#166534' }}>Setujui Hasil Audit (Approved)</strong>
-                    </label>
-
-                    <label
-                      style={{
-                        flex: 1,
-                        padding: '12px',
-                        borderRadius: 'var(--radius-lg)',
-                        border: verifyStatus === 'rejected' ? '2px solid #dc2626' : '1px solid var(--border-color)',
-                        background: verifyStatus === 'rejected' ? '#fef2f2' : '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="verifyStatus"
-                        value="rejected"
-                        checked={verifyStatus === 'rejected'}
-                        onChange={() => setVerifyStatus('rejected')}
-                      />
-                      <strong style={{ color: '#991b1b' }}>Tolak / Minta Audit Ulang (Rejected)</strong>
-                    </label>
+                  <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
+                    <AlertTriangle size={18} />
+                    <span><strong>Perhatian:</strong> Ditemukan selisih jumlah atau kerusakan aset fisik pada audit ini. Silakan tinjau detail di bawah.</span>
                   </div>
+                ) : (
+                  <div className="alert alert-success" style={{ marginBottom: '16px' }}>
+                    <CheckCircle2 size={18} />
+                    <span>Seluruh aset fisik dilaporkan lengkap dan berkondisi baik sesuai data master.</span>
+                  </div>
+                )}
 
-                  {verifyStatus === 'approved' && (
-                    <div
-                      style={{
-                        background: '#f8fafc',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 'var(--radius-lg)',
-                        padding: '14px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px',
-                      }}
-                    >
-                      {selectedAuditForVerify.has_discrepancy && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                {selectedAuditForVerify.notes && (
+                  <div style={{ background: 'rgba(0,0,0,0.03)', padding: '12px 14px', borderRadius: 'var(--radius-lg)', marginBottom: '16px', fontSize: '0.88rem' }}>
+                    <strong>Catatan Auditor:</strong> {selectedAuditForVerify.notes}
+                  </div>
+                )}
+
+                {/* DAFTAR ITEM AUDIT */}
+                <h4 style={{ margin: '0 0 10px', fontSize: '0.95rem', color: 'var(--text-primary)' }}>Rincian Pemeriksaan Fisik Aset:</h4>
+                <div className="table-responsive" style={{ marginBottom: '20px' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Ruangan</th>
+                        <th>Nama Aset &amp; Kode</th>
+                        <th>Jumlah Paten</th>
+                        <th>Jumlah Riil</th>
+                        <th>Kondisi Fisik</th>
+                        <th>Foto &amp; Catatan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedAuditForVerify.items || []).map(item => {
+                        const isDiscrepant = item.jumlah_actual !== item.jumlah_expected || item.kondisi !== 'good';
+
+                        return (
+                          <tr key={item.id} style={{ background: isDiscrepant ? 'rgba(225, 29, 72, 0.03)' : 'transparent' }}>
+                            <td style={{ fontWeight: 600 }}>{item.room_name || '-'}</td>
+                            <td>
+                              <div style={{ fontWeight: 700 }}>{item.nama_aset}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.kode_aset}</div>
+                            </td>
+                            <td style={{ fontWeight: 700 }}>{item.jumlah_expected}</td>
+                            <td style={{ fontWeight: 800, color: item.jumlah_actual < item.jumlah_expected ? 'var(--danger)' : 'var(--text-primary)' }}>
+                              {item.jumlah_actual}
+                            </td>
+                            <td>
+                              <span className={`status-badge ${item.kondisi === 'good' ? 'status-completed' : 'status-rejected'}`} style={{ fontSize: '0.72rem' }}>
+                                {item.kondisi === 'good' ? 'Bagus' : item.kondisi === 'damaged' ? 'Rusak' : 'Hilang'}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {item.foto_bukti_url && (
+                                  <img
+                                    src={item.foto_bukti_url}
+                                    alt="Bukti"
+                                    style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: '1px solid var(--border-color)' }}
+                                    onClick={() => setPreviewPhotoUrl(item.foto_bukti_url)}
+                                    title="Klik untuk perbesar"
+                                  />
+                                )}
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.catatan || '-'}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* SUPERVISOR VERIFICATION ACTION (IF ROLE PERMITS) */}
+                {canManageMaster && selectedAuditForVerify.status === 'submitted' && (
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '16px' }}>
+                    <h4 style={{ margin: '0 0 12px', fontSize: '1rem', color: 'var(--primary)' }}>Keputusan Verifikasi Supervisor:</h4>
+
+                    <div style={{ display: 'flex', gap: '14px', marginBottom: '14px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 700 }}>
+                        <input
+                          type="radio"
+                          name="verifyStatus"
+                          value="approved"
+                          checked={verifyStatus === 'approved'}
+                          onChange={() => setVerifyStatus('approved')}
+                        />
+                        Setujui Laporan Audit
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 700, color: 'var(--danger)' }}>
+                        <input
+                          type="radio"
+                          name="verifyStatus"
+                          value="rejected"
+                          checked={verifyStatus === 'rejected'}
+                          onChange={() => setVerifyStatus('rejected')}
+                        />
+                        Tolak / Minta Audit Ulang
+                      </label>
+                    </div>
+
+                    {verifyStatus === 'approved' && selectedAuditForVerify.has_discrepancy && (
+                      <div style={{ background: 'rgba(234, 179, 8, 0.1)', padding: '12px 14px', borderRadius: 'var(--radius-lg)', marginBottom: '14px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.88rem' }}>
                           <input
                             type="checkbox"
                             checked={autoCreateFindings}
                             onChange={(e) => setAutoCreateFindings(e.target.checked)}
-                            style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
                           />
-                          <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#b45309' }}>
-                            Otomatis Buat Tiket Temuan Kerusakan (Findings) untuk barang rusak / hilang
-                          </span>
+                          Otomatis Terbitkan Tiket Temuan Kerusakan (Finding) untuk aset yang rusak/hilang
                         </label>
-                      )}
+                      </div>
+                    )}
 
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={syncMasterBaseline}
-                          onChange={(e) => setSyncMasterBaseline(e.target.checked)}
-                          style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
-                        />
-                        <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>
-                          Sinkronisasi Master Paten (Update jumlah baseline master sesuai angka riil fisik)
-                        </span>
-                      </label>
+                    <div className="form-group" style={{ marginBottom: '14px' }}>
+                      <label className="form-label" style={{ fontWeight: 700 }}>Catatan Verifikasi</label>
+                      <textarea
+                        className="form-control"
+                        rows="2"
+                        placeholder="Tulis catatan persetujuan atau alasan penolakan..."
+                        value={verifyNotes}
+                        onChange={(e) => setVerifyNotes(e.target.value)}
+                      />
                     </div>
-                  )}
-
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 700 }}>
-                      Catatan Verifikasi Supervisor
-                    </label>
-                    <textarea
-                      className="form-control"
-                      rows="2"
-                      placeholder="Instruksi atau catatan persetujuan hasil audit..."
-                      value={verifyNotes}
-                      onChange={(e) => setVerifyNotes(e.target.value)}
-                    ></textarea>
                   </div>
-                </div>
+                )}
 
-                <div className="modal-footer" style={{ marginTop: '18px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowVerifyModal(false)}
-                    disabled={submittingVerify}
-                  >
-                    Tutup
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={submittingVerify}
-                    style={{ fontWeight: 700 }}
-                  >
-                    {submittingVerify ? 'Menyimpan...' : 'Simpan Keputusan Verifikasi'}
-                  </button>
-                </div>
-              </form>
-            )}
+              </div>
 
-            {!canManageMaster && (
-              <div className="modal-footer" style={{ marginTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowVerifyModal(false)}>
+              <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowVerifyModal(false)}
+                  disabled={submittingVerify}
+                >
                   Tutup
                 </button>
+
+                {canManageMaster && selectedAuditForVerify.status === 'submitted' && (
+                  <button
+                    type="submit"
+                    className={`btn ${verifyStatus === 'approved' ? 'btn-success' : 'btn-danger'}`}
+                    disabled={submittingVerify}
+                    style={{ fontWeight: 800 }}
+                  >
+                    {submittingVerify ? 'Memproses...' : verifyStatus === 'approved' ? 'Setujui Audit Gedung' : 'Tolak Laporan'}
+                  </button>
+                )}
               </div>
-            )}
+            </form>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 5: PREVIEW FOTO BUKTI */}
+      {/* MODAL 5: PREVIEW FOTO ZOOM */}
       {/* ========================================================================= */}
       {previewPhotoUrl && (
-        <div className="modal-backdrop" onClick={() => setPreviewPhotoUrl(null)} style={{ zIndex: 1000 }}>
-          <div
-            style={{
-              maxWidth: '90vw',
-              maxHeight: '90vh',
-              background: '#000',
-              padding: '8px',
-              borderRadius: '12px',
-              position: 'relative',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="modal-overlay" onClick={() => setPreviewPhotoUrl(null)} style={{ zIndex: 9999 }}>
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+            <img
+              src={previewPhotoUrl}
+              alt="Foto Bukti Fisik"
+              style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: 'var(--radius-lg)', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
+            />
             <button
+              type="button"
               onClick={() => setPreviewPhotoUrl(null)}
               style={{
                 position: 'absolute',
-                top: '12px',
-                right: '12px',
-                background: 'rgba(0,0,0,0.6)',
-                color: '#fff',
-                border: 'none',
+                top: '-15px',
+                right: '-15px',
+                width: '36px',
+                height: '36px',
                 borderRadius: '50%',
-                width: '32px',
-                height: '32px',
+                background: 'white',
+                border: 'none',
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '18px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
               }}
             >
-              <X size={18} />
+              &times;
             </button>
-            <img
-              src={previewPhotoUrl}
-              alt="Foto Bukti"
-              style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: '8px' }}
-            />
           </div>
         </div>
       )}
+
     </div>
   );
 }
-
-
