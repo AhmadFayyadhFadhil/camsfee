@@ -866,10 +866,17 @@ export default function App() {
             <Suspense fallback={<div className="spinner"></div>}>
               {currentTab === 'dashboard' && (
                 <Dashboard 
+                  user={user}
+                  setCurrentTab={selectTab} 
+                  setOpenScanModalOnMount={setOpenScanModalOnMount}
+                  onScanSuccess={(data) => {
+                    setScannedTaskData(data);
+                    selectTab('tasks');
+                  }} 
                   onNavigate={(tab) => selectTab(tab)} 
                   onNavigateWithTask={(task) => {
                     setScannedTaskData(task);
-                    setCurrentTab('tasks');
+                    selectTab('tasks');
                   }} 
                 />
               )}

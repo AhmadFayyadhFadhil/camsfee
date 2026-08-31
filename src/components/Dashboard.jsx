@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount, onScanSuccess }) {
+  const activeUser = user || api.getUser() || {};
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,10 +59,11 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
 
   const todayFormatted = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-  const isAdminOrSupervisor = user.roles && (user.roles.includes('admin') || user.roles.includes('supervisor'));
-  const isPic = user.roles && user.roles.includes('pic');
-  const isCs = user.roles && user.roles.includes('cleaning_service');
-  const isOb = user.roles && user.roles.includes('ob');
+  const userRoles = activeUser.roles || [];
+  const isAdminOrSupervisor = userRoles.includes('admin') || userRoles.includes('supervisor');
+  const isPic = userRoles.includes('pic');
+  const isCs = userRoles.includes('cleaning_service') || userRoles.includes('cs');
+  const isOb = userRoles.includes('ob');
 
   const getDateParams = (p) => {
     const today = new Date();
