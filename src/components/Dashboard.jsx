@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   Image as ImageIcon
 } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
 
 export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount, onScanSuccess }) {
   const [data, setData] = useState(null);
@@ -174,6 +173,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         return;
       }
 
+      const { Html5Qrcode } = await import('html5-qrcode');
       const qrCode = new Html5Qrcode("dashboard-qr-reader");
       inlineQrCodeRef.current = qrCode;
 
