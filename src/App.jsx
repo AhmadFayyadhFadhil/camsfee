@@ -93,9 +93,9 @@ export default function App() {
   const TAB_TITLES = {
     dashboard: 'Dashboard',
     tasks: 'Tugas Harian Saya',
-    cs_adhoc: 'Tugas Mendadak',
+    cs_adhoc: 'Tugas Khusus & Acara',
     verifications: 'Verifikasi Laporan',
-    adhoc_tasks: 'Tugas Mendadak',
+    adhoc_tasks: 'Tugas Khusus & Acara',
     findings: 'Laporan Temuan Kerusakan',
     buildings: 'Kelola Gedung',
     rooms: 'Kelola Ruangan',
@@ -509,7 +509,7 @@ export default function App() {
                   className={`sidebar-link ${currentTab === 'cs_adhoc' ? 'active' : ''}`}
                   onClick={() => selectTab('cs_adhoc')}
                 >
-                  <FileText size={18} /> Tugas Mendadak
+                  <FileText size={18} /> Tugas Khusus & Acara
                 </button>
               </li>
               <li>
@@ -541,7 +541,7 @@ export default function App() {
                     className={`sidebar-link ${currentTab === 'adhoc_tasks' ? 'active' : ''}`}
                     onClick={() => selectTab('adhoc_tasks')}
                   >
-                    <FileText size={18} /> Tugas Mendadak
+                    <FileText size={18} /> Tugas Khusus & Acara
                   </button>
                 </li>
               )}
