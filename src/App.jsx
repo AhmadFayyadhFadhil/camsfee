@@ -715,8 +715,20 @@ export default function App() {
                   {getRoleLabel()}
                 </span>
               </div>
-              <div className="user-avatar" title={`Login sebagai: ${user.name} (${getRoleLabel()})`}>
-                {user.name[0]}
+              <div 
+                className="user-avatar" 
+                title={`Login sebagai: ${user.name} (${getRoleLabel()})`}
+                style={{ overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {user.avatar_url || user.foto_profile ? (
+                  <img 
+                    src={user.avatar_url || user.foto_profile} 
+                    alt={user.name} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  user.name?.[0] || 'U'
+                )}
               </div>
             </div>
 
@@ -794,7 +806,14 @@ export default function App() {
             {currentTab === 'verifications' && <Verifications />}
             {currentTab === 'findings' && <Findings user={user} isOb={isOb} />}
             {currentTab === 'audit_logs' && <AuditLogs />}
-            {currentTab === 'profile' && <Profile user={user} />}
+            {currentTab === 'profile' && (
+              <Profile 
+                user={user} 
+                onUserUpdated={(updated) => {
+                  setUser((prev) => ({ ...prev, ...updated }));
+                }} 
+              />
+            )}
             {currentTab === 'reports' && <Reports />}
             {currentTab === 'app_settings' && (
               <AppSettings 

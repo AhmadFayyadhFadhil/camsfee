@@ -253,6 +253,19 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* ── Grid Layouts ── */
+.grid-2fr-1fr {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .grid-2fr-1fr {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Cards & Panels ── */
 .glass-panel {
   background: #ffffff;
