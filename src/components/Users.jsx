@@ -4,12 +4,13 @@ import { ROLES } from '../utils/constants';
 import { Users, Plus, Edit2, Trash2, Check, X, ShieldAlert, Key } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 
-export default function UsersList() {
+export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
   const confirm = useConfirm();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
 
   // Form State
   const [showForm, setShowForm] = useState(false);
@@ -157,6 +158,53 @@ export default function UsersList() {
       } else {
         setError(err.message || 'Terjadi kesalahan saat menyimpan data.');
       }
+    }
+  };
+
+  const handleToggleStatus = async (user) => {
+    if (!user) return;
+    
+    // Proteksi: jangan izinkan menonaktifkan akun sendiri
+    if (currentUser?.id === user.id) {
+      setError('Anda tidak dapat mengubah status aktif akun Anda sendiri.');
+      return;
+    }
+
+    // Proteksi: Supervisor tidak boleh menonaktifkan Admin
+    if (isSupervisor && user.roles?.includes('admin')) {
+      setError('Supervisor tidak memiliki wewenang untuk mengubah status akun Administrator.');
+      return;
+    }
+
+    const confirmMessage = user.is_active
+      ? `Apakah Anda yakin ingin menonaktifkan akun "${user.name}"? Pengguna ini tidak akan bisa login ke sistem.`
+      : `Apakah Anda yakin ingin mengaktifkan kembali akun "${user.name}"?`;
+
+    const isConfirmed = await confirm({
+      title: `${user.is_active ? 'Nonaktifkan' : 'Aktifkan'} Pengguna`,
+      message: confirmMessage,
+      confirmText: user.is_active ? 'Ya, Nonaktifkan' : 'Ya, Aktifkan',
+      cancelText: 'Batal',
+      type: user.is_active ? 'warning' : 'primary'
+    });
+
+    if (!isConfirmed) return;
+
+    setTogglingId(user.id);
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      const res = await api.patch(`/users/${user.id}/toggle-status`);
+      if (res.success && res.data) {
+        const updatedUser = res.data;
+        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, ...updatedUser, is_active: updatedUser.is_active } : u));
+        setSuccessMsg(res.message || `Status akun ${user.name} berhasil diperbarui.`);
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal mengubah status pengguna.');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -413,9 +461,42 @@ export default function UsersList() {
                     </div>
                   </td>
                   <td>
-                    <span className={`role-badge ${u.is_active ? 'role-cs' : 'role-admin'}`}>
-                      {u.is_active ? 'Aktif' : 'Non-aktif'}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(u)}
+                      disabled={togglingId === u.id || (currentUser?.id === u.id) || (isSupervisor && u.roles?.includes('admin'))}
+                      title={
+                        currentUser?.id === u.id 
+                          ? 'Tidak dapat menonaktifkan akun sendiri'
+                          : isSupervisor && u.roles?.includes('admin')
+                            ? 'Supervisor tidak dapat menonaktifkan Admin'
+                            : `Klik untuk ${u.is_active ? 'Menonaktifkan' : 'Mengaktifkan'} pengguna ini`
+                      }
+                      style={{
+                        cursor: (currentUser?.id === u.id || (isSupervisor && u.roles?.includes('admin'))) ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 12px',
+                        borderRadius: 'var(--radius-full)',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        border: u.is_active ? '1px solid #86efac' : '1px solid #fca5a5',
+                        background: u.is_active ? '#ecfdf5' : '#fef2f2',
+                        color: u.is_active ? '#15803d' : '#b91c1c',
+                        transition: 'all 0.15s ease',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                      }}
+                    >
+                      <span style={{ 
+                        width: '7px', 
+                        height: '7px', 
+                        borderRadius: '50%', 
+                        background: u.is_active ? '#22c55e' : '#ef4444',
+                        display: 'inline-block'
+                      }}></span>
+                      <span>{togglingId === u.id ? 'Memproses...' : u.is_active ? 'Aktif' : 'Non-aktif'}</span>
+                    </button>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px' }}>

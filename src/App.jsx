@@ -586,10 +586,10 @@ export default function App() {
             </>
           )}
 
-          {/* Admin only features */}
-          {isAdmin && (
+          {/* User Management & System Admin */}
+          {(isAdmin || isSupervisor) && (
             <>
-              <li className="sidebar-item-group-title">System Admin</li>
+              <li className="sidebar-item-group-title">{isAdmin ? 'System Admin' : 'Manajemen Pengguna'}</li>
               <li>
                 <button 
                   className={`sidebar-link ${currentTab === 'users' ? 'active' : ''}`}
@@ -598,14 +598,16 @@ export default function App() {
                   <Users size={18} /> Kelola Pengguna
                 </button>
               </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'app_settings' ? 'active' : ''}`}
-                  onClick={() => selectTab('app_settings')}
-                >
-                  <Sliders size={18} /> System Company
-                </button>
-              </li>
+              {isAdmin && (
+                <li>
+                  <button 
+                    className={`sidebar-link ${currentTab === 'app_settings' ? 'active' : ''}`}
+                    onClick={() => selectTab('app_settings')}
+                  >
+                    <Sliders size={18} /> System Company
+                  </button>
+                </li>
+              )}
             </>
           )}
 
@@ -812,7 +814,13 @@ export default function App() {
             {currentTab === 'cs_adhoc' && (
               <CsAdhocTasks onResumeDailyTasks={() => selectTab('tasks')} />
             )}
-            {currentTab === 'users' && <UsersList />}
+            {currentTab === 'users' && (
+              <UsersList 
+                currentUser={user} 
+                isSupervisor={isSupervisor} 
+                isAdmin={isAdmin} 
+              />
+            )}
             {currentTab === 'schedules' && <Schedules />}
             {currentTab === 'tasks' && (
               <CsTasks 
