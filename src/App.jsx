@@ -512,6 +512,14 @@ export default function App() {
                   <FileText size={18} /> Tugas Mendadak
                 </button>
               </li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'room_assets' ? 'active' : ''}`}
+                  onClick={() => selectTab('room_assets')}
+                >
+                  <Box size={18} /> Audit Aset Ruangan
+                </button>
+              </li>
             </>
           )}
 
@@ -846,7 +854,7 @@ export default function App() {
               {currentTab === 'buildings' && <Buildings />}
               {currentTab === 'rooms' && <Rooms />}
               {currentTab === 'checklist_templates' && <ChecklistTemplates />}
-              {currentTab === 'room_assets' && <RoomAssets />}
+              {currentTab === 'room_assets' && <RoomAssets user={user} />}
               {currentTab === 'cleaning_materials' && <CleaningMaterials />}
               {currentTab === 'sla_parameters' && <SlaParameters />}
               {currentTab === 'adhoc_tasks' && <AdhocTaskSupervisor />}
