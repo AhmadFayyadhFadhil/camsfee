@@ -18,8 +18,6 @@ const Notifications = lazy(() => import('./components/Notifications'));
 const AppSettings = lazy(() => import('./components/AppSettings'));
 const ChecklistTemplates = lazy(() => import('./components/ChecklistTemplates'));
 const RoomAssets = lazy(() => import('./components/RoomAssets'));
-const CleaningMaterials = lazy(() => import('./components/CleaningMaterials'));
-const SlaParameters = lazy(() => import('./components/SlaParameters'));
 const AdhocTaskSupervisor = lazy(() => import('./components/AdhocTaskSupervisor'));
 const CsAdhocTasks = lazy(() => import('./components/CsAdhocTasks'));
 import { resolveNotificationTarget } from './utils/notificationRouter';
@@ -45,8 +43,6 @@ import {
   Sliders, 
   Zap, 
   Box, 
-  Sparkles, 
-  Award,
   CheckCircle2,
   RefreshCw
 } from 'lucide-react';
@@ -55,7 +51,7 @@ import { useConfirm } from './context/ConfirmContext.jsx';
 const VALID_TABS = [
   'dashboard', 'tasks', 'cs_adhoc', 'verifications', 'adhoc_tasks',
   'findings', 'buildings', 'rooms', 'checklist_templates', 'room_assets',
-  'cleaning_materials', 'sla_parameters', 'schedules',
+  'schedules',
   'reports', 'users', 'app_settings', 'audit_logs', 'notifications_panel', 'profile'
 ];
 
@@ -102,8 +98,6 @@ export default function App() {
     rooms: 'Kelola Ruangan',
     checklist_templates: 'Template Checklist',
     room_assets: 'Aset & Peralatan Ruangan',
-    cleaning_materials: 'Bahan Kimia & Alat',
-    sla_parameters: 'Parameter Penilaian SLA',
     schedules: 'Jadwal & Penugasan CS',
     reports: 'Ekspor Laporan',
     users: 'Kelola Pengguna',
@@ -615,22 +609,6 @@ export default function App() {
               </li>
               <li>
                 <button 
-                  className={`sidebar-link ${currentTab === 'cleaning_materials' ? 'active' : ''}`}
-                  onClick={() => selectTab('cleaning_materials')}
-                >
-                  <Sparkles size={18} /> Bahan Kimia & Alat
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'sla_parameters' ? 'active' : ''}`}
-                  onClick={() => selectTab('sla_parameters')}
-                >
-                  <Award size={18} /> Parameter SLA
-                </button>
-              </li>
-              <li>
-                <button 
                   className={`sidebar-link ${currentTab === 'schedules' ? 'active' : ''}`}
                   onClick={() => selectTab('schedules')}
                 >
@@ -884,8 +862,6 @@ export default function App() {
               {currentTab === 'rooms' && <Rooms />}
               {currentTab === 'checklist_templates' && <ChecklistTemplates />}
               {currentTab === 'room_assets' && <RoomAssets user={user} />}
-              {currentTab === 'cleaning_materials' && <CleaningMaterials />}
-              {currentTab === 'sla_parameters' && <SlaParameters />}
               {currentTab === 'adhoc_tasks' && <AdhocTaskSupervisor />}
               {currentTab === 'cs_adhoc' && (
                 <CsAdhocTasks onResumeDailyTasks={() => selectTab('tasks')} />

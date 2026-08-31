@@ -154,8 +154,6 @@ function SecureImage({ src, alt, className, style }) {
 export default function Verifications() {
   const confirm = useConfirm();
   const [submissions, setSubmissions] = useState([]);
-  const [slaParams, setSlaParams] = useState([]);
-  const [slaRatings, setSlaRatings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -169,22 +167,9 @@ export default function Verifications() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [subsRes, slaRes] = await Promise.all([
-        api.get('/verifications/pending'),
-        api.get('/sla-parameters?is_active=true&per_page=100', { lookup: true })
-      ]);
-
+      const subsRes = await api.get('/verifications/pending');
       if (subsRes.success) {
         setSubmissions(subsRes.data.data || subsRes.data || []);
-      }
-      if (slaRes.success) {
-        const params = slaRes.data.data || slaRes.data || [];
-        setSlaParams(params);
-        const initialRatings = {};
-        params.forEach(p => {
-          initialRatings[p.id] = p.tipe_penilaian === 'scale_1_5' ? '5' : 'yes';
-        });
-        setSlaRatings(initialRatings);
       }
     } catch (err) {
       if (showLoading) setError(err.message || 'Gagal memuat antrean verifikasi.');
@@ -218,7 +203,7 @@ export default function Verifications() {
   const handleApprove = async () => {
     if (!(await confirm({
       title: 'Setujui Laporan Kebersihan',
-      message: 'Apakah Anda yakin ingin menyetujui laporan kebersihan ini beserta penilaian skor SLA?',
+      message: 'Apakah Anda yakin ingin menyetujui laporan kebersihan ruangan ini?',
       confirmText: 'Ya, Setujui',
       cancelText: 'Batal',
       type: 'info'
@@ -235,17 +220,13 @@ export default function Verifications() {
     try {
       const payload = {
         notes: feedback || 'Laporan disetujui.',
-        sla_ratings: Object.entries(slaRatings).map(([id, val]) => ({
-          sla_parameter_id: id,
-          nilai: String(val)
-        }))
       };
 
       const response = await api.post(`/verifications/${subId}/approve`, payload);
 
       if (response.success) {
         setSubmissions(prev => prev.filter(s => s.id !== subId));
-        setSuccessMsg('Laporan kebersihan berhasil disetujui. Skor SLA tersimpan.');
+        setSuccessMsg('Laporan kebersihan berhasil disetujui.');
         setSelectedSubmission(null);
         setFeedback('');
         fetchPendingSubmissions(false);
@@ -432,93 +413,6 @@ export default function Verifications() {
               <label className="form-label" style={{ fontWeight: 700 }}>Catatan Petugas CS saat Menyerahkan:</label>
               <div style={{ background: 'rgba(0,0,0,0.03)', padding: '12px 14px', borderRadius: 'var(--radius-lg)', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                 {selectedSubmission.notes}
-              </div>
-            </div>
-          )}
-
-          {/* SLA Scorecard Quantitative Grading */}
-          {slaParams.length > 0 && (
-            <div style={{ marginBottom: '24px', background: 'rgba(14, 49, 146, 0.03)', border: '1px solid rgba(14, 49, 146, 0.12)', padding: '18px 20px', borderRadius: 'var(--radius-xl)' }}>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: '1.05rem', color: 'var(--primary)', fontWeight: 700 }}>
-                Scorecard Penilaian Mutu SLA Kebersihan
-              </h3>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 14px 0' }}>
-                Berikan skor standar kebersihan ruangan ini sebelum menyetujui laporan:
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {slaParams.map((param) => (
-                  <div
-                    key={param.id}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '8px',
-                      background: 'white',
-                      padding: '10px 16px',
-                      borderRadius: 'var(--radius-lg)',
-                      border: '1px solid rgba(14, 49, 146, 0.08)'
-                    }}
-                  >
-                    <div>
-                      <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{param.nama_parameter}</strong>
-                      {param.deskripsi && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{param.deskripsi}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      {param.tipe_penilaian === 'scale_1_5' ? (
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          {['1', '2', '3', '4', '5'].map((val) => {
-                            const isSelected = (slaRatings[param.id] || '5') === val;
-                            return (
-                              <button
-                                type="button"
-                                key={val}
-                                onClick={() => setSlaRatings({ ...slaRatings, [param.id]: val })}
-                                style={{
-                                  width: '36px',
-                                  height: '36px',
-                                  borderRadius: '8px',
-                                  border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-                                  background: isSelected ? 'var(--primary)' : 'white',
-                                  color: isSelected ? 'white' : 'var(--text-secondary)',
-                                  fontWeight: 800,
-                                  fontSize: '0.9rem',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {val}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setSlaRatings({ ...slaRatings, [param.id]: 'yes' })}
-                            className={`btn btn-sm ${slaRatings[param.id] === 'yes' ? 'btn-success' : 'btn-secondary'}`}
-                            style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Check size={14} /> Ya (Sesuai SOP)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSlaRatings({ ...slaRatings, [param.id]: 'no' })}
-                            className={`btn btn-sm ${slaRatings[param.id] === 'no' ? 'btn-danger' : 'btn-secondary'}`}
-                            style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <X size={14} /> Tidak Sesuai
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}

@@ -34,8 +34,6 @@ export default function CsTasks({
   onNavigateDashboard 
 }) {
   const [tasks, setTasks] = useState([]);
-  const [availableMaterials, setAvailableMaterials] = useState([]);
-  const [selectedMaterials, setSelectedMaterials] = useState([]);
   const [adhocCount, setAdhocCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -446,17 +444,13 @@ export default function CsTasks({
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const [tasksRes, matRes, adhocRes] = await Promise.all([
+      const [tasksRes, adhocRes] = await Promise.all([
         api.get('/tasks/my-tasks'),
-        api.get('/cleaning-materials?is_active=true&per_page=100', { lookup: true }),
         api.get('/adhoc-tasks?per_page=20', { cache: true })
       ]);
 
       if (tasksRes.success) {
         setTasks(tasksRes.data.data || tasksRes.data || []);
-      }
-      if (matRes.success) {
-        setAvailableMaterials(matRes.data.data || matRes.data || []);
       }
       if (adhocRes.success) {
         const adhocList = adhocRes.data.data || adhocRes.data || [];
@@ -1086,11 +1080,6 @@ export default function CsTasks({
         }
       });
 
-      // Lampirkan bahan pembersih / alat yang dipilih
-      selectedMaterials.forEach((matId, index) => {
-        formData.append(`material_ids[${index}]`, matId);
-      });
-
       formData.append('foto_after_1', compressedPhotos[0] || fotoAfterFiles[0], `after-1-${activeTask.id.substring(0, 8)}.jpg`);
       formData.append('foto_after_2', compressedPhotos[1] || fotoAfterFiles[1], `after-2-${activeTask.id.substring(0, 8)}.jpg`);
       formData.append('foto_after_3', compressedPhotos[2] || fotoAfterFiles[2], `after-3-${activeTask.id.substring(0, 8)}.jpg`);
@@ -1103,7 +1092,6 @@ export default function CsTasks({
         setSuccessMsg('Laporan kebersihan ruangan berhasil dikirim! Menunggu verifikasi dari PIC.');
         setActiveTask(null);
         setChecklistItems([]);
-        setSelectedMaterials([]);
         setSubmissionNotes('');
         setFotoAfterFiles([null, null, null, null]);
         setFotoAfterPreviews([null, null, null, null]);
@@ -1598,55 +1586,8 @@ export default function CsTasks({
                 </div>
               </div>
 
-              {/* STEP 3: BAHAN & CATATAN */}
-              {availableMaterials.length > 0 && (
-                <div className="form-group" style={{ marginBottom: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                  <label className="form-label" style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem' }}>
-                    <FlaskConical size={18} color="var(--primary)" /> Bahan Kimia &amp; Alat yang Digunakan (Ketuk untuk Memilih):
-                  </label>
-                  <p style={{ margin: '2px 0 10px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Pilih sabun, disinfektan, atau alat yang Anda pakai di ruangan ini:
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {availableMaterials.map((mat) => {
-                      const isSelected = selectedMaterials.includes(mat.id);
-                      return (
-                        <button
-                          type="button"
-                          key={mat.id}
-                          onClick={() => {
-                            if (isSelected) {
-                              setSelectedMaterials(selectedMaterials.filter((id) => id !== mat.id));
-                            } else {
-                              setSelectedMaterials([...selectedMaterials, mat.id]);
-                            }
-                          }}
-                          style={{
-                            padding: '8px 14px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            borderRadius: 'var(--radius-lg)',
-                            border: isSelected ? '1.5px solid var(--success)' : '1px solid var(--border-color)',
-                            background: isSelected ? 'rgba(15, 118, 110, 0.12)' : 'white',
-                            color: isSelected ? 'var(--success)' : 'var(--text-primary)',
-                            fontWeight: isSelected ? 700 : 500,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          {isSelected && <Check size={14} />}
-                          <span>{mat.nama_material}</span>
-                          <span style={{ fontSize: '0.72rem', opacity: 0.75 }}>({mat.jenis})</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="form-group" style={{ marginBottom: '24px' }}>
+              {/* STEP 3: CATATAN TAMBAHAN */}
+              <div className="form-group" style={{ marginBottom: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.95rem' }}>Catatan Tambahan Pekerjaan (Opsional)</label>
                 <textarea 
                   className="form-control" 
