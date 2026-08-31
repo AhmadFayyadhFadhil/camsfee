@@ -22,6 +22,7 @@ import {
   FolderOpen
 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
+import { compressImage } from '../utils/imageCompressor';
 
 export default function RoomAssets({ initialRoomId = null, user = null }) {
   const confirm = useConfirm();
@@ -526,10 +527,19 @@ export default function RoomAssets({ initialRoomId = null, user = null }) {
     setAuditFormItems(updated);
   };
 
-  const handleAuditItemPhotoChange = (index, file) => {
+  const handleAuditItemPhotoChange = async (index, file) => {
+    if (!file) {
+      const updated = [...auditFormItems];
+      updated[index].foto_file = null;
+      updated[index].foto_preview = null;
+      setAuditFormItems(updated);
+      return;
+    }
+    const compressed = await compressImage(file, 1600, 1000 * 1024);
+    const finalFile = compressed instanceof File ? compressed : new File([compressed || file], file.name || `audit_${Date.now()}.jpg`, { type: 'image/jpeg' });
     const updated = [...auditFormItems];
-    updated[index].foto_file = file;
-    updated[index].foto_preview = file ? URL.createObjectURL(file) : null;
+    updated[index].foto_file = finalFile;
+    updated[index].foto_preview = URL.createObjectURL(compressed || file);
     setAuditFormItems(updated);
   };
 
