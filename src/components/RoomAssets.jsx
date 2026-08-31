@@ -19,7 +19,7 @@ export default function RoomAssets({ initialRoomId = null }) {
   const [editingAsset, setEditingAsset] = useState(null);
   const [roomId, setRoomId] = useState(initialRoomId || '');
   const [items, setItems] = useState([
-    { id: 'item-1', nama_aset: '', kode_aset: '', merk: '', status: 'active' }
+    { id: 'item-1', nama_aset: '', kode_aset: '', jumlah: 1, status: 'active' }
   ]);
   const [saving, setSaving] = useState(false);
 
@@ -74,7 +74,7 @@ export default function RoomAssets({ initialRoomId = null }) {
     setEditingAsset(null);
     setRoomId(selectedRoomFilter || rooms[0]?.id || '');
     setItems([
-      { id: `item-${Date.now()}-1`, nama_aset: '', kode_aset: generateAssetCode(), merk: '', status: 'active' }
+      { id: `item-${Date.now()}-1`, nama_aset: '', kode_aset: generateAssetCode(), jumlah: 1, status: 'active' }
     ]);
     setShowModal(true);
   };
@@ -87,7 +87,7 @@ export default function RoomAssets({ initialRoomId = null }) {
         id: asset.id,
         nama_aset: asset.nama_aset || '',
         kode_aset: asset.kode_aset || '',
-        merk: asset.merk || '',
+        jumlah: asset.jumlah ?? 1,
         status: asset.status || 'active'
       }
     ]);
@@ -101,7 +101,7 @@ export default function RoomAssets({ initialRoomId = null }) {
         id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         nama_aset: '',
         kode_aset: generateAssetCode(),
-        merk: '',
+        jumlah: 1,
         status: 'active'
       }
     ]);
@@ -112,7 +112,7 @@ export default function RoomAssets({ initialRoomId = null }) {
     setItems(
       updated.length > 0
         ? updated
-        : [{ id: `item-${Date.now()}`, nama_aset: '', kode_aset: generateAssetCode(), merk: '', status: 'active' }]
+        : [{ id: `item-${Date.now()}`, nama_aset: '', kode_aset: generateAssetCode(), jumlah: 1, status: 'active' }]
     );
   };
 
@@ -145,7 +145,7 @@ export default function RoomAssets({ initialRoomId = null }) {
           room_id: roomId,
           nama_aset: singleItem.nama_aset.trim(),
           kode_aset: singleItem.kode_aset.trim(),
-          merk: singleItem.merk ? singleItem.merk.trim() : null,
+          jumlah: singleItem.jumlah ? Math.max(1, parseInt(singleItem.jumlah) || 1) : 1,
           status: singleItem.status || 'active',
         };
         const res = await api.put(`/room-assets/${editingAsset.id}`, payload);
@@ -188,7 +188,7 @@ export default function RoomAssets({ initialRoomId = null }) {
           assets: validItems.map((i) => ({
             nama_aset: i.nama_aset.trim(),
             kode_aset: i.kode_aset.trim(),
-            merk: i.merk ? i.merk.trim() : null,
+            jumlah: i.jumlah ? Math.max(1, parseInt(i.jumlah) || 1) : 1,
             status: i.status || 'active',
           })),
         };
@@ -282,7 +282,7 @@ export default function RoomAssets({ initialRoomId = null }) {
         <input
           type="text"
           className="form-control"
-          placeholder="Cari nama, kode aset, atau merk..."
+          placeholder="Cari nama atau kode aset..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{ maxWidth: '280px' }}
@@ -345,7 +345,7 @@ export default function RoomAssets({ initialRoomId = null }) {
               <tr>
                 <th>Kode Aset</th>
                 <th>Nama Aset</th>
-                <th>Merk / Brand</th>
+                <th>Jumlah</th>
                 <th>Ruangan</th>
                 <th>Status Kondisi</th>
                 <th style={{ textAlign: 'right' }}>Aksi</th>
@@ -360,8 +360,8 @@ export default function RoomAssets({ initialRoomId = null }) {
                   <td style={{ fontWeight: 500 }}>
                     {asset.nama_aset}
                   </td>
-                  <td style={{ color: 'var(--text-secondary)' }}>
-                    {asset.merk || '-'}
+                  <td style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    {asset.jumlah ?? 1}
                   </td>
                   <td>
                     <span style={{ fontWeight: 500 }}>{asset.room_name || asset.room?.nama_ruangan}</span>
@@ -531,14 +531,16 @@ export default function RoomAssets({ initialRoomId = null }) {
 
                           <div>
                             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '4px', display: 'block' }}>
-                              Merk / Brand
+                              Jumlah *
                             </label>
                             <input
-                              type="text"
+                              type="number"
+                              min="1"
                               className="form-control"
-                              placeholder="Contoh: Daikin, Toto, Informa"
-                              value={item.merk}
-                              onChange={(e) => handleItemChange(index, 'merk', e.target.value)}
+                              placeholder="Contoh: 1, 2, 5"
+                              value={item.jumlah}
+                              onChange={(e) => handleItemChange(index, 'jumlah', e.target.value)}
+                              required
                             />
                           </div>
 
