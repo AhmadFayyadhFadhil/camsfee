@@ -1042,10 +1042,12 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
           id: b.building_id,
           name: b.building_name,
           code: b.building_code,
-          radius_meter: 250,
-          latitude: -7.643212,
-          longitude: 112.698765
+          radius_meter: b.radius_meter || 250,
+          latitude: b.latitude,
+          longitude: b.longitude
         }))} 
+        inspectionTrail={data?.inspection_trail || []}
+        onNavigateBuildings={() => setCurrentTab && setCurrentTab('buildings')}
       />
 
       {/* Building Details Grid Modal / Section */}

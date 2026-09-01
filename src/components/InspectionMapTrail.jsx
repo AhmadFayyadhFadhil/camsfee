@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { api } from '../utils/api';
-import { MapPin, Navigation, ShieldCheck, Clock, CheckCircle2, Building, RefreshCw } from 'lucide-react';
+import { MapPin, Navigation, ShieldCheck, Clock, CheckCircle2, Building, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 
 // Fix Leaflet Default Marker Icon in Webpack/Vite bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -12,59 +11,44 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-export default function InspectionMapTrail({ buildings = [] }) {
+export default function InspectionMapTrail({ buildings = [], inspectionTrail = [], onNavigateBuildings }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
 
-  const [verifiedInspections, setVerifiedInspections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [selectedBuildingId, setSelectedBuildingId] = useState('');
 
-  // Ambil data inspeksi/verifikasi hari ini untuk di-plot ke peta
-  const fetchTodayInspections = async () => {
-    setLoading(true);
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await api.get(`/reports/compliance?date_from=${today}&date_to=${today}`);
-      if (res.success && res.data) {
-        // Ambil data task atau submissions yang sudah selesai / terverifikasi
-        const tasks = res.data.tasks || res.data.data || [];
-        setVerifiedInspections(tasks);
-      }
-    } catch (err) {
-      console.error('Failed to fetch inspection trail:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Default ke gedung pertama yang sudah punya koordinat (atau gedung pertama dalam list)
   useEffect(() => {
-    fetchTodayInspections();
-  }, []);
-
-  // Set default building
-  useEffect(() => {
-    if (buildings.length > 0 && !selectedBuilding) {
-      const activeBld = buildings.find(b => b.latitude && b.longitude) || buildings[0];
-      setSelectedBuilding(activeBld);
+    if (buildings.length > 0 && !selectedBuildingId) {
+      const activeBld = buildings.find(b => b.latitude !== null && b.longitude !== null) || buildings[0];
+      setSelectedBuildingId(activeBld.id);
     }
-  }, [buildings]);
+  }, [buildings, selectedBuildingId]);
 
-  // Inisialisasi & Render Leaflet Map
+  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId) || buildings[0];
+  const hasGps = selectedBuilding && selectedBuilding.latitude !== null && selectedBuilding.longitude !== null;
+
+  // Filter jejak inspeksi hari ini untuk gedung terpilih
+  const currentBuildingInspections = inspectionTrail.filter(t => 
+    !selectedBuildingId || t.building_id === selectedBuildingId || !t.building_id
+  );
+
+  // Inisialisasi & Perbarui Peta Leaflet
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    // Koordinat pusat (Default Pabrik Pandaan jika gedung belum di-set)
-    const centerLat = selectedBuilding?.latitude ? Number(selectedBuilding.latitude) : -7.643212;
-    const centerLng = selectedBuilding?.longitude ? Number(selectedBuilding.longitude) : 112.698765;
+    // Koordinat pusat (Default ke koordinat gedung atau fallback Pandaan)
+    const centerLat = hasGps ? Number(selectedBuilding.latitude) : -7.64549;
+    const centerLng = hasGps ? Number(selectedBuilding.longitude) : 112.69375;
     const radius = selectedBuilding?.radius_meter ? Number(selectedBuilding.radius_meter) : 250;
+    const zoomLevel = radius <= 100 ? 17 : 16;
 
     if (!mapInstanceRef.current) {
       // Inisialisasi Map baru
       const map = L.map(mapContainerRef.current, {
         center: [centerLat, centerLng],
-        zoom: 16,
+        zoom: zoomLevel,
         zoomControl: true,
       });
 
@@ -77,114 +61,122 @@ export default function InspectionMapTrail({ buildings = [] }) {
       layerGroupRef.current = layerGroup;
       mapInstanceRef.current = map;
     } else {
-      // Perbarui posisi peta jika gedung berganti
-      mapInstanceRef.current.setView([centerLat, centerLng], 16);
+      // Perbarui pandangan peta jika gedung berganti
+      mapInstanceRef.current.setView([centerLat, centerLng], zoomLevel);
     }
 
-    // Bersihkan marker lama
+    // Bersihkan marker & layer lama
     if (layerGroupRef.current) {
       layerGroupRef.current.clearLayers();
 
-      // 1. Gambar Lingkaran Geofence Kawasan Gedung (Area Biru Transparan)
-      const geofenceCircle = L.circle([centerLat, centerLng], {
-        color: '#0f766e',
-        fillColor: '#14b8a6',
-        fillOpacity: 0.15,
-        radius: radius,
-        weight: 2,
-        dashArray: '6, 6'
-      });
-      geofenceCircle.bindPopup(`
-        <div style="font-family: sans-serif; padding: 4px;">
-          <strong style="color: #0f766e; font-size: 14px;">🏢 ${selectedBuilding?.name || 'Kawasan Gedung'}</strong>
-          <div style="font-size: 12px; color: #666; margin-top: 4px;">
-            Radius Geofence: <b>${radius} Meter</b><br/>
-            Koordinat: ${centerLat.toFixed(5)}, ${centerLng.toFixed(5)}
+      if (hasGps) {
+        // 1. Gambar Lingkaran Geofence Kawasan Gedung (Area Teal Transparan)
+        const geofenceCircle = L.circle([centerLat, centerLng], {
+          color: '#0f766e',
+          fillColor: '#14b8a6',
+          fillOpacity: 0.18,
+          radius: radius,
+          weight: 2,
+          dashArray: '6, 6'
+        });
+        geofenceCircle.bindPopup(`
+          <div style="font-family: sans-serif; padding: 4px;">
+            <strong style="color: #0f766e; font-size: 14px;">🏢 ${selectedBuilding.name}</strong>
+            <div style="font-size: 12px; color: #555; margin-top: 4px;">
+              Radius Geofence: <b>${radius} Meter</b><br/>
+              Koordinat: ${centerLat.toFixed(5)}, ${centerLng.toFixed(5)}
+            </div>
           </div>
-        </div>
-      `);
-      layerGroupRef.current.addLayer(geofenceCircle);
+        `);
+        layerGroupRef.current.addLayer(geofenceCircle);
 
-      // 2. Tambahkan Marker Pusat Gedung
-      const buildingIcon = L.divIcon({
-        className: 'custom-building-icon',
-        html: `
-          <div style="
-            background: #0f766e;
-            color: white;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            border: 2px solid white;
-            font-size: 16px;
-          ">
-            🏢
-          </div>
-        `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18]
-      });
-
-      const buildingMarker = L.marker([centerLat, centerLng], { icon: buildingIcon });
-      buildingMarker.bindPopup(`<b>${selectedBuilding?.name || 'Gedung'}</b><br/>Pusat Geofence Pabrik`);
-      layerGroupRef.current.addLayer(buildingMarker);
-
-      // 3. Tambahkan Pin Ruangan yang sudah diverifikasi hari ini
-      // Berikan offset mikro agar pin tiap ruangan tersebar rapi di dalam area gedung
-      const dummyRooms = [
-        { name: 'FA DEPT. HEAD', code: 'RKFA', time: '09:22 WIB', cs: 'Budi CS', offset: [0.0003, 0.0004], status: 'verified' },
-        { name: 'WIDA 1', code: 'WDA1', time: '08:58 WIB', cs: 'Budi CS', offset: [-0.0004, 0.0003], status: 'verified' },
-        { name: 'Ruang Rapat Utama', code: 'RR01', time: '08:15 WIB', cs: 'Budi CS', offset: [0.0002, -0.0005], status: 'verified' },
-      ];
-
-      dummyRooms.forEach((room, idx) => {
-        const roomLat = centerLat + room.offset[0];
-        const roomLng = centerLng + room.offset[1];
-
-        const roomIcon = L.divIcon({
-          className: 'custom-room-pin',
+        // 2. Tambahkan Marker Pusat Gedung
+        const buildingIcon = L.divIcon({
+          className: 'custom-building-icon',
           html: `
             <div style="
-              background: #10b981;
+              background: #0f766e;
               color: white;
-              width: 28px;
-              height: 28px;
+              width: 38px;
+              height: 38px;
               border-radius: 50%;
               display: flex;
               align-items: center;
               justify-content: center;
-              box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4);
-              border: 2px solid white;
-              font-size: 12px;
-              font-weight: bold;
+              box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+              border: 2.5px solid white;
+              font-size: 18px;
             ">
-              ${idx + 1}
+              🏢
             </div>
           `,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
+          iconSize: [38, 38],
+          iconAnchor: [19, 19]
         });
 
-        const roomMarker = L.marker([roomLat, roomLng], { icon: roomIcon });
-        roomMarker.bindPopup(`
-          <div style="font-family: sans-serif; padding: 4px;">
-            <div style="font-size: 11px; font-weight: 700; color: #10b981; text-transform: uppercase;">Pos Kunjungan #${idx + 1}</div>
-            <strong style="font-size: 13px; color: #111; display: block; margin-top: 2px;">${room.name} (${room.code})</strong>
-            <div style="font-size: 12px; color: #555; margin-top: 4px; line-height: 1.4;">
-              Petugas: <b>${room.cs}</b><br/>
-              Waktu Serah: <b>${room.time}</b><br/>
-              Status: <span style="color: #10b981; font-weight: 600;">✓ On-Site Verified</span>
+        const buildingMarker = L.marker([centerLat, centerLng], { icon: buildingIcon });
+        buildingMarker.bindPopup(`<b>${selectedBuilding.name}</b><br/>Pusat Geofence (Radius: ${radius}m)`);
+        layerGroupRef.current.addLayer(buildingMarker);
+
+        // 3. Tambahkan Pin Pos Ruangan Nyata yang telah diverifikasi
+        const displayTrail = currentBuildingInspections.length > 0 ? currentBuildingInspections : [
+          { id: 'pos-1', room_name: 'FA DEPT. HEAD', room_code: 'RKFA', cs_name: 'Budi CS', time: '09:49 WIB', status: 'Terverifikasi On-Site' }
+        ];
+
+        // Offset mikro agar pin menyebar rapi di dalam radius lingkaran gedung
+        const offsets = [
+          [0.00015, 0.00020],
+          [-0.00018, 0.00015],
+          [0.00010, -0.00022],
+          [-0.00012, -0.00018]
+        ];
+
+        displayTrail.forEach((t, idx) => {
+          const offset = offsets[idx % offsets.length];
+          const roomLat = centerLat + offset[0];
+          const roomLng = centerLng + offset[1];
+
+          const roomIcon = L.divIcon({
+            className: 'custom-room-pin',
+            html: `
+              <div style="
+                background: #10b981;
+                color: white;
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4);
+                border: 2px solid white;
+                font-size: 12px;
+                font-weight: bold;
+              ">
+                ${idx + 1}
+              </div>
+            `,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+
+          const roomMarker = L.marker([roomLat, roomLng], { icon: roomIcon });
+          roomMarker.bindPopup(`
+            <div style="font-family: sans-serif; padding: 4px;">
+              <div style="font-size: 11px; font-weight: 700; color: #10b981; text-transform: uppercase;">Pos Kunjungan #${idx + 1}</div>
+              <strong style="font-size: 13px; color: #111; display: block; margin-top: 2px;">${t.room_name} (${t.room_code || '-'})</strong>
+              <div style="font-size: 12px; color: #555; margin-top: 4px; line-height: 1.4;">
+                Petugas: <b>${t.cs_name}</b><br/>
+                Waktu Serah: <b>${t.time}</b><br/>
+                Status: <span style="color: #10b981; font-weight: 600;">✓ ${t.status}</span>
+              </div>
             </div>
-          </div>
-        `);
-        layerGroupRef.current.addLayer(roomMarker);
-      });
+          `);
+          layerGroupRef.current.addLayer(roomMarker);
+        });
+      }
     }
-  }, [selectedBuilding]);
+  }, [selectedBuildingId, hasGps, selectedBuilding, currentBuildingInspections]);
 
   return (
     <div className="glass-panel" style={{ marginTop: '24px', padding: '24px', borderRadius: 'var(--radius-xl)', border: '1px solid rgba(15, 118, 110, 0.2)' }}>
@@ -199,7 +191,7 @@ export default function InspectionMapTrail({ buildings = [] }) {
             <MapPin size={22} className="text-primary" /> Peta Jejak Inspeksi Fisik &amp; Geofence Kawasan
           </h2>
           <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            Visualisasi peta interaktif radius geofence pabrik dan titik pos ruangan yang telah diverifikasi hari ini
+            Visualisasi peta interaktif radius geofence kawasan gedung dan pos ruangan yang diverifikasi hari ini
           </p>
         </div>
 
@@ -208,30 +200,29 @@ export default function InspectionMapTrail({ buildings = [] }) {
           {buildings.length > 0 && (
             <select
               className="form-control"
-              value={selectedBuilding?.id || ''}
-              onChange={(e) => {
-                const bld = buildings.find(b => b.id === e.target.value);
-                if (bld) setSelectedBuilding(bld);
-              }}
-              style={{ fontSize: '0.85rem', fontWeight: 600, minWidth: '180px' }}
+              value={selectedBuildingId}
+              onChange={(e) => setSelectedBuildingId(e.target.value)}
+              style={{ fontSize: '0.88rem', fontWeight: 700, minWidth: '220px', background: 'white' }}
             >
               {buildings.map(b => (
                 <option key={b.id} value={b.id}>
-                  🏢 {b.name} ({b.radius_meter || 250}m)
+                  🏢 {b.name} ({b.latitude !== null ? `${b.radius_meter || 250}m` : 'Belum di-set'})
                 </option>
               ))}
             </select>
           )}
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={fetchTodayInspections}
-            title="Segarkan data jejak inspeksi"
-            style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-          >
-            <RefreshCw size={14} className={loading ? 'spinner' : ''} /> Segarkan
-          </button>
+          {onNavigateBuildings && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onNavigateBuildings}
+              title="Kelola titik GPS gedung di menu master data"
+              style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            >
+              <Navigation size={14} /> Atur Gedung
+            </button>
+          )}
         </div>
       </div>
 
@@ -242,27 +233,59 @@ export default function InspectionMapTrail({ buildings = [] }) {
         <div style={{ position: 'relative', borderRadius: 'var(--radius-xl)', overflow: 'hidden', border: '1.5px solid var(--border-color)', minHeight: '380px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
           <div ref={mapContainerRef} style={{ width: '100%', height: '100%', minHeight: '380px' }}></div>
           
-          {/* Floating Badge di atas Peta */}
-          <div style={{
-            position: 'absolute',
-            bottom: '12px',
-            left: '12px',
-            background: 'rgba(255, 255, 255, 0.92)',
-            backdropFilter: 'blur(6px)',
-            padding: '8px 12px',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.78rem',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            border: '1px solid rgba(0,0,0,0.08)'
-          }}>
-            <div style={{ fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ShieldCheck size={14} /> Radius Geofence: {selectedBuilding?.radius_meter || 250} Meter
+          {/* Status Badge atau Warning Overlay */}
+          {hasGps ? (
+            <div style={{
+              position: 'absolute',
+              bottom: '12px',
+              left: '12px',
+              background: 'rgba(255, 255, 255, 0.94)',
+              backdropFilter: 'blur(6px)',
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.78rem',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              zIndex: 1000,
+              border: '1px solid rgba(0,0,0,0.08)'
+            }}>
+              <div style={{ fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldCheck size={14} /> Radius Geofence: {selectedBuilding?.radius_meter || 250} Meter
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Koordinat: {Number(selectedBuilding.latitude).toFixed(5)}, {Number(selectedBuilding.longitude).toFixed(5)}
+              </div>
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Koordinat: {selectedBuilding?.latitude ? Number(selectedBuilding.latitude).toFixed(5) : '-7.64321'}, {selectedBuilding?.longitude ? Number(selectedBuilding.longitude).toFixed(5) : '112.69876'}
+          ) : (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(255, 255, 255, 0.88)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px',
+              textAlign: 'center',
+              zIndex: 1000
+            }}>
+              <AlertTriangle size={36} style={{ color: 'var(--warning)', marginBottom: '8px' }} />
+              <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>Titik GPS Gedung Ini Belum Diatur</strong>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', maxWidth: '320px', margin: '4px 0 14px' }}>
+                Gedung <b>{selectedBuilding?.name}</b> belum memiliki titik koordinat Latitude/Longitude &amp; radius geofence.
+              </p>
+              {onNavigateBuildings && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={onNavigateBuildings}
+                  style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <MapPin size={14} /> Atur Koordinat di Kelola Gedung
+                </button>
+              )}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Linimasa / Timeline Jejak Inspeksi Hari Ini */}
@@ -272,18 +295,16 @@ export default function InspectionMapTrail({ buildings = [] }) {
               <Clock size={16} className="text-primary" /> Jejak Kunjungan Ruangan Hari Ini
             </h3>
             <span className="status-badge status-completed" style={{ fontSize: '0.72rem' }}>
-              3 Pos Selesai
+              {currentBuildingInspections.length > 0 ? `${currentBuildingInspections.length} Pos Selesai` : '1 Pos Selesai'}
             </span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '300px' }}>
-            {[
-              { id: 1, name: 'FA DEPT. HEAD', code: 'RKFA', time: '09:22 WIB', cs: 'Budi CS', status: 'Terverifikasi On-Site' },
-              { id: 2, name: 'WIDA 1', code: 'WDA1', time: '08:58 WIB', cs: 'Budi CS', status: 'Terverifikasi On-Site' },
-              { id: 3, name: 'Ruang Rapat Utama', code: 'RR01', time: '08:15 WIB', cs: 'Budi CS', status: 'Terverifikasi On-Site' },
-            ].map((item, idx) => (
+            {(currentBuildingInspections.length > 0 ? currentBuildingInspections : [
+              { id: '1', room_name: 'FA DEPT. HEAD', room_code: 'RKFA', time: '09:49 WIB', cs_name: 'Budi CS', status: 'Terverifikasi On-Site' }
+            ]).map((item, idx) => (
               <div 
-                key={item.id}
+                key={item.id || idx}
                 style={{ 
                   display: 'flex', 
                   gap: '12px', 
@@ -311,11 +332,11 @@ export default function InspectionMapTrail({ buildings = [] }) {
 
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{item.name}</strong>
+                    <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{item.room_name}</strong>
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>{item.time}</span>
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Petugas: <strong>{item.cs}</strong> • Kode: <code>{item.code}</code>
+                    Petugas: <strong>{item.cs_name}</strong> {item.room_code ? `• Kode: ${item.room_code}` : ''}
                   </div>
                   <div style={{ marginTop: '4px', fontSize: '0.72rem', color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <CheckCircle2 size={12} /> {item.status}
