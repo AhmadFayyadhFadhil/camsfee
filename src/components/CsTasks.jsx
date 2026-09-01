@@ -388,14 +388,30 @@ export default function CsTasks({
         config,
         async (decodedText) => {
           const cleanText = decodedText.trim();
-          const targetRoomCode = (scanningTask.room?.code || '').trim();
-          const targetRoomId = (scanningTask.room_id || scanningTask.room?.id || '').trim();
-          const targetRoomToken = (scanningTask.room?.qr_code_token || '').trim();
+          let scannedRoomId = '';
+          let scannedToken = '';
+          try {
+            const parsed = JSON.parse(cleanText);
+            scannedRoomId = (parsed.room_id || '').trim().toLowerCase();
+            scannedToken = (parsed.token || '').trim().toLowerCase();
+          } catch (e) {
+            scannedRoomId = cleanText.toLowerCase();
+          }
 
-          const isMatch = (cleanText === targetRoomCode || cleanText === targetRoomId || cleanText === targetRoomToken);
+          const targetRoomCode = (scanningTask.room?.code || '').trim().toLowerCase();
+          const targetRoomId = (scanningTask.room_id || scanningTask.room?.id || '').trim().toLowerCase();
+          const targetRoomToken = (scanningTask.room?.qr_code_token || '').trim().toLowerCase();
+          const targetRoomName = scanningTask.room?.name || 'Ruangan Terkait';
+          const cleanLower = cleanText.toLowerCase();
+
+          const isMatch = (
+            (targetRoomId && (scannedRoomId === targetRoomId || cleanLower === targetRoomId)) ||
+            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower === targetRoomCode)) ||
+            (targetRoomToken && (scannedToken === targetRoomToken || cleanLower === targetRoomToken))
+          );
 
           if (!isMatch) {
-            setScannerError(`QR Code tidak cocok! Anda memindai '${cleanText}', sedangkan tugas ini adalah untuk '${scanningTask.room?.name || 'Ruangan'}' (${targetRoomCode}).`);
+            setScannerError(`QR Code tidak cocok! Anda memindai QR ruangan lain, sedangkan tugas ini adalah untuk '${targetRoomName}' (${targetRoomCode.toUpperCase()}).`);
             return;
           }
 
@@ -406,7 +422,7 @@ export default function CsTasks({
 
             const payload = {
               room_id: scanningTask.room_id || scanningTask.room?.id,
-              qr_code_token: cleanText,
+              qr_code_token: scannedToken || cleanText,
               task_id: scanningTask.id
             };
 

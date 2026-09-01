@@ -347,11 +347,29 @@ export default function Verifications() {
         async (decodedText) => {
           // QR Decoded!
           const cleanText = decodedText.trim();
-          const targetRoomCode = (selectedSubmission?.task?.room?.code || '').trim();
-          const targetRoomId = (selectedSubmission?.task?.room?.id || '').trim();
-          const targetRoomName = selectedSubmission?.task?.room?.name || 'Ruangan Terkait';
+          let scannedRoomId = '';
+          let scannedToken = '';
+          try {
+            const parsed = JSON.parse(cleanText);
+            scannedRoomId = (parsed.room_id || '').trim().toLowerCase();
+            scannedToken = (parsed.token || '').trim().toLowerCase();
+          } catch (e) {
+            scannedRoomId = cleanText.toLowerCase();
+          }
 
-          if (cleanText === targetRoomCode || cleanText === targetRoomId) {
+          const targetRoomCode = (selectedSubmission?.task?.room?.code || '').trim().toLowerCase();
+          const targetRoomId = (selectedSubmission?.task?.room?.id || '').trim().toLowerCase();
+          const targetRoomToken = (selectedSubmission?.task?.room?.qr_code_token || '').trim().toLowerCase();
+          const targetRoomName = selectedSubmission?.task?.room?.name || 'Ruangan Terkait';
+          const cleanLower = cleanText.toLowerCase();
+
+          const isMatch = (
+            (targetRoomId && (scannedRoomId === targetRoomId || cleanLower === targetRoomId)) ||
+            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower === targetRoomCode)) ||
+            (targetRoomToken && (scannedToken === targetRoomToken || cleanLower === targetRoomToken))
+          );
+
+          if (isMatch) {
             // MATCH!
             await handleStopSupervisorScan();
             setIsQrUnlocked(true);
@@ -363,7 +381,7 @@ export default function Verifications() {
 
             setSuccessMsg(`Lokasi fisik terkonfirmasi: Ruang ${targetRoomName}! Kunci persetujuan dibuka.`);
           } else {
-            setScannerError(`QR Code ruangan tidak cocok! Anda memindai '${cleanText}', sedangkan laporan ini adalah untuk ruang '${targetRoomName}' (${targetRoomCode}).`);
+            setScannerError(`QR Code ruangan tidak cocok! Anda memindai QR ruangan lain, sedangkan laporan ini adalah untuk ruang '${targetRoomName}' (${targetRoomCode.toUpperCase()}).`);
           }
         },
         (errorMessage) => {
