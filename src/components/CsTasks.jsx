@@ -906,16 +906,11 @@ export default function CsTasks({
           onClick={() => handleScanQr(t)}
           style={{ 
             width: isMobile ? '100%' : 'auto', 
-            fontWeight: 800, 
-            display: 'inline-flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            gap: '6px', 
-            boxShadow: '0 2px 8px rgba(14, 49, 146, 0.2)' 
+            fontWeight: 700, 
+            fontSize: '0.82rem'
           }}
           title="Scan QR Code fisik di pintu ruangan untuk mulai pengerjaan"
         >
-          <Camera size={15} />
           Scan QR Ruangan
         </button>
       );
@@ -927,23 +922,18 @@ export default function CsTasks({
           <button 
             className={`btn btn-warning ${isMobile ? '' : 'btn-sm'}`}
             onClick={() => handleResumeTask(t)}
-            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 700, fontSize: '0.82rem' }}
             title="Lanjutkan pengisian form checklist yang sedang dikerjakan"
           >
-            <Play size={14} />
             Lanjutkan Isi
           </button>
         );
       }
       return (
         <span style={{ 
-          fontSize: '0.82rem', 
-          color: 'var(--on-surface-variant)', 
-          background: 'var(--surface-container-high)', 
-          padding: '6px 12px', 
-          borderRadius: 'var(--radius-md)', 
-          fontWeight: 600,
-          display: 'inline-block'
+          fontSize: '0.8rem', 
+          color: 'var(--text-secondary)', 
+          fontWeight: 600
         }}>
           Dikerjakan {workerName}
         </span>
@@ -952,8 +942,7 @@ export default function CsTasks({
 
     if (t.status === 'waiting_verification') {
       return (
-        <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <Clock size={14} />
+        <span style={{ fontSize: '0.8rem', color: 'var(--warning)', fontWeight: 600 }}>
           Menunggu PIC
         </span>
       );
@@ -961,8 +950,7 @@ export default function CsTasks({
 
     if (t.status === 'completed') {
       return (
-        <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <CheckCircle2 size={14} />
+        <span style={{ fontSize: '0.8rem', color: 'var(--success)', fontWeight: 600 }}>
           Selesai
         </span>
       );
@@ -974,21 +962,17 @@ export default function CsTasks({
           <button 
             className={`btn btn-warning ${isMobile ? '' : 'btn-sm'}`}
             onClick={() => handleScanQr(t)}
-            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 700, fontSize: '0.82rem' }}
             title="Scan QR Code ruangan untuk mengerjakan ulang revisi"
           >
-            <Camera size={15} />
             Scan QR &amp; Revisi
           </button>
         );
       }
       return (
         <span style={{ 
-          fontSize: '0.82rem', 
-          color: '#991b1b', 
-          background: '#fee2e2', 
-          padding: '6px 12px', 
-          borderRadius: 'var(--radius-md)', 
+          fontSize: '0.8rem', 
+          color: 'var(--danger)', 
           fontWeight: 600 
         }}>
           Revisi {workerName}
@@ -1001,10 +985,9 @@ export default function CsTasks({
         <button 
           className={`btn btn-danger ${isMobile ? '' : 'btn-sm'}`}
           onClick={() => handleScanQr(t)}
-          style={{ width: isMobile ? '100%' : 'auto', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+          style={{ width: isMobile ? '100%' : 'auto', fontWeight: 700, fontSize: '0.82rem' }}
           title="Scan QR Code ruangan untuk mulai pengerjaan tugas yang terlambat"
         >
-          <Camera size={15} />
           Scan QR (Terlambat)
         </button>
       );
@@ -1223,22 +1206,9 @@ export default function CsTasks({
         )}
       </div>
 
-      {/* BANNER INFORMASI TUGAS HARIAN */}
-      {!activeTask && (
-        <div className="instruction-banner" style={{ marginBottom: '20px' }}>
-          <div className="instruction-banner-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ClipboardCheck size={20} color="var(--primary)" />
-            <span>Memulai Pengerjaan Tugas Kebersihan:</span>
-          </div>
-          <p style={{ margin: '8px 0 0 0', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Untuk memulai pengerjaan, tekan tombol <strong>"📷 Scan QR Ruangan"</strong> pada tabel tugas di bawah ini dan arahkan kamera ke stiker QR Code fisik di pintu/dinding ruangan tersebut.
-          </p>
-        </div>
-      )}
-
       {/* FILTER BAR & QUICK STATUS TABS */}
       {!activeTask && (
-        <div className="glass-panel" style={{ padding: '18px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
+        <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
           
           {/* Quick Status Badges / Pills */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
@@ -1309,8 +1279,8 @@ export default function CsTasks({
             
             {/* Search Input */}
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Search size={14} /> Cari Ruangan / Kode
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                Cari Ruangan / Kode
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -1336,8 +1306,8 @@ export default function CsTasks({
 
             {/* Filter Gedung */}
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Building2 size={14} /> Gedung
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                Gedung
               </label>
               <select
                 className="form-control"
@@ -1356,8 +1326,8 @@ export default function CsTasks({
 
             {/* Filter Shift */}
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Filter size={14} /> Shift Kerja
+              <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                Shift Kerja
               </label>
               <select
                 className="form-control"
