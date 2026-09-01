@@ -378,8 +378,6 @@ export default function Verifications() {
 
             const gps = await getGeolocation();
             setSupervisorGps(gps);
-
-            setSuccessMsg(`Lokasi fisik terkonfirmasi: Ruang ${targetRoomName}! Kunci persetujuan dibuka.`);
           } else {
             setScannerError(`QR Code ruangan tidak cocok! Anda memindai QR ruangan lain, sedangkan laporan ini adalah untuk ruang '${targetRoomName}' (${targetRoomCode.toUpperCase()}).`);
           }
@@ -488,7 +486,6 @@ export default function Verifications() {
         setInspectionPhotoBlob(compressed || blob);
         setInspectionPhotoPreview(URL.createObjectURL(compressed || blob));
         handleCloseSupervisorCamera();
-        setSuccessMsg('Foto bukti inspeksi fisik di lokasi berhasil diambil!');
       } catch (e) {
         setInspectionPhotoBlob(blob);
         setInspectionPhotoPreview(URL.createObjectURL(blob));
