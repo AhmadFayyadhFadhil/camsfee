@@ -378,10 +378,26 @@ export default function CsTasks({
   useEffect(() => {
     if (showScanner && scanningTask) {
       const scannerId = 'cs-room-scanner';
-      const html5QrCode = new Html5Qrcode(scannerId);
+      const html5QrCode = new Html5Qrcode(scannerId, {
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
+        verbose: false
+      });
       setHtml5QrCodeInstance(html5QrCode);
 
-      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      const config = { 
+        fps: 25, 
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const qrboxEdgeSize = Math.floor(minEdge * 0.85);
+          return {
+            width: Math.max(qrboxEdgeSize, 260),
+            height: Math.max(qrboxEdgeSize, 260)
+          };
+        },
+        aspectRatio: 1.0
+      };
 
       html5QrCode.start(
         { facingMode: 'environment' },
