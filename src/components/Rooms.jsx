@@ -26,6 +26,10 @@ export default function Rooms() {
   const [buildingId, setBuildingId] = useState('');
   const [picUserId, setPicUserId] = useState('');
   const [checklistTemplateId, setChecklistTemplateId] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
+  const [radiusMeter, setRadiusMeter] = useState('');
+  const [fetchingGps, setFetchingGps] = useState(false);
 
   // QR Code Preview State
   const [previewingRoom, setPreviewingRoom] = useState(null);
@@ -122,6 +126,9 @@ export default function Rooms() {
     setBuildingId(buildings[0]?.id || '');
     setPicUserId(users[0]?.id || '');
     setChecklistTemplateId('');
+    setLatitude('');
+    setLongitude('');
+    setRadiusMeter('');
     setShowForm(true);
     setPreviewingRoom(null);
   };
@@ -134,8 +141,33 @@ export default function Rooms() {
     setBuildingId(room.building_id || room.building?.id || '');
     setPicUserId(room.active_pic?.user_id || room.active_pic?.user?.id || room.pic_user_id || '');
     setChecklistTemplateId(room.checklist_template_id || room.template?.id || '');
+    setLatitude(room.latitude !== null && room.latitude !== undefined ? room.latitude : '');
+    setLongitude(room.longitude !== null && room.longitude !== undefined ? room.longitude : '');
+    setRadiusMeter(room.radius_meter !== null && room.radius_meter !== undefined ? room.radius_meter : '');
     setShowForm(true);
     setPreviewingRoom(null);
+  };
+
+  const handleGetMyCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Browser tidak mendukung deteksi lokasi GPS.');
+      return;
+    }
+    setFetchingGps(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatitude(pos.coords.latitude.toFixed(6));
+        setLongitude(pos.coords.longitude.toFixed(6));
+        if (!radiusMeter) setRadiusMeter(30);
+        setFetchingGps(false);
+      },
+      (err) => {
+        setFetchingGps(false);
+        setError('Gagal mendapatkan lokasi GPS. Pastikan izin lokasi aktif.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const handleSave = async (e) => {
@@ -150,6 +182,9 @@ export default function Rooms() {
       floor: parseInt(floor),
       pic_user_id: picUserId || null,
       checklist_template_id: checklistTemplateId || null,
+      latitude: latitude !== '' ? parseFloat(latitude) : null,
+      longitude: longitude !== '' ? parseFloat(longitude) : null,
+      radius_meter: radiusMeter !== '' ? parseInt(radiusMeter, 10) : null,
     };
 
     try {
@@ -462,6 +497,66 @@ export default function Rooms() {
                     Jika dipilih, ruangan ini akan otomatis mengadopsi seluruh item kebersihan dari template setiap hari.
                   </span>
                 </div>
+
+                {/* KOORDINAT & GEOFENCE RUANGAN (OPSIONAL) */}
+                <div style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                        Koordinat GPS Ruangan (Opsional)
+                      </span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'block' }}>
+                        Kosongkan jika ruangan berada di dalam gedung (otomatis ikut gedung induk)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleGetMyCurrentLocation}
+                      disabled={fetchingGps}
+                      style={{ fontSize: '0.78rem', fontWeight: 600 }}
+                    >
+                      {fetchingGps ? 'Mendeteksi...' : 'Ambil Lokasi Saat Ini'}
+                    </button>
+                  </div>
+
+                  <div className="grid-3-cols" style={{ gap: '10px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Latitude</label>
+                      <input 
+                        type="number" 
+                        step="any"
+                        className="form-control" 
+                        value={latitude} 
+                        onChange={(e) => setLatitude(e.target.value)} 
+                        placeholder="-7.645550"
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Longitude</label>
+                      <input 
+                        type="number" 
+                        step="any"
+                        className="form-control" 
+                        value={longitude} 
+                        onChange={(e) => setLongitude(e.target.value)} 
+                        placeholder="112.693800"
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Radius (m)</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        value={radiusMeter} 
+                        onChange={(e) => setRadiusMeter(e.target.value)} 
+                        placeholder="30"
+                        min="5"
+                        max="5000"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="modal-footer">
@@ -545,6 +640,7 @@ export default function Rooms() {
                 <th>Kode</th>
                 <th>Lantai</th>
                 <th>Gedung</th>
+                <th>Geofence GPS</th>
                 <th>Template Checklist</th>
                 <th>PIC Aktif</th>
                 <th>Status</th>
@@ -558,6 +654,17 @@ export default function Rooms() {
                   <td><code>{r.code || r.kode_ruangan}</code></td>
                   <td>Lantai {r.floor || r.lantai}</td>
                   <td>{r.building?.nama_gedung || r.building?.name || '-'}</td>
+                  <td>
+                    {r.latitude !== null && r.longitude !== null ? (
+                      <span className="role-badge role-cs" style={{ fontSize: '0.72rem', textTransform: 'none' }} title={`Lat: ${r.latitude}, Lng: ${r.longitude}, Rad: ${r.radius_meter || 30}m`}>
+                        Khusus ({r.radius_meter || 30}m)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Ikut Gedung
+                      </span>
+                    )}
+                  </td>
                   <td>
                     {r.template_name || r.template?.nama_template ? (
                       <span className="role-badge role-supervisor" style={{ fontSize: '0.75rem', textTransform: 'none' }}>
@@ -612,7 +719,7 @@ export default function Rooms() {
               ))}
               {filteredRooms.length === 0 && (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px 24px' }}>
+                  <td colSpan="9" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px 24px' }}>
                     {hasActiveFilter
                       ? 'Tidak ada ruangan yang cocok dengan filter yang dipilih.'
                       : 'Belum ada data ruangan.'}
