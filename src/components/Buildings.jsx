@@ -314,7 +314,7 @@ export default function Buildings() {
                       style={{ fontSize: '0.78rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                     >
                       <Navigation size={13} />
-                      {fetchingGps ? 'Mendapatkan GPS...' : '📍 Ambil Lokasi Saya Sekarang'}
+                      {fetchingGps ? 'Mendapatkan GPS...' : 'Ambil Lokasi Saat Ini'}
                     </button>
                   </div>
 
