@@ -13,7 +13,11 @@ import {
   QrCode,
   ThumbsUp,
   AlertTriangle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  MapPin,
+  Navigation,
+  ShieldCheck,
+  ExternalLink
 } from 'lucide-react';
 
 export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount, onScanSuccess }) {
@@ -1029,6 +1033,66 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
           </div>
         </div>
 
+      </div>
+
+      {/* PANEL GEOFENCING GPS & PEMANTAUAN LOKASI FISIK */}
+      <div className="glass-panel" style={{ marginTop: '24px', padding: '24px', borderRadius: 'var(--radius-xl)', background: 'linear-gradient(135deg, rgba(15, 118, 110, 0.03) 0%, rgba(14, 49, 146, 0.03) 100%)', border: '1px solid rgba(15, 118, 110, 0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MapPin size={22} className="text-primary" /> Pemantauan Titik Geofence Kawasan &amp; Verifikasi Fisik On-Site
+            </h2>
+            <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Status radius GPS kawasan gedung pabrik &amp; proteksi kehadiran fisik petugas di lokasi
+            </p>
+          </div>
+          {setCurrentTab && (
+            <button 
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCurrentTab('buildings')}
+              style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Navigation size={14} /> Kelola Titik Koordinat Gedung
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+          {breakdown.map(b => (
+            <div 
+              key={b.building_id} 
+              className="glass-card" 
+              style={{ padding: '16px', borderRadius: 'var(--radius-lg)', margin: 0, border: '1px solid var(--border-color)', background: 'white' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                <div>
+                  <strong style={{ fontSize: '0.98rem', display: 'block', color: 'var(--text-primary)' }}>{b.building_name}</strong>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Kode: <code>{b.building_code}</code> • {b.total_rooms} Ruangan</span>
+                </div>
+                <span className="status-badge status-completed" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  <ShieldCheck size={12} /> Geofence Aktif
+                </span>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.02)', padding: '10px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                <div>
+                  <div>Radius Kawasan: <strong style={{ color: 'var(--primary)' }}>250 Meter</strong></div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>Proteksi Scan di Luar Kawasan: Aktif</div>
+                </div>
+                <a 
+                  href={`https://www.google.com/maps/search/?api=1&query=-7.643212,112.698765`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  title="Lihat titik koordinat di Google Maps"
+                >
+                  <ExternalLink size={12} /> Peta
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Building Details Grid Modal / Section */}

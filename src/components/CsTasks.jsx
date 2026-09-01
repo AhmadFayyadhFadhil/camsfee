@@ -420,10 +420,25 @@ export default function CsTasks({
             setHtml5QrCodeInstance(null);
             setLoading(true);
 
+            let currentGps = { latitude: null, longitude: null };
+            try {
+              if (navigator.geolocation) {
+                currentGps = await new Promise((resolve) => {
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+                    () => resolve({ latitude: null, longitude: null }),
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                  );
+                });
+              }
+            } catch (e) {}
+
             const payload = {
               room_id: scanningTask.room_id || scanningTask.room?.id,
               qr_code_token: scannedToken || cleanText,
-              task_id: scanningTask.id
+              task_id: scanningTask.id,
+              latitude: currentGps.latitude,
+              longitude: currentGps.longitude
             };
 
             const response = await api.post('/submissions/scan', payload);

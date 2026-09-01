@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { SHIFTS } from '../utils/constants';
-import { Building, Plus, Edit2, Trash2, Check, X, ShieldAlert, Layers } from 'lucide-react';
+import { Building, Plus, Edit2, Trash2, Check, X, ShieldAlert, Layers, MapPin, Navigation } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 
 export default function Buildings() {
@@ -17,6 +17,10 @@ export default function Buildings() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
+  const [radiusMeter, setRadiusMeter] = useState(250);
+  const [fetchingGps, setFetchingGps] = useState(false);
   
   // Shift assignment state
   const [assigningShiftsBuilding, setAssigningShiftsBuilding] = useState(null);
@@ -60,6 +64,9 @@ export default function Buildings() {
     setName('');
     setCode('');
     setDescription('');
+    setLatitude('');
+    setLongitude('');
+    setRadiusMeter(250);
     setShowForm(true);
     setAssigningShiftsBuilding(null);
   };
@@ -69,8 +76,32 @@ export default function Buildings() {
     setName(building.name);
     setCode(building.code);
     setDescription(building.description || '');
+    setLatitude(building.latitude !== null && building.latitude !== undefined ? building.latitude : '');
+    setLongitude(building.longitude !== null && building.longitude !== undefined ? building.longitude : '');
+    setRadiusMeter(building.radius_meter || 250);
     setShowForm(true);
     setAssigningShiftsBuilding(null);
+  };
+
+  const handleGetMyCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Browser Anda tidak mendukung deteksi lokasi GPS.');
+      return;
+    }
+    setFetchingGps(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatitude(pos.coords.latitude.toFixed(6));
+        setLongitude(pos.coords.longitude.toFixed(6));
+        setFetchingGps(false);
+      },
+      (err) => {
+        setFetchingGps(false);
+        setError('Gagal mendapatkan lokasi GPS. Pastikan izin lokasi diaktifkan pada browser Anda.');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const handleSave = async (e) => {
@@ -78,7 +109,14 @@ export default function Buildings() {
     setError(null);
     setSuccessMsg(null);
 
-    const payload = { name, code, description };
+    const payload = { 
+      name, 
+      code, 
+      description,
+      latitude: latitude !== '' ? parseFloat(latitude) : null,
+      longitude: longitude !== '' ? parseFloat(longitude) : null,
+      radius_meter: parseInt(radiusMeter, 10) || 250
+    };
     try {
       let response;
       if (editingBuilding) {
@@ -96,7 +134,7 @@ export default function Buildings() {
             setBuildings(prev => [savedBld, ...prev]);
           }
         }
-        setSuccessMsg(editingBuilding ? 'Gedung berhasil diperbarui.' : 'Gedung baru berhasil ditambahkan.');
+        setSuccessMsg(editingBuilding ? 'Gedung & Geofence GPS berhasil diperbarui.' : 'Gedung baru berhasil ditambahkan.');
         setShowForm(false);
         setEditingBuilding(null);
         fetchBuildings(false);
@@ -255,11 +293,71 @@ export default function Buildings() {
                   <label className="form-label" style={{ fontWeight: 700 }}>Deskripsi / Catatan Lokasi</label>
                   <textarea 
                     className="form-control" 
-                    rows="3"
+                    rows="2"
                     value={description} 
                     onChange={(e) => setDescription(e.target.value)} 
                     placeholder="Tulis detail gedung atau catatan khusus..."
                   />
+                </div>
+
+                {/* GEOFENCING GPS SECTION */}
+                <div style={{ background: 'rgba(15, 118, 110, 0.04)', border: '1px solid rgba(15, 118, 110, 0.18)', borderRadius: 'var(--radius-lg)', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MapPin size={16} /> Titik Koordinat &amp; Geofencing GPS
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleGetMyCurrentLocation}
+                      disabled={fetchingGps}
+                      style={{ fontSize: '0.78rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Navigation size={13} />
+                      {fetchingGps ? 'Mendapatkan GPS...' : '📍 Ambil Lokasi Saya Sekarang'}
+                    </button>
+                  </div>
+
+                  <div className="grid-2-cols" style={{ gap: '10px' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Latitude</label>
+                      <input 
+                        type="number" 
+                        step="any"
+                        className="form-control" 
+                        value={latitude} 
+                        onChange={(e) => setLatitude(e.target.value)} 
+                        placeholder="-7.643212"
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Longitude</label>
+                      <input 
+                        type="number" 
+                        step="any"
+                        className="form-control" 
+                        value={longitude} 
+                        onChange={(e) => setLongitude(e.target.value)} 
+                        placeholder="112.698765"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginTop: '10px', marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Radius Toleransi Geofence (Meter)</label>
+                    <input 
+                      type="number" 
+                      className="form-control" 
+                      value={radiusMeter} 
+                      onChange={(e) => setRadiusMeter(e.target.value)} 
+                      placeholder="250"
+                      min="10"
+                      max="10000"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.74rem', marginTop: '2px', display: 'block' }}>
+                      Batas radius area kawasan gedung (standar: 250 meter). Petugas di luar radius ini tidak dapat scan QR.
+                    </small>
+                  </div>
                 </div>
               </div>
 
@@ -363,6 +461,7 @@ export default function Buildings() {
                 <th>Nama Gedung</th>
                 <th>Kode</th>
                 <th>Deskripsi</th>
+                <th>Geofence GPS</th>
                 <th>Shift Aktif</th>
                 <th>Status</th>
                 <th>Aksi</th>
@@ -375,6 +474,20 @@ export default function Buildings() {
                   <td><code>{b.code}</code></td>
                   <td style={{ color: 'var(--text-secondary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {b.description || '-'}
+                  </td>
+                  <td>
+                    {b.latitude !== null && b.longitude !== null && b.latitude !== undefined ? (
+                      <div style={{ fontSize: '0.78rem' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <MapPin size={12} /> {Number(b.latitude).toFixed(4)}, {Number(b.longitude).toFixed(4)}
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          Radius: {b.radius_meter || 250}m
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Belum di-set</span>
+                    )}
                   </td>
                   <td>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
