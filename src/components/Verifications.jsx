@@ -504,8 +504,13 @@ export default function Verifications() {
       return;
     }
 
+    if (!inspectionPhotoBlob) {
+      setError('Persetujuan ditolak! Anda wajib mengambil 1 foto bukti inspeksi fisik ruangan sebelum menyetujui laporan.');
+      return;
+    }
+
     if (!(await confirm({
-      title: 'Setujui Laporan Kebersihan (Verifikasi On-Site)',
+      title: 'Setujui Laporan Kebersihan',
       message: `Apakah Anda menyatakan telah memeriksa fisik ruang ${selectedSubmission.task?.room?.name} secara langsung dan menyetujui hasil kebersihannya?`,
       confirmText: 'Ya, Setujui Laporan',
       cancelText: 'Batal',
@@ -774,17 +779,17 @@ export default function Verifications() {
           )}
 
           {/* ========================================================================= */}
-          {/* SECTION 2: BUKTI INSPEKSI FISIK SUPERVISOR (ON-THE-SPOT PHOTO) */}
+          {/* SECTION 2: BUKTI INSPEKSI FISIK SUPERVISOR */}
           {/* ========================================================================= */}
           {isQrUnlocked && (
             <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'rgba(15, 118, 110, 0.03)', border: '1.5px solid rgba(15, 118, 110, 0.2)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <Camera size={18} /> Foto Bukti Inspeksi Fisik Supervisor (On-The-Spot)
+                    <Camera size={18} /> Foto Bukti Inspeksi Fisik Supervisor
                   </h3>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Ambil 1 foto kondisi fisik ruangan saat ini sebagai bukti sah inspeksi langsung di lokasi.
+                    Ambil 1 foto kondisi fisik ruangan saat ini sebagai bukti sah inspeksi langsung di lokasi (Wajib).
                   </div>
                 </div>
 
@@ -795,7 +800,7 @@ export default function Verifications() {
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                 >
                   <Camera size={15} />
-                  {inspectionPhotoPreview ? 'Ambil Ulang Foto' : '📸 Ambil Foto Inspeksi Lapangan'}
+                  {inspectionPhotoPreview ? 'Ambil Ulang Foto' : 'Ambil Foto Inspeksi Lapangan'}
                 </button>
               </div>
 
@@ -845,28 +850,39 @@ export default function Verifications() {
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
               
-              {/* TOMBOL APPROVE (TERKUNCI JIKA BELUM SCAN QR) */}
-              <button 
-                type="button" 
-                className={`btn ${isQrUnlocked ? 'btn-success' : 'btn-secondary'} btn-lg`}
-                onClick={handleApprove}
-                disabled={processing || !isQrUnlocked}
-                style={{ 
-                  fontWeight: 800, 
-                  fontSize: '1rem', 
-                  boxShadow: isQrUnlocked ? '0 4px 16px rgba(15, 118, 110, 0.25)' : 'none', 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '8px',
-                  opacity: isQrUnlocked ? 1 : 0.6,
-                  cursor: isQrUnlocked ? 'pointer' : 'not-allowed'
-                }}
-                title={isQrUnlocked ? 'Setujui laporan kebersihan ini' : 'Anda wajib scan QR ruangan di lokasi terlebih dahulu'}
-              >
-                {isQrUnlocked ? <Check size={18} /> : <Lock size={18} />}
-                {processing ? 'Memproses...' : isQrUnlocked ? 'Setujui Laporan Ini (Approve)' : 'Setujui (Terkunci - Wajib Scan QR)'}
-              </button>
+              {/* TOMBOL APPROVE (TERKUNCI JIKA BELUM SCAN QR ATAU BELUM AMBIL FOTO) */}
+              {(() => {
+                const isReadyToApprove = isQrUnlocked && inspectionPhotoBlob !== null;
+                return (
+                  <button 
+                    type="button" 
+                    className={`btn ${isReadyToApprove ? 'btn-success' : 'btn-secondary'} btn-lg`}
+                    onClick={handleApprove}
+                    disabled={processing || !isReadyToApprove}
+                    style={{ 
+                      fontWeight: 800, 
+                      fontSize: '1rem', 
+                      boxShadow: isReadyToApprove ? '0 4px 16px rgba(15, 118, 110, 0.25)' : 'none', 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '8px',
+                      opacity: isReadyToApprove ? 1 : 0.6,
+                      cursor: isReadyToApprove ? 'pointer' : 'not-allowed'
+                    }}
+                    title={!isQrUnlocked ? 'Anda wajib scan QR ruangan di lokasi terlebih dahulu' : !inspectionPhotoBlob ? 'Anda wajib mengambil foto bukti inspeksi terlebih dahulu' : 'Setujui laporan kebersihan ini'}
+                  >
+                    {isReadyToApprove ? <Check size={18} /> : <Lock size={18} />}
+                    {processing 
+                      ? 'Memproses...' 
+                      : !isQrUnlocked 
+                        ? 'Setujui (Terkunci - Wajib Scan QR)' 
+                        : !inspectionPhotoBlob 
+                          ? 'Setujui (Terkunci - Wajib Ambil Foto)' 
+                          : 'Setujui Laporan Ini (Approve)'}
+                  </button>
+                );
+              })()}
 
               {/* TOMBOL REJECT */}
               <button 
