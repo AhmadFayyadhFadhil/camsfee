@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../utils/api';
 import { 
   ClipboardCheck, 
@@ -23,6 +24,7 @@ import {
   CheckCircle2,
   Send
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { compressImage } from '../utils/imageCompressor';
 
 export default function CsTasks({ 
@@ -75,6 +77,7 @@ export default function CsTasks({
   const [showScanner, setShowScanner] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const [html5QrCodeInstance, setHtml5QrCodeInstance] = useState(null);
+  const [scannerError, setScannerError] = useState(null);
 
   // Room Camera realtime capture states
   const [showRoomCamera, setShowRoomCamera] = useState(false);
@@ -358,21 +361,103 @@ export default function CsTasks({
   };
 
   const handleCloseScanner = async () => {
-    await stopScanner();
+    if (html5QrCodeInstance && html5QrCodeInstance.isScanning) {
+      try {
+        await html5QrCodeInstance.stop();
+      } catch (err) {
+        console.error("Failed to stop scanner:", err);
+      }
+    }
+    setHtml5QrCodeInstance(null);
     setScanningTask(null);
     setShowScanner(false);
+    setScannerError(null);
   };
 
+  // Start HTML5 QR Code live camera scanner for CS Tasks
   useEffect(() => {
+    if (showScanner && scanningTask) {
+      const scannerId = 'cs-room-scanner';
+      const html5QrCode = new Html5Qrcode(scannerId);
+      setHtml5QrCodeInstance(html5QrCode);
+
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        config,
+        async (decodedText) => {
+          const cleanText = decodedText.trim();
+          const targetRoomCode = (scanningTask.room?.code || '').trim();
+          const targetRoomId = (scanningTask.room_id || scanningTask.room?.id || '').trim();
+          const targetRoomToken = (scanningTask.room?.qr_code_token || '').trim();
+
+          const isMatch = (cleanText === targetRoomCode || cleanText === targetRoomId || cleanText === targetRoomToken);
+
+          if (!isMatch) {
+            setScannerError(`QR Code tidak cocok! Anda memindai '${cleanText}', sedangkan tugas ini adalah untuk '${scanningTask.room?.name || 'Ruangan'}' (${targetRoomCode}).`);
+            return;
+          }
+
+          try {
+            await html5QrCode.stop().catch(() => {});
+            setHtml5QrCodeInstance(null);
+            setLoading(true);
+
+            const payload = {
+              room_id: scanningTask.room_id || scanningTask.room?.id,
+              qr_code_token: cleanText,
+              task_id: scanningTask.id
+            };
+
+            const response = await api.post('/submissions/scan', payload);
+            if (response.success) {
+              setSuccessMsg(`QR Ruangan ${scanningTask.room?.name || ''} Terkonfirmasi! Silakan periksa item checklist dan ambil 4 foto bukti.`);
+              setError(null);
+
+              const items = (response.data.checklist_items || []).map(item => ({
+                ...item,
+                name: item.name || item.nama_item || ''
+              }));
+              setChecklistItems(items);
+
+              const initialResults = {};
+              items.forEach(item => {
+                initialResults[item.id] = {
+                  status: false,
+                  notes: ''
+                };
+              });
+              setChecklistResults(initialResults);
+              setFotoAfterFiles([null, null, null, null]);
+              setFotoAfterPreviews([null, null, null, null]);
+
+              setActiveTask(response.data.task || scanningTask);
+              setScanningTask(null);
+              setShowScanner(false);
+              setScannerError(null);
+            }
+          } catch (err) {
+            setScannerError(err.message || 'Gagal memvalidasi QR Code ruangan.');
+          } finally {
+            setLoading(false);
+          }
+        },
+        (errorMessage) => {
+          // ignore frame scan errors
+        }
+      ).catch((err) => {
+        console.error('Camera QR start error in CS Tasks:', err);
+        setScannerError('Gagal mengakses kamera scanner. Pastikan izin kamera aktif pada browser.');
+      });
+    }
+
     return () => {
       if (html5QrCodeInstance && html5QrCodeInstance.isScanning) {
         html5QrCodeInstance.stop().catch(err => console.error(err));
       }
-      if (roomCameraStream) {
-        roomCameraStream.getTracks().forEach(track => track.stop());
-      }
     };
-  }, [html5QrCodeInstance, roomCameraStream]);
+  }, [showScanner, scanningTask]);
   useEffect(() => {
     let intervalId;
     if (showRoomCamera) {
@@ -784,46 +869,24 @@ export default function CsTasks({
     const workerName = t.cs_name || 'Rekan CS';
 
     if (t.status === 'pending') {
-      if (isMobile) {
-        return (
-          <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
-            <button 
-              className="btn btn-primary"
-              onClick={() => handleStartTask(t)}
-              style={{ flex: 1, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              Mulai Kerjakan
-            </button>
-            <button 
-              className="btn btn-secondary btn-sm"
-              onClick={onNavigateDashboard}
-              style={{ padding: '8px 10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-              title="Pindai QR"
-            >
-              Scan
-            </button>
-          </div>
-        );
-      }
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button 
-            className="btn btn-primary btn-sm"
-            onClick={() => handleStartTask(t)}
-            style={{ display: 'inline-flex', alignItems: 'center', fontWeight: 700 }}
-            title="Mulai pengerjaan tugas ruangan ini"
-          >
-            Mulai Kerjakan
-          </button>
-          <button 
-            className="btn btn-secondary btn-sm"
-            onClick={onNavigateDashboard}
-            style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 8px' }}
-            title="Opsi Pindai QR di Dashboard"
-          >
-            Scan
-          </button>
-        </div>
+        <button 
+          className={`btn btn-primary ${isMobile ? '' : 'btn-sm'}`}
+          onClick={() => handleScanQr(t)}
+          style={{ 
+            width: isMobile ? '100%' : 'auto', 
+            fontWeight: 800, 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            gap: '6px', 
+            boxShadow: '0 2px 8px rgba(14, 49, 146, 0.2)' 
+          }}
+          title="Scan QR Code fisik di pintu ruangan untuk mulai pengerjaan"
+        >
+          <Camera size={15} />
+          Scan QR Ruangan
+        </button>
       );
     }
 
@@ -833,9 +896,10 @@ export default function CsTasks({
           <button 
             className={`btn btn-warning ${isMobile ? '' : 'btn-sm'}`}
             onClick={() => handleResumeTask(t)}
-            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 700 }}
-            title="Lanjutkan pengisian form checklist"
+            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            title="Lanjutkan pengisian form checklist yang sedang dikerjakan"
           >
+            <Play size={14} />
             Lanjutkan Isi
           </button>
         );
@@ -857,7 +921,8 @@ export default function CsTasks({
 
     if (t.status === 'waiting_verification') {
       return (
-        <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 600 }}>
+        <span style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <Clock size={14} />
           Menunggu PIC
         </span>
       );
@@ -865,7 +930,8 @@ export default function CsTasks({
 
     if (t.status === 'completed') {
       return (
-        <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 700 }}>
+        <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <CheckCircle2 size={14} />
           Selesai
         </span>
       );
@@ -876,11 +942,12 @@ export default function CsTasks({
         return (
           <button 
             className={`btn btn-warning ${isMobile ? '' : 'btn-sm'}`}
-            onClick={() => handleStartTask(t)}
-            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 700 }}
-            title="Kerjakan ulang tugas yang ditolak"
+            onClick={() => handleScanQr(t)}
+            style={{ width: isMobile ? '100%' : 'auto', color: 'white', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            title="Scan QR Code ruangan untuk mengerjakan ulang revisi"
           >
-            Kerjakan Ulang
+            <Camera size={15} />
+            Scan QR &amp; Revisi
           </button>
         );
       }
@@ -902,11 +969,12 @@ export default function CsTasks({
       return (
         <button 
           className={`btn btn-danger ${isMobile ? '' : 'btn-sm'}`}
-          onClick={() => handleStartTask(t)}
-          style={{ width: isMobile ? '100%' : 'auto', fontWeight: 700 }}
-          title="Mulai pengerjaan tugas yang terlambat"
+          onClick={() => handleScanQr(t)}
+          style={{ width: isMobile ? '100%' : 'auto', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+          title="Scan QR Code ruangan untuk mulai pengerjaan tugas yang terlambat"
         >
-          Mulai (Terlambat)
+          <Camera size={15} />
+          Scan QR (Terlambat)
         </button>
       );
     }
@@ -1132,18 +1200,8 @@ export default function CsTasks({
             <span>Memulai Pengerjaan Tugas Kebersihan:</span>
           </div>
           <p style={{ margin: '8px 0 0 0', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Anda dapat langsung menekan tombol <strong>"▶ Mulai Kerjakan"</strong> pada tabel tugas di bawah ini, atau gunakan opsi <strong>"Scan di Dashboard"</strong> untuk pemindaian QR Code stiker pintu ruangan.
+            Untuk memulai pengerjaan, tekan tombol <strong>"📷 Scan QR Ruangan"</strong> pada tabel tugas di bawah ini dan arahkan kamera ke stiker QR Code fisik di pintu/dinding ruangan tersebut.
           </p>
-          <div style={{ marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button 
-              type="button"
-              className="btn btn-secondary btn-sm" 
-              onClick={onNavigateDashboard}
-              style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <QrCode size={16} /> Opsi Cepat: Buka Scanner QR di Dashboard
-            </button>
-          </div>
         </div>
       )}
 
@@ -1919,6 +1977,77 @@ export default function CsTasks({
             </div>
           </div>
         </div>
+      )}
+
+      {/* SCANNER MODAL CS (PORTAL) */}
+      {showScanner && scanningTask && createPortal(
+        <div className="modal-backdrop" onClick={handleCloseScanner}>
+          <div 
+            className="glass-panel" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '520px', width: '92vw', padding: 0, overflow: 'hidden' }}
+          >
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Wajib Scan di Lokasi Ruangan
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <QrCode className="text-primary" size={22} />
+                  Scan QR: {scanningTask.room?.name || 'Ruangan'}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Arahkan kamera ke stiker QR di pintu ruang <strong>{scanningTask.room?.name}</strong> ({scanningTask.room?.code})
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={handleCloseScanner}
+                title="Tutup Scanner"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px', textAlign: 'center' }}>
+              {scannerError && (
+                <div className="alert alert-danger" style={{ marginBottom: '16px', textAlign: 'left' }}>
+                  <AlertTriangle size={18} />
+                  <span style={{ fontSize: '0.85rem' }}>{scannerError}</span>
+                </div>
+              )}
+
+              <div 
+                id="cs-room-scanner" 
+                style={{ 
+                  width: '100%', 
+                  maxWidth: '360px', 
+                  margin: '0 auto', 
+                  borderRadius: 'var(--radius-xl)', 
+                  overflow: 'hidden',
+                  border: '2px solid var(--primary)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                }}
+              ></div>
+
+              <p style={{ margin: '14px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Pastikan Anda berdiri tepat di depan pintu ruangan dan QR Code terlihat jelas di kotak kamera.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ margin: 0, padding: '14px 24px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleCloseScanner}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
