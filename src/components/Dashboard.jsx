@@ -600,6 +600,15 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             </div>
           </div>
         )}
+
+        {/* PANEL DETEKSI KEHADIRAN GEOFENCE LOKASI CS */}
+        <InspectionMapTrail 
+          isCs={true} 
+          buildings={data?.assigned_buildings || []} 
+          onStartScan={() => {
+            if (setCurrentTab) setCurrentTab('tasks');
+          }} 
+        />
       </div>
     );
   }
