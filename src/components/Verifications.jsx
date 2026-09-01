@@ -238,6 +238,35 @@ export default function Verifications() {
     }
   }, [error]);
 
+  // Format submission time into accurate local Indonesian time (WIB)
+  const formatSubmissionTime = (sub) => {
+    if (!sub) return '-';
+    const timeStr = sub.submitted_at || sub.submission_time;
+    if (!timeStr) return '-';
+
+    try {
+      // Jika string waktu sudah memiliki WIB di ujungnya
+      if (typeof timeStr === 'string' && timeStr.includes('WIB')) {
+        return timeStr;
+      }
+
+      const d = new Date(timeStr);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        const month = monthNames[d.getMonth()];
+        const year = d.getFullYear();
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        return `${day} ${month} ${year} • ${hours}:${minutes} WIB`;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return String(timeStr).replace('T', ' ').substring(0, 16);
+  };
+
   // Reset On-Site Verification State when opening a new submission
   const handleSelectSubmission = (sub) => {
     setSelectedSubmission(sub);
@@ -594,7 +623,7 @@ export default function Verifications() {
               Ruang: {selectedSubmission.task?.room?.name} ({selectedSubmission.task?.room?.code})
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginTop: '4px' }}>
-              Gedung: <strong>{selectedSubmission.task?.room?.building?.name}</strong> | Petugas CS: <strong>{selectedSubmission.user?.name}</strong> | Waktu Serah: <strong>{selectedSubmission.submission_time ? selectedSubmission.submission_time.replace('T', ' ').substring(0, 16) : '-'}</strong>
+              Gedung: <strong>{selectedSubmission.task?.room?.building?.name}</strong> | Petugas CS: <strong>{selectedSubmission.user?.name}</strong> | Waktu Serah: <strong>{formatSubmissionTime(selectedSubmission)}</strong>
             </p>
           </div>
 
@@ -877,7 +906,7 @@ export default function Verifications() {
 
                       <td>
                         <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
-                          {sub.submission_time ? sub.submission_time.replace('T', ' ').substring(0, 16) : '-'}
+                          {formatSubmissionTime(sub)}
                         </div>
                       </td>
 
