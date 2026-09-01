@@ -1,8 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../utils/api';
-import { Check, X, ShieldAlert, AlertCircle, MessageSquare, Eye, ArrowLeft, Camera, CheckCircle2 } from 'lucide-react';
+import { 
+  Check, 
+  X, 
+  ShieldAlert, 
+  ShieldCheck,
+  AlertCircle, 
+  MessageSquare, 
+  Eye, 
+  ArrowLeft, 
+  Camera, 
+  CheckCircle2,
+  Lock,
+  Unlock,
+  QrCode,
+  MapPin,
+  RefreshCw,
+  Sparkles,
+  Image as ImageIcon
+} from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
+import { Html5Qrcode } from 'html5-qrcode';
+import { compressImage } from '../utils/imageCompressor';
 
 // Reusable component to render images protected by Sanctum token authentication
 function SecureImage({ src, alt, className, style }) {
@@ -80,6 +100,7 @@ function SecureImage({ src, alt, className, style }) {
           height: '100%', 
           objectFit: 'cover', 
           borderRadius: 'var(--radius-md)', 
+          cursor: 'pointer',
           ...style 
         }} 
       />
@@ -98,24 +119,21 @@ function SecureImage({ src, alt, className, style }) {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            zIndex: 999999,
-            cursor: 'zoom-out',
-            animation: 'fadeIn 0.2s ease-out'
+            zIndex: 10000,
+            cursor: 'zoom-out'
           }}
         >
-          <div style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
             <img 
               src={imgUrl} 
               alt={alt} 
-              style={{ 
-                maxWidth: '100%', 
-                maxHeight: '100%', 
-                objectFit: 'contain', 
-                borderRadius: 'var(--radius-md)',
-                boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                animation: 'scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-              }} 
+              style={{
+                maxWidth: '100%',
+                maxHeight: '90vh',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}
             />
             <button
               onClick={() => setIsZoomed(false)}
@@ -163,6 +181,26 @@ export default function Verifications() {
   const [feedback, setFeedback] = useState('');
   const [processing, setProcessing] = useState(false);
 
+  // On-Site Scan-to-Verify & Physical Inspection States
+  const [isQrUnlocked, setIsQrUnlocked] = useState(false);
+  const [scannedQrCode, setScannedQrCode] = useState(null);
+  const [qrScannedAt, setQrScannedAt] = useState(null);
+  const [inspectionPhotoBlob, setInspectionPhotoBlob] = useState(null);
+  const [inspectionPhotoPreview, setInspectionPhotoPreview] = useState(null);
+  const [supervisorGps, setSupervisorGps] = useState({ latitude: null, longitude: null, ready: false });
+
+  // Live Camera Scanner States (Supervisor)
+  const [showSupervisorScanner, setShowSupervisorScanner] = useState(false);
+  const [html5QrCodeInstance, setHtml5QrCodeInstance] = useState(null);
+  const [scannerError, setScannerError] = useState(null);
+
+  // Live Physical Photo Capture States (Supervisor)
+  const [showSupervisorCamera, setShowSupervisorCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [liveSupervisorTime, setLiveSupervisorTime] = useState('');
+
+  const currentUser = api.getUser() || {};
+
   const fetchPendingSubmissions = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
@@ -200,11 +238,229 @@ export default function Verifications() {
     }
   }, [error]);
 
+  // Reset On-Site Verification State when opening a new submission
+  const handleSelectSubmission = (sub) => {
+    setSelectedSubmission(sub);
+    setFeedback('');
+    setError(null);
+    setIsQrUnlocked(false);
+    setScannedQrCode(null);
+    setQrScannedAt(null);
+    setInspectionPhotoBlob(null);
+    setInspectionPhotoPreview(null);
+  };
+
+  // Helper format datetime for watermark
+  const getFormattedDateTime = () => {
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const day = now.getDate();
+    const month = months[now.getMonth()];
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${day} ${month} ${year} ${hours}:${minutes}:${seconds} WIB`;
+  };
+
+  // Geolocation fetcher
+  const getGeolocation = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve({ latitude: null, longitude: null, ready: false });
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            ready: true,
+          });
+        },
+        () => {
+          resolve({ latitude: null, longitude: null, ready: false });
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    });
+  };
+
+  // --- SUPERVISOR QR SCANNER (SCAN-TO-VERIFY) ---
+  const handleStartSupervisorScan = () => {
+    setScannerError(null);
+    setShowSupervisorScanner(true);
+  };
+
+  const handleStopSupervisorScan = async () => {
+    if (html5QrCodeInstance && html5QrCodeInstance.isScanning) {
+      try {
+        await html5QrCodeInstance.stop();
+      } catch (e) {
+        console.error('Error stopping QR scanner:', e);
+      }
+    }
+    setShowSupervisorScanner(false);
+    setHtml5QrCodeInstance(null);
+  };
+
+  useEffect(() => {
+    if (showSupervisorScanner) {
+      const qrScannerId = 'supervisor-qr-reader';
+      const html5QrCode = new Html5Qrcode(qrScannerId);
+      setHtml5QrCodeInstance(html5QrCode);
+
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      html5QrCode.start(
+        { facingMode: 'environment' },
+        config,
+        async (decodedText) => {
+          // QR Decoded!
+          const cleanText = decodedText.trim();
+          const targetRoomCode = (selectedSubmission?.task?.room?.code || '').trim();
+          const targetRoomId = (selectedSubmission?.task?.room?.id || '').trim();
+          const targetRoomName = selectedSubmission?.task?.room?.name || 'Ruangan Terkait';
+
+          if (cleanText === targetRoomCode || cleanText === targetRoomId) {
+            // MATCH!
+            await handleStopSupervisorScan();
+            setIsQrUnlocked(true);
+            setScannedQrCode(cleanText);
+            setQrScannedAt(new Date().toISOString());
+
+            const gps = await getGeolocation();
+            setSupervisorGps(gps);
+
+            setSuccessMsg(`Lokasi fisik terkonfirmasi: Ruang ${targetRoomName}! Kunci persetujuan dibuka.`);
+          } else {
+            setScannerError(`QR Code ruangan tidak cocok! Anda memindai '${cleanText}', sedangkan laporan ini adalah untuk ruang '${targetRoomName}' (${targetRoomCode}).`);
+          }
+        },
+        (errorMessage) => {
+          // Frame read fail (ignored)
+        }
+      ).catch((err) => {
+        console.error('Camera QR start error:', err);
+        setScannerError('Gagal mengakses kamera scanner. Pastikan izin kamera aktif.');
+      });
+    }
+
+    return () => {
+      if (html5QrCodeInstance && html5QrCodeInstance.isScanning) {
+        html5QrCodeInstance.stop().catch((err) => console.error(err));
+      }
+    };
+  }, [showSupervisorScanner]);
+
+  // --- SUPERVISOR PHYSICAL INSPECTION PHOTO CAMERA ---
+  const handleOpenSupervisorCamera = async () => {
+    setError(null);
+    setShowSupervisorCamera(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      });
+      setCameraStream(stream);
+
+      setTimeout(() => {
+        const video = document.getElementById('supervisor-video');
+        if (video) {
+          video.srcObject = stream;
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Error starting supervisor camera:', err);
+      setError('Gagal mengakses kamera fisik. Silakan izinkan akses kamera pada browser Anda.');
+      setShowSupervisorCamera(false);
+    }
+  };
+
+  const handleCloseSupervisorCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
+    setCameraStream(null);
+    setShowSupervisorCamera(false);
+  };
+
+  useEffect(() => {
+    let timer;
+    if (showSupervisorCamera) {
+      setLiveSupervisorTime(getFormattedDateTime());
+      timer = setInterval(() => {
+        setLiveSupervisorTime(getFormattedDateTime());
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showSupervisorCamera]);
+
+  const handleCaptureInspectionPhoto = async () => {
+    const video = document.getElementById('supervisor-video');
+    if (!video) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Draw Supervisor Watermark
+    const overlayHeight = Math.max(64, canvas.height * 0.18);
+    const paddingX = Math.max(14, canvas.width * 0.03);
+    const paddingY = Math.max(12, canvas.height * 0.03);
+    const fontSize = Math.max(12, canvas.height * 0.034);
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.fillRect(0, canvas.height - overlayHeight, canvas.width, overlayHeight);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${fontSize}px Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+
+    const roomName = selectedSubmission?.task?.room?.name || 'Ruangan';
+    const verifierName = currentUser.full_name || currentUser.name || 'Supervisor';
+
+    ctx.fillText(`Inspeksi Fisik: ${roomName} (${selectedSubmission?.task?.room?.code || ''})`, paddingX, canvas.height - overlayHeight + paddingY);
+    ctx.fillText(`Supervisor: ${verifierName}`, paddingX, canvas.height - overlayHeight + paddingY + fontSize * 1.3);
+    ctx.fillText(`Waktu Cek: ${getFormattedDateTime()}`, paddingX, canvas.height - overlayHeight + paddingY + fontSize * 2.6);
+
+    ctx.fillStyle = '#22c55e';
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillText('CAMS On-Site Verified', canvas.width - paddingX, canvas.height - paddingY - fontSize);
+    ctx.textAlign = 'left';
+
+    canvas.toBlob(async (blob) => {
+      try {
+        const compressed = await compressImage(blob, 1600, 1000 * 1024);
+        setInspectionPhotoBlob(compressed || blob);
+        setInspectionPhotoPreview(URL.createObjectURL(compressed || blob));
+        handleCloseSupervisorCamera();
+        setSuccessMsg('Foto bukti inspeksi fisik di lokasi berhasil diambil!');
+      } catch (e) {
+        setInspectionPhotoBlob(blob);
+        setInspectionPhotoPreview(URL.createObjectURL(blob));
+        handleCloseSupervisorCamera();
+      }
+    }, 'image/jpeg', 0.85);
+  };
+
+  // --- APPROVE SUBMISSION ---
   const handleApprove = async () => {
+    if (!isQrUnlocked) {
+      setError('Persetujuan ditolak! Anda wajib melakukan scan QR Code ruangan di lokasi terlebih dahulu untuk membuktikan kehadiran fisik Anda.');
+      return;
+    }
+
     if (!(await confirm({
-      title: 'Setujui Laporan Kebersihan',
-      message: 'Apakah Anda yakin ingin menyetujui laporan kebersihan ruangan ini?',
-      confirmText: 'Ya, Setujui',
+      title: 'Setujui Laporan Kebersihan (Verifikasi On-Site)',
+      message: `Apakah Anda menyatakan telah memeriksa fisik ruang ${selectedSubmission.task?.room?.name} secara langsung dan menyetujui hasil kebersihannya?`,
+      confirmText: 'Ya, Setujui Laporan',
       cancelText: 'Batal',
       type: 'info'
     }))) {
@@ -218,15 +474,23 @@ export default function Verifications() {
     const subId = selectedSubmission.id;
 
     try {
-      const payload = {
-        notes: feedback || 'Laporan disetujui.',
-      };
+      const formData = new FormData();
+      formData.append('notes', feedback || 'Laporan disetujui setelah cek fisik di lokasi.');
+      if (scannedQrCode) formData.append('room_qr_code', scannedQrCode);
+      if (qrScannedAt) formData.append('qr_scanned_at', qrScannedAt);
+      if (supervisorGps.latitude) formData.append('latitude', supervisorGps.latitude);
+      if (supervisorGps.longitude) formData.append('longitude', supervisorGps.longitude);
+      formData.append('is_onsite_verified', '1');
 
-      const response = await api.post(`/verifications/${subId}/approve`, payload);
+      if (inspectionPhotoBlob) {
+        formData.append('foto_inspeksi', inspectionPhotoBlob, 'inspeksi_supervisor.jpg');
+      }
+
+      const response = await api.post(`/verifications/${subId}/approve`, formData);
 
       if (response.success) {
         setSubmissions(prev => prev.filter(s => s.id !== subId));
-        setSuccessMsg('Laporan kebersihan berhasil disetujui.');
+        setSuccessMsg(`Laporan kebersihan ruang ${selectedSubmission.task?.room?.name} berhasil diverifikasi & disetujui di lokasi!`);
         setSelectedSubmission(null);
         setFeedback('');
         fetchPendingSubmissions(false);
@@ -238,6 +502,7 @@ export default function Verifications() {
     }
   };
 
+  // --- REJECT SUBMISSION ---
   const handleReject = async () => {
     if (!feedback || !feedback.trim()) {
       setError('Untuk penolakan laporan, Anda wajib mengisi catatan perbaikan.');
@@ -247,7 +512,7 @@ export default function Verifications() {
     if (!(await confirm({
       title: 'Tolak Laporan Kebersihan',
       message: 'Apakah Anda yakin ingin menolak laporan ini dan meminta CS melakukan perbaikan ulang?',
-      confirmText: 'Ya, Tolak',
+      confirmText: 'Ya, Tolak & Minta Perbaikan',
       cancelText: 'Batal',
       type: 'warning'
     }))) {
@@ -281,11 +546,11 @@ export default function Verifications() {
 
   return (
     <div>
-      <div className="flex-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      <div className="flex-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 800 }}>Verifikasi Laporan Kebersihan</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Periksa hasil kerja petugas CS melalui 4 sudut foto ruangan sebelum menyetujui laporan
+            Pemeriksaan hasil kerja petugas CS &amp; verifikasi fisik langsung di lokasi ruangan (*Scan-to-Verify*).
           </p>
         </div>
         {selectedSubmission && (
@@ -306,14 +571,14 @@ export default function Verifications() {
       </div>
 
       {successMsg && (
-        <div className="alert alert-success">
+        <div className="alert alert-success" style={{ marginBottom: '20px' }}>
           <Check size={18} />
           <span style={{ fontWeight: 700 }}>{successMsg}</span>
         </div>
       )}
 
       {error && (
-        <div className="alert alert-danger">
+        <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
           <ShieldAlert size={18} />
           <span>{error}</span>
         </div>
@@ -324,7 +589,7 @@ export default function Verifications() {
         <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
 
           <div style={{ marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
-            <span className="status-badge status-waiting_verification" style={{ marginBottom: '6px' }}>Menunggu Verifikasi Anda</span>
+            <span className="status-badge status-waiting_verification" style={{ marginBottom: '6px' }}>Menunggu Verifikasi On-Site</span>
             <h2 style={{ margin: 0, fontSize: '1.35rem', marginTop: '4px', fontWeight: 800 }}>
               Ruang: {selectedSubmission.task?.room?.name} ({selectedSubmission.task?.room?.code})
             </h2>
@@ -333,11 +598,71 @@ export default function Verifications() {
             </p>
           </div>
 
-          {/* FOTO BUKTI 4 SUDUT */}
+          {/* ========================================================================= */}
+          {/* BANNER 1: STATUS VERIFIKASI FISIK ON-SITE (SCAN-TO-VERIFY) */}
+          {/* ========================================================================= */}
+          <div 
+            style={{ 
+              padding: '18px 20px', 
+              borderRadius: 'var(--radius-xl)', 
+              marginBottom: '24px',
+              background: isQrUnlocked ? 'rgba(15, 118, 110, 0.06)' : 'rgba(234, 179, 8, 0.08)',
+              border: isQrUnlocked ? '1.5px solid var(--success)' : '1.5px solid #eab308',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div 
+                style={{ 
+                  width: '46px', 
+                  height: '46px', 
+                  borderRadius: '50%', 
+                  background: isQrUnlocked ? 'var(--success)' : '#eab308', 
+                  color: 'white', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                {isQrUnlocked ? <ShieldCheck size={26} /> : <Lock size={24} />}
+              </div>
+              <div>
+                <strong style={{ fontSize: '1rem', color: isQrUnlocked ? 'var(--success)' : '#92400e', display: 'block' }}>
+                  {isQrUnlocked 
+                    ? `Lokasi Fisik Terkonfirmasi: Ruang ${selectedSubmission.task?.room?.name}` 
+                    : 'Pemeriksaan Lapangan Wajib Dilakukan'}
+                </strong>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  {isQrUnlocked 
+                    ? `Kunci persetujuan terbuka. QR dipindai pada ${new Date(qrScannedAt).toLocaleTimeString('id-ID')}` 
+                    : `Anda wajib mendatangi Ruang ${selectedSubmission.task?.room?.name} dan memindai QR Code fisiknya untuk membuka persetujuan.`}
+                </span>
+              </div>
+            </div>
+
+            {!isQrUnlocked && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleStartSupervisorScan}
+                style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(14, 49, 146, 0.25)' }}
+              >
+                <QrCode size={18} />
+                Scan QR Ruangan di Lokasi
+              </button>
+            )}
+          </div>
+
+          {/* FOTO BUKTI 4 SUDUT DARI PETUGAS CS */}
           <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'rgba(255,255,255,0.02)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                <Camera size={18} /> Foto Bukti 4 Sudut Ruangan
+                <Camera size={18} /> Foto Bukti Pengerjaan Petugas CS (4 Sudut)
               </h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ketuk foto untuk memperbesar (zoom)</span>
             </div>
@@ -392,22 +717,6 @@ export default function Verifications() {
             ))}
           </div>
 
-          {/* Bahan & Alat yang Digunakan CS */}
-          {selectedSubmission.materials && selectedSubmission.materials.length > 0 && (
-            <div style={{ marginBottom: '20px', background: 'rgba(15, 118, 110, 0.04)', border: '1px solid rgba(15, 118, 110, 0.15)', padding: '14px 18px', borderRadius: 'var(--radius-xl)' }}>
-              <label className="form-label" style={{ fontWeight: 700, color: 'var(--success)' }}>
-                Bahan Pembersih &amp; Alat yang Digunakan CS (Kepatuhan GMP / HACCP):
-              </label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
-                {selectedSubmission.materials.map((m) => (
-                  <span key={m.id} className="status-badge status-completed" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
-                    {m.nama_material} ({m.jenis})
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
           {selectedSubmission.notes && (
             <div className="form-group" style={{ marginBottom: '20px' }}>
               <label className="form-label" style={{ fontWeight: 700 }}>Catatan Petugas CS saat Menyerahkan:</label>
@@ -417,17 +726,67 @@ export default function Verifications() {
             </div>
           )}
 
+          {/* ========================================================================= */}
+          {/* SECTION 2: BUKTI INSPEKSI FISIK SUPERVISOR (ON-THE-SPOT PHOTO) */}
+          {/* ========================================================================= */}
+          {isQrUnlocked && (
+            <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'rgba(15, 118, 110, 0.03)', border: '1.5px solid rgba(15, 118, 110, 0.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <Camera size={18} /> Foto Bukti Inspeksi Fisik Supervisor (On-The-Spot)
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Ambil 1 foto kondisi fisik ruangan saat ini sebagai bukti sah inspeksi langsung di lokasi.
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleOpenSupervisorCamera}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                >
+                  <Camera size={15} />
+                  {inspectionPhotoPreview ? 'Ambil Ulang Foto' : '📸 Ambil Foto Inspeksi Lapangan'}
+                </button>
+              </div>
+
+              {inspectionPhotoPreview ? (
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                  <img
+                    src={inspectionPhotoPreview}
+                    alt="Bukti Inspeksi Fisik"
+                    style={{ width: '180px', height: '120px', objectFit: 'cover', borderRadius: 'var(--radius-lg)', border: '2px solid var(--success)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  />
+                  <div style={{ fontSize: '0.85rem' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle2 size={16} /> Foto Inspeksi Berhasil Ditambahkan
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Foto telah dibubuhi watermark digital waktu &amp; nama supervisor.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-color)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  Tekan tombol <strong>"Ambil Foto Inspeksi Lapangan"</strong> di atas untuk mengambil foto fisik ruangan saat Anda berada di lokasi.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Feedback Form */}
           <div className="form-group" style={{ marginBottom: '24px' }}>
             <label className="form-label" style={{ fontWeight: 700 }}>
-              Catatan Verifikasi / Alasan Penolakan <span style={{ color: 'var(--danger)', fontWeight: 400 }}>(Wajib diisi jika Anda menolak laporan)</span>
+              Catatan Verifikasi Supervisor <span style={{ color: 'var(--danger)', fontWeight: 400 }}>(Wajib diisi jika menolak laporan)</span>
             </label>
             <textarea 
               className="form-control" 
               rows="3" 
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Contoh jika disetujui: Hasil bersih dan rapi. Contoh jika ditolak: Sudut kiri masih kotor, tolong dipel ulang..."
+              placeholder="Contoh jika disetujui: Hasil bersih, wangi, dan rapi sesuai SOP. Contoh jika ditolak: Sudut kiri masih kotor, tolong dipel ulang..."
               disabled={processing}
             />
           </div>
@@ -435,186 +794,278 @@ export default function Verifications() {
           {/* ACTION BUTTONS — BESAR & JELAS */}
           <div>
             <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
-              KEPUTUSAN VERIFIKASI ANDA:
+              KEPUTUSAN VERIFIKASI SUPERVISOR:
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+              
+              {/* TOMBOL APPROVE (TERKUNCI JIKA BELUM SCAN QR) */}
               <button 
                 type="button" 
-                className="btn btn-success btn-lg"
+                className={`btn ${isQrUnlocked ? 'btn-success' : 'btn-secondary'} btn-lg`}
                 onClick={handleApprove}
-                disabled={processing}
-                style={{ fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 16px rgba(15, 118, 110, 0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                disabled={processing || !isQrUnlocked}
+                style={{ 
+                  fontWeight: 800, 
+                  fontSize: '1rem', 
+                  boxShadow: isQrUnlocked ? '0 4px 16px rgba(15, 118, 110, 0.25)' : 'none', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '8px',
+                  opacity: isQrUnlocked ? 1 : 0.6,
+                  cursor: isQrUnlocked ? 'pointer' : 'not-allowed'
+                }}
+                title={isQrUnlocked ? 'Setujui laporan kebersihan ini' : 'Anda wajib scan QR ruangan di lokasi terlebih dahulu'}
               >
-                <Check size={18} /> {processing ? 'Memproses...' : 'Setujui Laporan Ini (Approve)'}
+                {isQrUnlocked ? <Check size={18} /> : <Lock size={18} />}
+                {processing ? 'Memproses...' : isQrUnlocked ? 'Setujui Laporan Ini (Approve)' : 'Setujui (Terkunci - Wajib Scan QR)'}
               </button>
+
+              {/* TOMBOL REJECT */}
               <button 
                 type="button" 
                 className="btn btn-danger btn-lg"
                 onClick={handleReject}
-                disabled={processing || feedback.trim().length < 5}
-                style={{ fontWeight: 800, fontSize: '1rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                title={feedback.trim().length < 5 ? "Harap tulis catatan alasan penolakan di atas terlebih dahulu" : "Tolak laporan ini"}
+                disabled={processing}
+                style={{ fontWeight: 800, fontSize: '1rem', boxShadow: '0 4px 16px rgba(225, 29, 72, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               >
-                <X size={18} /> {processing ? 'Memproses...' : 'Tolak & Minta Perbaikan Ulang'}
+                <X size={18} /> Tolak &amp; Minta CS Perbaiki
               </button>
             </div>
-            {feedback.trim().length < 5 && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
-                * Tombol Tolak akan aktif otomatis setelah Anda mengetik alasan penolakan di kotak catatan di atas.
-              </p>
-            )}
           </div>
+
         </div>
       )}
 
-      {/* LIST PENDING SUBMISSIONS */}
+      {/* ========================================================================= */}
+      {/* DAFTAR ANTREAN VERIFIKASI (TABEL) */}
+      {/* ========================================================================= */}
       {!selectedSubmission && (
         <div>
           {loading ? (
-            <div className="loading-state">
-              <div className="spinner" style={{ width: '36px', height: '36px' }}></div>
-              <div className="loading-state-text">Memuat antrean verifikasi laporan...</div>
+            <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <div className="spinner" style={{ width: '36px', height: '36px', margin: '0 auto 14px' }}></div>
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Memuat antrean verifikasi kebersihan...</div>
             </div>
           ) : (
-            <>
-              {/* Tampilan Desktop (Tabel) */}
-              <div className="desktop-view">
-                <div className="table-container">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Gedung &amp; Ruangan</th>
-                        <th>Petugas CS</th>
-                        <th className="col-hide-mobile">Shift Kerja</th>
-                        <th>Waktu Penyerahan</th>
-                        <th className="col-hide-mobile">Catatan CS</th>
-                        <th>Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {submissions.map(sub => {
-                        const roomName = sub.task?.room?.name || sub.task?.nama_ruangan || '-';
-                        const roomCode = sub.task?.room?.code || sub.task?.kode_ruangan || '-';
-                        const buildingName = sub.task?.room?.building?.name || '-';
-                        const csName = sub.user?.name || sub.cs_name || '-';
-                        const csInitial = csName !== '-' ? csName.charAt(0).toUpperCase() : '?';
-                        const shiftName = sub.task?.shift?.name || sub.task?.nama_shift || 'Shift 1';
-                        const submittedAt = sub.submission_time || sub.submitted_at || null;
-                        const dateStr = submittedAt ? submittedAt.split('T')[0].split(' ')[0] : '-';
-                        const timeStr = submittedAt ? (submittedAt.includes('T') ? submittedAt.split('T')[1]?.substring(0,5) : submittedAt.split(' ')[1]?.substring(0,5) || '-') : '-';
-
-                        return (
-                        <tr key={sub.id}>
-                          <td style={{ fontWeight: 700 }}>
-                            <div style={{ fontSize: '0.95rem' }}>{roomName}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '2px' }}>Kode: {roomCode} | Gedung: {buildingName}</div>
-                          </td>
-                          <td>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                              <span className="user-avatar" style={{ width: '28px', height: '28px', fontSize: '0.75rem', flexShrink: 0 }}>{csInitial}</span>
-                              <strong style={{ fontSize: '0.9rem' }}>{csName}</strong>
-                            </span>
-                          </td>
-                          <td className="col-hide-mobile">
-                            <span className="status-badge status-in_progress">{shiftName}</span>
-                          </td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{dateStr}</div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Pukul {timeStr}</div>
-                          </td>
-                          <td className="col-hide-mobile" style={{ color: 'var(--text-secondary)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {sub.notes || sub.catatan_cs || '-'}
-                          </td>
-                          <td>
-                            <button 
-                              className="btn btn-primary btn-sm"
-                              onClick={() => setSelectedSubmission(sub)}
-                              style={{ display: 'inline-flex', gap: '6px', fontWeight: 700 }}
-                            >
-                              <Eye size={14} /> Tinjau &amp; Verifikasi
-                            </button>
-                          </td>
-                        </tr>
-                        );
-                      })}
-                      {submissions.length === 0 && (
-                        <tr>
-                          <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>
-                            <CheckCircle2 size={36} style={{ color: 'var(--success)', marginBottom: '8px' }} />
-                            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Semua Laporan Sudah Terverifikasi</h3>
-                            <p style={{ margin: 0, fontSize: '0.85rem' }}>Tidak ada antrean laporan yang menunggu persetujuan Anda saat ini.</p>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Tampilan Mobile (Kartu / Cards) */}
-              <div className="mobile-view">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {submissions.map(sub => {
-                    const roomName = sub.task?.room?.name || sub.task?.nama_ruangan || '-';
-                    const roomCode = sub.task?.room?.code || sub.task?.kode_ruangan || '-';
-                    const buildingName = sub.task?.room?.building?.name || '-';
-                    const csName = sub.user?.name || sub.cs_name || '-';
-                    const csInitial = csName !== '-' ? csName.charAt(0).toUpperCase() : '?';
-                    const shiftName = sub.task?.shift?.name || sub.task?.nama_shift || 'Shift 1';
-                    const submittedAt = sub.submission_time || sub.submitted_at || null;
-                    const dateStr = submittedAt ? submittedAt.split('T')[0].split(' ')[0] : '-';
-                    const timeStr = submittedAt ? (submittedAt.includes('T') ? submittedAt.split('T')[1]?.substring(0,5) : submittedAt.split(' ')[1]?.substring(0,5) || '-') : '-';
-
-                    return (
-                      <div 
-                        key={sub.id} 
-                        className="task-card-mobile"
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                          <div>
-                            <div className="task-card-title">{roomName}</div>
-                            <div className="task-card-sub">{buildingName} • Kode: {roomCode}</div>
-                          </div>
-                          <span className="status-badge status-in_progress" style={{ fontSize: '0.72rem' }}>{shiftName}</span>
+            <div className="table-responsive glass-panel" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Ruangan &amp; Gedung</th>
+                    <th>Petugas CS</th>
+                    <th>Waktu Serah Laporan</th>
+                    <th>Status Verifikasi Fisik</th>
+                    <th style={{ textAlign: 'right' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {submissions.map((sub) => (
+                    <tr key={sub.id}>
+                      <td>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                          {sub.task?.room?.name || 'Ruangan'}
                         </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            <span className="user-avatar" style={{ width: '22px', height: '22px', fontSize: '0.65rem', flexShrink: 0 }}>{csInitial}</span>
-                            <strong>{csName}</strong>
-                          </span>
-                          <span style={{ color: 'var(--text-secondary)' }}>{dateStr} ({timeStr})</span>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          Kode: {sub.task?.room?.code || '-'} • Gedung: {sub.task?.room?.building?.name || '-'}
                         </div>
+                      </td>
 
-                        {sub.notes && (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.03)', padding: '8px 12px', borderRadius: 'var(--radius-md)', lineHeight: '1.4' }}>
-                            <strong>Catatan CS:</strong> {sub.notes}
-                          </div>
-                        )}
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{sub.user?.name || sub.cs_name || 'Petugas CS'}</div>
+                      </td>
 
-                        <button 
-                          className="btn btn-primary"
-                          onClick={() => setSelectedSubmission(sub)}
-                          style={{ width: '100%', fontWeight: 700, marginTop: '4px' }}
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
+                          {sub.submission_time ? sub.submission_time.replace('T', ' ').substring(0, 16) : '-'}
+                        </div>
+                      </td>
+
+                      <td>
+                        <span className="status-badge status-waiting_verification" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Lock size={12} />
+                          Wajib Cek On-Site
+                        </span>
+                      </td>
+
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleSelectSubmission(sub)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                         >
-                          <Eye size={16} /> Tinjau &amp; Verifikasi Laporan
+                          <Eye size={14} />
+                          Tinjau &amp; Cek Fisik
                         </button>
-                      </div>
-                    );
-                  })}
+                      </td>
+                    </tr>
+                  ))}
+
                   {submissions.length === 0 && (
-                    <div className="glass-panel" style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      <CheckCircle2 size={36} style={{ color: 'var(--success)', marginBottom: '8px' }} />
-                      <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: 'var(--text-primary)' }}>Semua Laporan Terverifikasi</h3>
-                      <p style={{ margin: 0, fontSize: '0.85rem' }}>Tidak ada antrean laporan kebersihan saat ini.</p>
-                    </div>
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+                        <CheckCircle2 size={40} style={{ margin: '0 auto 12px', color: 'var(--success)', opacity: 0.8 }} />
+                        <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Tidak Ada Antrean Verifikasi</h4>
+                        <p style={{ margin: 0, fontSize: '0.85rem' }}>Seluruh laporan kebersihan telah diverifikasi atau belum ada laporan baru yang diserahkan CS.</p>
+                      </td>
+                    </tr>
                   )}
-                </div>
-              </div>
-            </>
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: SUPERVISOR QR SCANNER DI LOKASI (PORTAL) */}
+      {/* ========================================================================= */}
+      {showSupervisorScanner && createPortal(
+        <div className="modal-backdrop" onClick={handleStopSupervisorScan}>
+          <div 
+            className="glass-panel" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '520px', width: '92vw', padding: 0, overflow: 'hidden' }}
+          >
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Verifikasi Kehadiran Fisik
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <QrCode className="text-primary" size={22} />
+                  Scan QR Ruangan di Lokasi
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Arahkan kamera ke QR Code di pintu ruang: <strong>{selectedSubmission?.task?.room?.name}</strong>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={handleStopSupervisorScan}
+                title="Tutup Scanner"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px', textAlign: 'center' }}>
+              {scannerError && (
+                <div className="alert alert-danger" style={{ marginBottom: '16px', textAlign: 'left' }}>
+                  <AlertCircle size={18} />
+                  <span style={{ fontSize: '0.85rem' }}>{scannerError}</span>
+                </div>
+              )}
+
+              <div 
+                id="supervisor-qr-reader" 
+                style={{ 
+                  width: '100%', 
+                  maxWidth: '360px', 
+                  margin: '0 auto', 
+                  borderRadius: 'var(--radius-xl)', 
+                  overflow: 'hidden',
+                  border: '2px solid var(--primary)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+                }}
+              ></div>
+
+              <p style={{ margin: '14px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Pastikan Anda berdiri tepat di depan QR Code fisik ruangan.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ margin: 0, padding: '14px 24px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleStopSupervisorScan}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: SUPERVISOR LIVE PHYSICAL INSPECTION CAMERA (PORTAL) */}
+      {/* ========================================================================= */}
+      {showSupervisorCamera && createPortal(
+        <div className="modal-backdrop" onClick={handleCloseSupervisorCamera}>
+          <div 
+            className="glass-panel" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ maxWidth: '640px', width: '92vw', padding: 0, overflow: 'hidden' }}
+          >
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Bukti Fisik Lapangan
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Camera className="text-primary" size={22} />
+                  Foto Inspeksi: {selectedSubmission?.task?.room?.name}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Ambil foto kondisi nyata ruangan saat ini
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={handleCloseSupervisorCamera}
+                title="Tutup Kamera"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '16px', position: 'relative', background: '#000000', textAlign: 'center' }}>
+              <div style={{ position: 'relative', width: '100%', maxHeight: '60vh', overflow: 'hidden', borderRadius: 'var(--radius-lg)' }}>
+                <video 
+                  id="supervisor-video" 
+                  autoPlay 
+                  playsInline 
+                  muted 
+                  style={{ width: '100%', height: 'auto', maxHeight: '55vh', objectFit: 'cover' }}
+                />
+
+                {/* Overlay live clock & info */}
+                <div style={{ position: 'absolute', bottom: '10px', left: '10px', right: '10px', background: 'rgba(0,0,0,0.65)', color: 'white', padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', textAlign: 'left' }}>
+                  <div><strong>Lokasi:</strong> {selectedSubmission?.task?.room?.name} ({selectedSubmission?.task?.room?.code})</div>
+                  <div><strong>Waktu Real-time:</strong> {liveSupervisorTime}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ margin: 0, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleCloseSupervisorCamera}
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleCaptureInspectionPhoto}
+                style={{ fontWeight: 800, padding: '10px 24px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Camera size={18} />
+                Jepret &amp; Simpan Foto
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }
