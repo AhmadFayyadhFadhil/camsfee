@@ -351,7 +351,7 @@ export default function Buildings() {
                       value={radiusMeter} 
                       onChange={(e) => setRadiusMeter(e.target.value)} 
                       placeholder="250"
-                      min="10"
+                      min="1"
                       max="10000"
                     />
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.74rem', marginTop: '2px', display: 'block' }}>

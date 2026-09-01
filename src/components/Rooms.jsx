@@ -551,7 +551,7 @@ export default function Rooms() {
                         value={radiusMeter} 
                         onChange={(e) => setRadiusMeter(e.target.value)} 
                         placeholder="30"
-                        min="5"
+                        min="1"
                         max="5000"
                       />
                     </div>
