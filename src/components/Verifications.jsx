@@ -357,16 +357,16 @@ export default function Verifications() {
             scannedRoomId = cleanText.toLowerCase();
           }
 
-          const targetRoomCode = (selectedSubmission?.task?.room?.code || '').trim().toLowerCase();
+          const targetRoomCode = (selectedSubmission?.task?.room?.code || selectedSubmission?.task?.room?.kode_ruangan || '').trim().toLowerCase();
           const targetRoomId = (selectedSubmission?.task?.room?.id || '').trim().toLowerCase();
           const targetRoomToken = (selectedSubmission?.task?.room?.qr_code_token || '').trim().toLowerCase();
-          const targetRoomName = selectedSubmission?.task?.room?.name || 'Ruangan Terkait';
+          const targetRoomName = selectedSubmission?.task?.room?.name || selectedSubmission?.task?.room?.nama_ruangan || 'Ruangan Terkait';
           const cleanLower = cleanText.toLowerCase();
 
           const isMatch = (
-            (targetRoomId && (scannedRoomId === targetRoomId || cleanLower === targetRoomId)) ||
-            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower === targetRoomCode)) ||
-            (targetRoomToken && (scannedToken === targetRoomToken || cleanLower === targetRoomToken))
+            (targetRoomToken && (scannedToken === targetRoomToken || cleanLower.includes(targetRoomToken))) ||
+            (targetRoomId && (scannedRoomId === targetRoomId || cleanLower.includes(targetRoomId))) ||
+            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower.includes(targetRoomCode)))
           );
 
           if (isMatch) {

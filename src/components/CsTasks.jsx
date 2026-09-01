@@ -398,16 +398,16 @@ export default function CsTasks({
             scannedRoomId = cleanText.toLowerCase();
           }
 
-          const targetRoomCode = (scanningTask.room?.code || '').trim().toLowerCase();
+          const targetRoomCode = (scanningTask.room?.code || scanningTask.room?.kode_ruangan || '').trim().toLowerCase();
           const targetRoomId = (scanningTask.room_id || scanningTask.room?.id || '').trim().toLowerCase();
           const targetRoomToken = (scanningTask.room?.qr_code_token || '').trim().toLowerCase();
-          const targetRoomName = scanningTask.room?.name || 'Ruangan Terkait';
+          const targetRoomName = scanningTask.room?.name || scanningTask.room?.nama_ruangan || 'Ruangan Terkait';
           const cleanLower = cleanText.toLowerCase();
 
           const isMatch = (
-            (targetRoomId && (scannedRoomId === targetRoomId || cleanLower === targetRoomId)) ||
-            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower === targetRoomCode)) ||
-            (targetRoomToken && (scannedToken === targetRoomToken || cleanLower === targetRoomToken))
+            (targetRoomToken && (scannedToken === targetRoomToken || cleanLower.includes(targetRoomToken))) ||
+            (targetRoomId && (scannedRoomId === targetRoomId || cleanLower.includes(targetRoomId))) ||
+            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower.includes(targetRoomCode)))
           );
 
           if (!isMatch) {
