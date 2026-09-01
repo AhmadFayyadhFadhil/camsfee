@@ -388,30 +388,40 @@ export default function CsTasks({
         config,
         async (decodedText) => {
           const cleanText = decodedText.trim();
+          let parsed = null;
           let scannedRoomId = '';
           let scannedToken = '';
+          let scannedCode = '';
+          let scannedName = '';
+
           try {
-            const parsed = JSON.parse(cleanText);
+            parsed = JSON.parse(cleanText);
             scannedRoomId = (parsed.room_id || '').trim().toLowerCase();
             scannedToken = (parsed.token || '').trim().toLowerCase();
+            scannedCode = (parsed.code || parsed.kode_ruangan || '').trim().toLowerCase();
+            scannedName = (parsed.name || parsed.nama_ruangan || '').trim().toLowerCase();
           } catch (e) {
             scannedRoomId = cleanText.toLowerCase();
+            scannedToken = cleanText.toLowerCase();
           }
 
           const targetRoomCode = (scanningTask.room?.code || scanningTask.room?.kode_ruangan || '').trim().toLowerCase();
           const targetRoomId = (scanningTask.room_id || scanningTask.room?.id || '').trim().toLowerCase();
           const targetRoomToken = (scanningTask.room?.qr_code_token || '').trim().toLowerCase();
-          const targetRoomName = scanningTask.room?.name || scanningTask.room?.nama_ruangan || 'Ruangan Terkait';
+          const targetRoomName = (scanningTask.room?.name || scanningTask.room?.nama_ruangan || 'Ruangan Terkait').trim();
           const cleanLower = cleanText.toLowerCase();
 
+          // Cek kecocokan berdasarkan Token, ID Ruangan, Kode Ruangan, atau Nama
           const isMatch = (
             (targetRoomToken && (scannedToken === targetRoomToken || cleanLower.includes(targetRoomToken))) ||
             (targetRoomId && (scannedRoomId === targetRoomId || cleanLower.includes(targetRoomId))) ||
-            (targetRoomCode && (scannedRoomId === targetRoomCode || cleanLower.includes(targetRoomCode)))
+            (targetRoomCode && (scannedCode === targetRoomCode || scannedRoomId === targetRoomCode || cleanLower.includes(targetRoomCode))) ||
+            (targetRoomName && (scannedName === targetRoomName.toLowerCase() || cleanLower.includes(targetRoomName.toLowerCase()))) ||
+            (!targetRoomToken && !targetRoomId) // Fallback ke backend jika data lokal belum lengkap
           );
 
           if (!isMatch) {
-            setScannerError(`QR Code tidak cocok! Anda memindai QR ruangan lain, sedangkan tugas ini adalah untuk '${targetRoomName}' (${targetRoomCode.toUpperCase()}).`);
+            setScannerError(`QR Code tidak cocok! Anda memindai QR ruangan lain, sedangkan tugas ini adalah untuk '${targetRoomName}' (${(targetRoomCode || '-').toUpperCase()}).`);
             return;
           }
 
