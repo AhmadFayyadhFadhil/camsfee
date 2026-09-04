@@ -196,6 +196,8 @@ export default function Findings({ user, isOb = false }) {
   // Create Form State
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [roomId, setRoomId] = useState('');
+  const [roomSearchQuery, setRoomSearchQuery] = useState('');
+  const [showRoomDropdown, setShowRoomDropdown] = useState(false);
   const [roomAssetId, setRoomAssetId] = useState('');
   const [roomAssets, setRoomAssets] = useState([]);
   const [findingCategoryId, setFindingCategoryId] = useState('');
@@ -617,6 +619,15 @@ export default function Findings({ user, isOb = false }) {
     fetchFindings(true);
   }, [statusFilter]);
 
+  const filteredRooms = rooms.filter(r => {
+    if (!roomSearchQuery.trim()) return true;
+    const q = roomSearchQuery.toLowerCase();
+    const name = (r.name || r.nama_ruangan || '').toLowerCase();
+    const code = (r.code || r.kode_ruangan || '').toLowerCase();
+    const building = (r.building?.name || r.building?.nama_gedung || '').toLowerCase();
+    return name.includes(q) || code.includes(q) || building.includes(q);
+  });
+
   useEffect(() => {
     if (roomId) {
       api.get(`/room-assets?room_id=${roomId}&is_active=true`)
@@ -752,6 +763,8 @@ export default function Findings({ user, isOb = false }) {
         setSuccessMsg('Temuan masalah berhasil dilaporkan dan notifikasi telah dikirim ke Supervisor.');
         setShowCreateForm(false);
         setRoomId('');
+        setRoomSearchQuery('');
+        setShowRoomDropdown(false);
         setRoomAssetId('');
         setFindingCategoryId('');
         setDescription('');
@@ -854,7 +867,18 @@ export default function Findings({ user, isOb = false }) {
         {!showCreateForm && !resolvingFinding && (
           <button 
             className="btn btn-primary" 
-            onClick={() => { setShowCreateForm(true); fetchRooms(); fetchCategories(); setResolvingFinding(null); }}
+            onClick={() => {
+              setShowCreateForm(true);
+              setRoomId('');
+              setRoomSearchQuery('');
+              setShowRoomDropdown(false);
+              setDescription('');
+              setFotoTemuan(null);
+              setFotoTemuanName('');
+              fetchRooms();
+              fetchCategories();
+              setResolvingFinding(null);
+            }}
             style={{ fontWeight: 700, display: 'inline-flex', gap: '8px' }}
           >
             <Plus size={18} /> + Laporkan Kerusakan Baru
@@ -899,55 +923,139 @@ export default function Findings({ user, isOb = false }) {
           </div>
 
           <form onSubmit={handleSaveReport}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 700 }}>1. Ruangan Lokasi Kerusakan *</label>
-                <select 
-                  className="form-control form-select"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
+            {/* 1. Ruangan Lokasi Kerusakan (Searchable Input + Dropdown) */}
+            <div className="form-group" style={{ position: 'relative', marginBottom: '18px' }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>
+                1. Ruangan Lokasi Kerusakan *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="Ketik nama atau kode unik ruangan (contoh: WDA1, Toilet, FA, Office)..." 
+                  value={roomSearchQuery}
+                  onChange={(e) => {
+                    setRoomSearchQuery(e.target.value);
+                    setShowRoomDropdown(true);
+                    if (!e.target.value) setRoomId('');
+                  }}
+                  onFocus={() => setShowRoomDropdown(true)}
+                  style={{ paddingRight: roomId ? '36px' : '14px', height: '42px', fontSize: '0.9rem' }}
                   required
-                >
-                  <option value="" disabled>Pilih Ruangan...</option>
-                  {rooms.map(r => (
-                    <option key={r.id} value={r.id}>{r.name || r.nama_ruangan} ({r.code || r.kode_ruangan}) - Gedung {r.building?.name || r.building?.nama_gedung}</option>
-                  ))}
-                </select>
+                />
+                {roomId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRoomId('');
+                      setRoomSearchQuery('');
+                      setShowRoomDropdown(true);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: '#e2e8f0',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: '22px',
+                      height: '22px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      color: '#475569'
+                    }}
+                    title="Hapus pilihan ruangan"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 700 }}>2. Aset / Mesin Terkait (Opsional)</label>
-                <select
-                  className="form-control form-select"
-                  value={roomAssetId}
-                  onChange={(e) => setRoomAssetId(e.target.value)}
-                  disabled={!roomId}
+              {/* Dropdown Suggestions */}
+              {showRoomDropdown && (
+                <div 
+                  className="glass-panel" 
+                  style={{ 
+                    position: 'absolute', 
+                    top: '100%', 
+                    left: 0, 
+                    right: 0, 
+                    maxHeight: '260px', 
+                    overflowY: 'auto', 
+                    zIndex: 100, 
+                    background: '#ffffff', 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: 'var(--radius-lg)', 
+                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.12)', 
+                    marginTop: '4px' 
+                  }}
                 >
-                  <option value="">— Tidak Terkait Aset Tertentu —</option>
-                  {roomAssets.map(a => (
-                    <option key={a.id} value={a.id}>{a.nama_aset} ({a.kode_aset})</option>
-                  ))}
-                </select>
-              </div>
+                  {filteredRooms.length > 0 ? (
+                    filteredRooms.map(r => {
+                      const isSelected = r.id === roomId;
+                      const rCode = r.code || r.kode_ruangan;
+                      const rName = r.name || r.nama_ruangan;
+                      const bName = r.building?.name || r.building?.nama_gedung || '';
 
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 700 }}>3. Kategori Masalah *</label>
-                <select 
-                  className="form-control form-select"
-                  value={findingCategoryId}
-                  onChange={(e) => setFindingCategoryId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Pilih Kategori Kerusakan...</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.nama_kategori} ({c.kode_kategori})</option>
-                  ))}
-                </select>
-              </div>
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => {
+                            setRoomId(r.id);
+                            setRoomSearchQuery(`${rName} (${rCode}) - Gedung ${bName}`);
+                            setShowRoomDropdown(false);
+                          }}
+                          style={{
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #f1f5f9',
+                            background: isSelected ? '#eff6ff' : 'transparent',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            transition: 'background 150ms ease'
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = isSelected ? '#dbeafe' : '#f8fafc'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = isSelected ? '#eff6ff' : 'transparent'; }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{rName}</span>
+                            <span style={{
+                              background: '#e0e7ff',
+                              color: '#3730a3',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              fontFamily: 'var(--mono)'
+                            }}>
+                              {rCode}
+                            </span>
+                            {bName && (
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                &bull; Gedung {bName}
+                              </span>
+                            )}
+                          </div>
+                          {isSelected && <Check size={16} style={{ color: 'var(--primary)' }} />}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      Tidak ada ruangan yang cocok dengan "{roomSearchQuery}"
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 700 }}>4. Jelaskan Kerusakannya Secara Singkat *</label>
+            {/* 2. Jelaskan Kerusakannya Secara Singkat */}
+            <div className="form-group" style={{ marginBottom: '18px' }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>2. Jelaskan Kerusakannya Secara Singkat *</label>
               <textarea 
                 className="form-control" 
                 rows="3" 
@@ -958,8 +1066,9 @@ export default function Findings({ user, isOb = false }) {
               />
             </div>
 
+            {/* 3. Foto Bukti Kerusakan */}
             <div className="form-group" style={{ background: 'rgba(14, 49, 146, 0.03)', border: '1.5px dashed var(--primary)', padding: '20px', borderRadius: 'var(--radius-xl)' }}>
-              <label className="form-label" style={{ fontWeight: 800, fontSize: '0.95rem' }}>5. Foto Bukti Kerusakan (Wajib 1 Foto)*</label>
+              <label className="form-label" style={{ fontWeight: 800, fontSize: '0.95rem' }}>3. Foto Bukti Kerusakan (Wajib 1 Foto)*</label>
               <p style={{ margin: '4px 0 12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                 Wajib ambil 1 foto kondisi kerusakan langsung dari kamera HP Anda.
               </p>
@@ -990,7 +1099,7 @@ export default function Findings({ user, isOb = false }) {
               <button type="button" className="btn btn-secondary" onClick={() => setShowCreateForm(false)} style={{ flex: 1 }}>
                 Batal
               </button>
-              <button type="submit" className="btn btn-primary" disabled={submitting || !fotoTemuan} style={{ flex: 2, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <button type="submit" className="btn btn-primary" disabled={submitting || !fotoTemuan || !roomId} style={{ flex: 2, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 {submitting ? 'Mengirim Laporan...' : <><Send size={18} /><span>Kirim Laporan Kerusakan</span></>}
               </button>
             </div>
