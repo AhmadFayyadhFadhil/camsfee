@@ -151,6 +151,56 @@ export default function Login({ onLoginSuccess, appIdentity }) {
           </button>
         </form>
 
+        {/* Akun Khusus Lapor Temuan Kerusakan & Tatacara */}
+        <div style={{
+          marginTop: '22px',
+          paddingTop: '18px',
+          borderTop: '1px solid var(--border-color)',
+        }}>
+          <div style={{
+            background: 'rgba(239, 246, 255, 0.6)',
+            border: '1px solid #bfdbfe',
+            borderRadius: 'var(--radius-lg)',
+            padding: '14px 16px',
+            textAlign: 'left'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertOctagon size={15} /> Akun Khusus Lapor Kerusakan Fasilitas
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setEmail('pelapor@cams.com');
+                  setPassword('password');
+                }}
+                style={{ fontSize: '0.74rem', padding: '3px 8px', minHeight: '26px', height: '26px', fontWeight: 600 }}
+                title="Klik untuk otomatis mengisi email & kata sandi akun pelapor"
+              >
+                Gunakan Akun Ini
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+              Bagi karyawan umum / staf yang tidak memiliki akun operasional dan ingin melaporkan fasilitas ruangan yang rusak:
+            </p>
+
+            <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: '0.76rem', fontFamily: 'var(--mono)', color: '#334155', marginBottom: '10px' }}>
+              Email: <b>pelapor@cams.com</b> &bull; Sandi: <b>password</b>
+            </div>
+
+            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+              <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '3px' }}>Tata Cara Melaporkan Kerusakan:</strong>
+              <ol style={{ margin: 0, paddingLeft: '16px' }}>
+                <li style={{ marginBottom: '2px' }}>Gunakan akun pelapor di atas, lalu klik tombol <b>Masuk Sistem</b>.</li>
+                <li style={{ marginBottom: '2px' }}>Pilih menu <b>Temuan Kerusakan</b> &rarr; klik <b>+ Laporkan Kerusakan Baru</b>.</li>
+                <li>Pilih lokasi ruangan, lampirkan 1 foto bukti kerusakan, dan kirim laporan untuk segera ditindaklanjuti.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );

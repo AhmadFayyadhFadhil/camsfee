@@ -327,7 +327,8 @@ export default function App() {
   const handleLoginSuccess = (loggedInUser, token) => {
     setUser(loggedInUser);
     setIsAuthenticated(true);
-    const initial = getInitialTab();
+    const isGuestUser = loggedInUser.roles && (loggedInUser.roles.includes('guest') || loggedInUser.roles.includes('pelapor'));
+    const initial = isGuestUser ? 'findings' : getInitialTab();
     setCurrentTab(initial);
     window.location.hash = initial;
     setAlert({ type: 'success', message: `Selamat datang kembali, ${loggedInUser.name}!` });
@@ -399,6 +400,14 @@ export default function App() {
   const isCs = user.roles && user.roles.includes('cleaning_service');
   const isOb = user.roles && user.roles.includes('ob');
   const isManager = user.roles && user.roles.includes('manager');
+  const isGuest = user.roles && (user.roles.includes('guest') || user.roles.includes('pelapor'));
+
+  // Redirect guest automatically to findings if landing on dashboard or disallowed tabs
+  useEffect(() => {
+    if (isGuest && (currentTab === 'dashboard' || !['findings', 'profile', 'notifications_panel'].includes(currentTab))) {
+      selectTab('findings');
+    }
+  }, [isGuest, currentTab]);
 
   const getRoleLabel = () => {
     if (isAdmin) return 'Admin';
@@ -407,6 +416,7 @@ export default function App() {
     if (isCs) return 'CS Staff';
     if (isOb) return 'Office Boy';
     if (isManager) return 'Manager';
+    if (isGuest) return 'Pelapor Fasilitas';
     return 'Staf';
   };
 
@@ -416,6 +426,7 @@ export default function App() {
     if (isPic) return 'role-pic';
     if (isCs) return 'role-cs';
     if (isOb) return 'role-ob';
+    if (isGuest) return 'role-pic';
     return 'role-manager';
   };
 
@@ -467,14 +478,16 @@ export default function App() {
 
         <ul className="sidebar-menu">
           <li className="sidebar-item-group-title">Menu Utama</li>
-          <li>
-            <button 
-              className={`sidebar-link ${currentTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => selectTab('dashboard')}
-            >
-              <Layers size={18} /> Dashboard
-            </button>
-          </li>
+          {!isGuest && (
+            <li>
+              <button 
+                className={`sidebar-link ${currentTab === 'dashboard' ? 'active' : ''}`}
+                onClick={() => selectTab('dashboard')}
+              >
+                <Layers size={18} /> Dashboard
+              </button>
+            </li>
+          )}
           <li>
             <button 
               className={`sidebar-link ${currentTab === 'notifications_panel' ? 'active' : ''}`}
