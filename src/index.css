@@ -580,6 +580,88 @@ button.sidebar-link {
   border: 1px solid #e5e7eb;
 }
 
+/* ── Unified Alert & Notification Banners ── */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: var(--radius-lg);
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.45;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  animation: alertSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 200ms ease;
+  width: 100%;
+}
+
+@keyframes alertSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alert svg {
+  flex-shrink: 0;
+}
+
+/* Success Banner (e.g. "Penugasan berhasil dihapus", "Data berhasil disimpan") */
+.alert-success {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+}
+
+.alert-success svg {
+  color: #16a34a;
+}
+
+/* Danger / Error Banner */
+.alert-danger,
+.alert-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #dc2626;
+}
+
+.alert-danger svg,
+.alert-error svg {
+  color: #dc2626;
+}
+
+/* Warning Banner */
+.alert-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fef08a;
+  border-left: 4px solid #eab308;
+}
+
+.alert-warning svg {
+  color: #d97706;
+}
+
+/* Info Banner */
+.alert-info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid #2563eb;
+}
+
+.alert-info svg {
+  color: #2563eb;
+}
+
 /* ── Canonical Buttons ── */
 .btn {
   display: inline-flex;

@@ -102,9 +102,11 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     return `?date_from=${dateFrom}&date_to=${dateTo}`;
   };
 
-  const fetchDashboardData = async (activePeriod = period) => {
-    setLoading(true);
-    setError(null);
+  const fetchDashboardData = async (activePeriod = period, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       let endpoint = '';
       if (isAdminOrSupervisor) {
@@ -125,14 +127,25 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         }
       }
     } catch (err) {
-      setError(err.message || 'Gagal memuat data dashboard.');
+      if (!silent) {
+        setError(err.message || 'Gagal memuat data dashboard.');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchDashboardData(period);
+
+    // Auto-refresh data secara berkala (setiap 15 detik) untuk sinkronisasi jejak inspeksi real-time
+    const refreshInterval = setInterval(() => {
+      fetchDashboardData(period, true);
+    }, 15000);
+
+    return () => clearInterval(refreshInterval);
   }, [user, period]);
 
   const viewBuildingDetails = async (buildingId) => {
