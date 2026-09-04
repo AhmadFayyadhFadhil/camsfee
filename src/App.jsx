@@ -477,45 +477,47 @@ export default function App() {
         </div>
 
         <ul className="sidebar-menu">
-          <li className="sidebar-item-group-title">Menu Utama</li>
           {!isGuest && (
-            <li>
-              <button 
-                className={`sidebar-link ${currentTab === 'dashboard' ? 'active' : ''}`}
-                onClick={() => selectTab('dashboard')}
-              >
-                <Layers size={18} /> Dashboard
-              </button>
-            </li>
+            <>
+              <li className="sidebar-item-group-title">Menu Utama</li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => selectTab('dashboard')}
+                >
+                  <Layers size={18} /> Dashboard
+                </button>
+              </li>
+              <li>
+                <button 
+                  className={`sidebar-link ${currentTab === 'notifications_panel' ? 'active' : ''}`}
+                  onClick={() => selectTab('notifications_panel')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <Bell size={18} /> Notifikasi
+                    </div>
+                    {unreadCount > 0 && (
+                      <span 
+                        className="notification-badge-sidebar" 
+                        style={{ 
+                          background: 'var(--danger)', 
+                          color: '#ffffff', 
+                          padding: '2px 7px', 
+                          borderRadius: '10px', 
+                          fontSize: '0.7rem', 
+                          fontWeight: 'bold',
+                          boxShadow: '0 2px 5px rgba(220, 38, 38, 0.4)'
+                        }}
+                      >
+                        {unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </li>
+            </>
           )}
-          <li>
-            <button 
-              className={`sidebar-link ${currentTab === 'notifications_panel' ? 'active' : ''}`}
-              onClick={() => selectTab('notifications_panel')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Bell size={18} /> Notifikasi
-                </div>
-                {unreadCount > 0 && (
-                  <span 
-                    className="notification-badge-sidebar" 
-                    style={{ 
-                      background: 'var(--danger)', 
-                      color: '#ffffff', 
-                      padding: '2px 7px', 
-                      borderRadius: '10px', 
-                      fontSize: '0.7rem', 
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 5px rgba(220, 38, 38, 0.4)'
-                    }}
-                  >
-                    {unreadCount}
-                  </span>
-                )}
-              </div>
-            </button>
-          </li>
 
           {/* Cleaning Service menu */}
           {isCs && (
@@ -716,95 +718,97 @@ export default function App() {
           </div>
 
           <div className="header-user-section">
-            {/* Notification Bell */}
-            <div className="notification-bell-container" onClick={() => setShowNotifications(!showNotifications)}>
-              <Bell size={20} style={{ color: 'var(--text-secondary)' }} />
-              {unreadCount > 0 && (
-                <div className="notification-badge">{unreadCount}</div>
-              )}
+            {/* Notification Bell (Hidden for Guest/Pelapor) */}
+            {!isGuest && (
+              <div className="notification-bell-container" onClick={() => setShowNotifications(!showNotifications)}>
+                <Bell size={20} style={{ color: 'var(--text-secondary)' }} />
+                {unreadCount > 0 && (
+                  <div className="notification-badge">{unreadCount}</div>
+                )}
 
-              {/* Notification Dropdown */}
-              {showNotifications && (
-                <div 
-                  className="glass-panel" 
-                  style={{ 
-                    position: 'absolute', 
-                    top: '40px', 
-                    right: 0, 
-                    width: '320px', 
-                    maxHeight: '380px', 
-                    overflowY: 'auto', 
-                    borderRadius: 'var(--radius-md)', 
-                    zIndex: 200, 
-                    boxShadow: 'var(--shadow-lg)'
-                  }}
-                >
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Bell size={16} /> Notifikasi ({unreadCount} belum dibaca)
-                    </span>
-                    <button 
-                      className="btn btn-secondary btn-sm" 
-                      style={{ padding: '4px 10px', fontSize: '0.75rem' }} 
-                      onClick={(e) => { e.stopPropagation(); fetchNotifications(); }}
-                    >
-                      <RefreshCw size={12} /> Perbarui
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    {notifications.map(n => (
-                      <div 
-                        key={n.id} 
-                        style={{ 
-                          padding: '12px 16px', 
-                          borderBottom: '1px solid var(--border-color)', 
-                          fontSize: '0.85rem',
-                          background: 'rgba(255,255,255,0.01)',
-                          cursor: 'pointer',
-                          transition: 'background 0.15s ease'
-                        }}
-                        onClick={() => handleNotificationClick(n)}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(14, 49, 146, 0.05)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.01)'; }}
+                {/* Notification Dropdown */}
+                {showNotifications && (
+                  <div 
+                    className="glass-panel" 
+                    style={{ 
+                      position: 'absolute', 
+                      top: '40px', 
+                      right: 0, 
+                      width: '320px', 
+                      maxHeight: '380px', 
+                      overflowY: 'auto', 
+                      borderRadius: 'var(--radius-md)', 
+                      zIndex: 200, 
+                      boxShadow: 'var(--shadow-lg)'
+                    }}
+                  >
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Bell size={16} /> Notifikasi ({unreadCount} belum dibaca)
+                      </span>
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        style={{ padding: '4px 10px', fontSize: '0.75rem' }} 
+                        onClick={(e) => { e.stopPropagation(); fetchNotifications(); }}
                       >
-                        <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: 'var(--text-primary)' }}>{n.title}</span>
-                          <button
-                            type="button"
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: '2px 6px',
-                              fontSize: '0.72rem',
-                              color: 'var(--primary)',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px'
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMarkAsRead(n.id);
-                            }}
-                            title="Tandai notifikasi ini sudah dibaca"
-                          >
-                            <Check size={11} /> Tandai Dibaca
-                          </button>
+                        <RefreshCw size={12} /> Perbarui
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {notifications.map(n => (
+                        <div 
+                          key={n.id} 
+                          style={{ 
+                            padding: '12px 16px', 
+                            borderBottom: '1px solid var(--border-color)', 
+                            fontSize: '0.85rem',
+                            background: 'rgba(255,255,255,0.01)',
+                            cursor: 'pointer',
+                            transition: 'background 0.15s ease'
+                          }}
+                          onClick={() => handleNotificationClick(n)}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(14, 49, 146, 0.05)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.01)'; }}
+                        >
+                          <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-primary)' }}>{n.title}</span>
+                            <button
+                              type="button"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '2px 6px',
+                                fontSize: '0.72rem',
+                                color: 'var(--primary)',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkAsRead(n.id);
+                              }}
+                              title="Tandai notifikasi ini sudah dibaca"
+                            >
+                              <Check size={11} /> Tandai Dibaca
+                            </button>
+                          </div>
+                          <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.8rem', lineHeight: 1.4 }}>{n.message}</p>
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.8rem', lineHeight: 1.4 }}>{n.message}</p>
-                      </div>
-                    ))}
-                    {notifications.length === 0 && (
-                      <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        <CheckCircle2 size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
-                        <div>Semua notifikasi sudah dibaca.</div>
-                      </div>
-                    )}
+                      ))}
+                      {notifications.length === 0 && (
+                        <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                          <CheckCircle2 size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+                          <div>Semua notifikasi sudah dibaca.</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Profile Info Badge */}
             <div className="user-profile-badge">
