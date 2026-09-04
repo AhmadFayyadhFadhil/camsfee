@@ -46,6 +46,31 @@ export default function CsTasks({
   const [filterBuilding, setFilterBuilding] = useState('all');
   const [filterShift, setFilterShift] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterFrequency, setFilterFrequency] = useState('all');
+
+  const getFrequencyLabel = (task) => {
+    const f = (task.frekuensi || task.frequency || task.schedule?.frekuensi || 'harian').toLowerCase();
+    if (f === 'mingguan' || f === 'weekly') {
+      const dayName = task.day_of_week || (task.hari_minggu !== undefined && task.hari_minggu !== null ? ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][task.hari_minggu] : 'Mingguan');
+      return `Mingguan (${dayName})`;
+    }
+    if (f === 'bulanan' || f === 'monthly') {
+      const tgl = task.tanggal_bulan || task.schedule?.tanggal_bulan || 1;
+      return `Bulanan (Tgl ${tgl})`;
+    }
+    return 'Harian';
+  };
+
+  const getFrequencyBadgeStyle = (task) => {
+    const f = (typeof task === 'string' ? task : (task.frekuensi || task.frequency || task.schedule?.frekuensi || 'harian')).toLowerCase();
+    if (f === 'mingguan' || f === 'weekly') {
+      return { background: 'rgba(124, 58, 237, 0.12)', color: '#7c3aed', border: '1px solid rgba(124, 58, 237, 0.3)' };
+    }
+    if (f === 'bulanan' || f === 'monthly') {
+      return { background: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)' };
+    }
+    return { background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)', border: '1px solid rgba(14, 49, 146, 0.2)' };
+  };
 
   // Active Task filling state
   const [activeTask, setActiveTask] = useState(null); // The task currently being filled
@@ -857,12 +882,30 @@ export default function CsTasks({
         }
       }
 
+      // 5. Frequency Filter (Harian, Mingguan, Bulanan)
+      if (filterFrequency !== 'all') {
+        const rawF = (t.frekuensi || t.frequency || t.schedule?.frekuensi || 'harian').toLowerCase();
+        let normF = 'harian';
+        if (rawF === 'mingguan' || rawF === 'weekly') normF = 'mingguan';
+        if (rawF === 'bulanan' || rawF === 'monthly') normF = 'bulanan';
+        if (normF !== filterFrequency) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [tasks, searchQuery, filterBuilding, filterShift, filterStatus]);
+  }, [tasks, searchQuery, filterBuilding, filterShift, filterStatus, filterFrequency]);
 
   // Status Summary Counts
   const statusCounts = useMemo(() => {
+    const getTaskNormFreq = (t) => {
+      const rawF = (t.frekuensi || t.frequency || t.schedule?.frekuensi || 'harian').toLowerCase();
+      if (rawF === 'mingguan' || rawF === 'weekly') return 'mingguan';
+      if (rawF === 'bulanan' || rawF === 'monthly') return 'bulanan';
+      return 'harian';
+    };
+
     return {
       all: tasks.length,
       pending: tasks.filter(t => t.status === 'pending').length,
@@ -871,6 +914,9 @@ export default function CsTasks({
       completed: tasks.filter(t => t.status === 'completed').length,
       overdue: tasks.filter(t => t.status === 'overdue').length,
       rejected: tasks.filter(t => t.status === 'rejected').length,
+      harian: tasks.filter(t => getTaskNormFreq(t) === 'harian').length,
+      mingguan: tasks.filter(t => getTaskNormFreq(t) === 'mingguan').length,
+      bulanan: tasks.filter(t => getTaskNormFreq(t) === 'bulanan').length,
     };
   }, [tasks]);
 
@@ -879,6 +925,7 @@ export default function CsTasks({
     setFilterBuilding('all');
     setFilterShift('all');
     setFilterStatus('all');
+    setFilterFrequency('all');
   };
 
   const currentUser = api.getUser();
@@ -1236,68 +1283,133 @@ export default function CsTasks({
       {!activeTask && (
         <div className="glass-panel" style={{ padding: '16px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
           
-          {/* Quick Status Badges / Pills */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-            <button
-              type="button"
-              className={`btn btn-sm ${filterStatus === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterStatus('all')}
-              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
-            >
-              Semua ({statusCounts.all})
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${filterStatus === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterStatus('pending')}
-              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
-            >
-              Belum Dimulai ({statusCounts.pending})
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${filterStatus === 'in_progress' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterStatus('in_progress')}
-              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
-            >
-              Sedang Dikerjakan ({statusCounts.in_progress})
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${filterStatus === 'waiting_verification' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterStatus('waiting_verification')}
-              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
-            >
-              Menunggu Verifikasi ({statusCounts.waiting_verification})
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${filterStatus === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilterStatus('completed')}
-              style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
-            >
-              Selesai ({statusCounts.completed})
-            </button>
-            {statusCounts.overdue > 0 && (
+          {/* Quick Status & Frequency Filter Pills */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+            {/* Status Pills */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px' }}>Status:</span>
               <button
                 type="button"
-                className={`btn btn-sm ${filterStatus === 'overdue' ? 'btn-danger' : 'btn-secondary'}`}
-                onClick={() => setFilterStatus('overdue')}
-                style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+                className={`btn btn-sm ${filterStatus === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('all')}
+                style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
               >
-                Terlambat ({statusCounts.overdue})
+                Semua Status ({statusCounts.all})
               </button>
-            )}
-            {statusCounts.rejected > 0 && (
               <button
                 type="button"
-                className={`btn btn-sm ${filterStatus === 'rejected' ? 'btn-warning' : 'btn-secondary'}`}
-                onClick={() => setFilterStatus('rejected')}
-                style={{ fontWeight: 600, fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+                className={`btn btn-sm ${filterStatus === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('pending')}
+                style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
               >
-                Ditolak ({statusCounts.rejected})
+                Belum Dimulai ({statusCounts.pending})
               </button>
-            )}
+              <button
+                type="button"
+                className={`btn btn-sm ${filterStatus === 'in_progress' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('in_progress')}
+                style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
+              >
+                Sedang Dikerjakan ({statusCounts.in_progress})
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${filterStatus === 'waiting_verification' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('waiting_verification')}
+                style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
+              >
+                Menunggu Verifikasi ({statusCounts.waiting_verification})
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${filterStatus === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterStatus('completed')}
+                style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
+              >
+                Selesai ({statusCounts.completed})
+              </button>
+              {statusCounts.overdue > 0 && (
+                <button
+                  type="button"
+                  className={`btn btn-sm ${filterStatus === 'overdue' ? 'btn-danger' : 'btn-secondary'}`}
+                  onClick={() => setFilterStatus('overdue')}
+                  style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
+                >
+                  Terlambat ({statusCounts.overdue})
+                </button>
+              )}
+              {statusCounts.rejected > 0 && (
+                <button
+                  type="button"
+                  className={`btn btn-sm ${filterStatus === 'rejected' ? 'btn-warning' : 'btn-secondary'}`}
+                  onClick={() => setFilterStatus('rejected')}
+                  style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
+                >
+                  Ditolak ({statusCounts.rejected})
+                </button>
+              )}
+            </div>
+
+            {/* Frequency Filter Pills */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(14, 49, 146, 0.06)' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px' }}>Frekuensi:</span>
+              <button
+                type="button"
+                className={`btn btn-sm ${filterFrequency === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilterFrequency('all')}
+                style={{ fontWeight: 600, fontSize: '0.78rem', borderRadius: 'var(--radius-full)', padding: '4px 12px' }}
+              >
+                Semua Frekuensi ({statusCounts.all})
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setFilterFrequency('harian')}
+                style={{
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '4px 12px',
+                  background: filterFrequency === 'harian' ? 'var(--primary)' : 'rgba(14, 49, 146, 0.08)',
+                  color: filterFrequency === 'harian' ? '#ffffff' : 'var(--primary)',
+                  border: '1px solid rgba(14, 49, 146, 0.25)'
+                }}
+              >
+                🔵 Harian ({statusCounts.harian})
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setFilterFrequency('mingguan')}
+                style={{
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '4px 12px',
+                  background: filterFrequency === 'mingguan' ? '#7c3aed' : 'rgba(124, 58, 237, 0.1)',
+                  color: filterFrequency === 'mingguan' ? '#ffffff' : '#7c3aed',
+                  border: '1px solid rgba(124, 58, 237, 0.3)'
+                }}
+              >
+                🟣 Mingguan ({statusCounts.mingguan})
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setFilterFrequency('bulanan')}
+                style={{
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '4px 12px',
+                  background: filterFrequency === 'bulanan' ? '#059669' : 'rgba(16, 185, 129, 0.1)',
+                  color: filterFrequency === 'bulanan' ? '#ffffff' : '#059669',
+                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                🟢 Bulanan ({statusCounts.bulanan})
+              </button>
+            </div>
           </div>
 
           {/* Detailed Filters Grid */}
@@ -1751,7 +1863,20 @@ export default function CsTasks({
                       {filteredTasks.map(t => (
                         <tr key={t.id} style={{ background: t.status === 'overdue' ? 'rgba(239, 68, 68, 0.03)' : 'transparent' }}>
                           <td>
-                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.room?.name || 'Ruangan'}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t.room?.name || 'Ruangan'}</span>
+                              <span
+                                style={{
+                                  ...getFrequencyBadgeStyle(t),
+                                  padding: '1px 7px',
+                                  borderRadius: '10px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {getFrequencyLabel(t)}
+                              </span>
+                            </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                               Gedung: {t.room?.building?.name || '-'} • Kode: {t.room?.code}
                             </div>
@@ -1828,8 +1953,19 @@ export default function CsTasks({
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                         <div>
-                          <div className="task-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div className="task-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span>{t.room?.name || 'Ruangan'}</span>
+                            <span
+                              style={{
+                                ...getFrequencyBadgeStyle(t),
+                                padding: '1px 6px',
+                                borderRadius: '8px',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {getFrequencyLabel(t)}
+                            </span>
                             {t.items_count > 1 && (
                               <span style={{ fontSize: '0.72rem', fontWeight: 600, background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                                 {t.items_count} Item

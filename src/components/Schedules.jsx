@@ -128,6 +128,31 @@ export default function Schedules() {
     }
   }, [error]);
 
+  const formatFrequencyLabel = (freq, dayOfWeek, dayOfMonth) => {
+    const f = (freq || 'harian').toLowerCase();
+    if (f === 'mingguan' || f === 'weekly') {
+      const dayNames = { 0: 'Minggu', 1: 'Senin', 2: 'Selasa', 3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu', 'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu', 'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu' };
+      const dName = dayNames[dayOfWeek] !== undefined ? dayNames[dayOfWeek] : (dayOfWeek || 'Jumat');
+      return `Mingguan (${dName})`;
+    }
+    if (f === 'bulanan' || f === 'monthly') {
+      const dNum = dayOfMonth || 1;
+      return `Bulanan (Tgl ${dNum})`;
+    }
+    return 'Harian';
+  };
+
+  const getFrequencyBadgeStyle = (freq) => {
+    const f = (freq || 'harian').toLowerCase();
+    if (f === 'mingguan' || f === 'weekly') {
+      return { background: 'rgba(124, 58, 237, 0.12)', color: '#7c3aed', border: '1px solid rgba(124, 58, 237, 0.3)' };
+    }
+    if (f === 'bulanan' || f === 'monthly') {
+      return { background: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)' };
+    }
+    return { background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)', border: '1px solid rgba(14, 49, 146, 0.2)' };
+  };
+
   // Scheduled Room IDs (ruangan yang sudah memiliki jadwal aktif)
   const scheduledRoomIds = useMemo(() => {
     const ids = new Set();
@@ -140,18 +165,10 @@ export default function Schedules() {
     return ids;
   }, [schedulesList]);
 
-  // Daftar ruangan yang dapat dipilih pada form jadwal:
-  // - Pada mode Tambah Baru: Hanya ruangan yang BELUM memiliki jadwal aktif
-  // - Pada mode Edit: Ruangan yang belum terjadwal PLUS ruangan yang sedang diedit
+  // Ruangan yang dapat dipilih: seluruh ruangan aktif (mendukung multi-jadwal harian/mingguan/bulanan per ruangan)
   const availableRoomsForSchedule = useMemo(() => {
-    const editingRoomId = editingSchedule?.room_id || editingSchedule?.room?.id;
-    return rooms.filter(r => {
-      if (editingSchedule && (r.id === editingRoomId || String(r.id) === String(editingRoomId))) {
-        return true;
-      }
-      return !scheduledRoomIds.has(r.id);
-    });
-  }, [rooms, scheduledRoomIds, editingSchedule]);
+    return rooms;
+  }, [rooms]);
 
   // When room is selected in Schedule form, filter shifts allocated to its building
   // and auto-select the room's checklist template
@@ -1331,13 +1348,19 @@ export default function Schedules() {
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Sesuai Shift</span>
                         )}
                       </td>
-                      <td style={{ textTransform: 'capitalize' }}>
-                        <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{g.frekuensi || g.frequency}</span>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                          {(g.frequency === 'daily' || g.frekuensi === 'harian') && 'Setiap Hari'}
-                          {(g.frequency === 'weekly' || g.frekuensi === 'mingguan') && `Hari ${g.day_of_week || g.hari_minggu}`}
-                          {(g.frequency === 'monthly' || g.frekuensi === 'bulanan') && `Tgl ${g.day_of_month || g.tanggal_bulan}`}
-                        </div>
+                      <td>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          ...getFrequencyBadgeStyle(g.frekuensi || g.frequency)
+                        }}>
+                          {formatFrequencyLabel(g.frekuensi || g.frequency, g.hari_minggu || g.day_of_week, g.tanggal_bulan || g.day_of_month)}
+                        </span>
                       </td>
                       <td>
                         <span className={`role-badge ${g.is_active ? 'role-cs' : 'role-admin'}`}>
