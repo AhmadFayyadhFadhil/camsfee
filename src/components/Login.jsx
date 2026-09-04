@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../utils/api';
-import { Shield, Lock, Mail, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Shield, Lock, Mail, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
 
 export default function Login({ onLoginSuccess, appIdentity }) {
   const [email, setEmail] = useState('');
