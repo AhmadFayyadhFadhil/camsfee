@@ -173,7 +173,7 @@ export default function Login({ onLoginSuccess, appIdentity }) {
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
                   setEmail('pelapor@cams.com');
-                  setPassword('password');
+                  setPassword('Pass123');
                 }}
                 style={{ fontSize: '0.72rem', padding: '2px 8px', minHeight: '24px', height: '24px', fontWeight: 600 }}
                 title="Klik untuk otomatis mengisi email & kata sandi akun pelapor"
@@ -187,7 +187,7 @@ export default function Login({ onLoginSuccess, appIdentity }) {
             </p>
 
             <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: '0.74rem', fontFamily: 'var(--mono)', color: '#334155', marginBottom: '8px' }}>
-              Email: <b>pelapor@cams.com</b> &bull; Sandi: <b>password</b>
+              Email: <b>pelapor@cams.com</b> &bull; Sandi: <b>Pass123</b>
             </div>
 
             <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
