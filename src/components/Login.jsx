@@ -43,9 +43,9 @@ export default function Login({ onLoginSuccess, appIdentity }) {
   return (
     <div className="login-page">
       <div className="login-card glass-panel">
-        <div style={{ margin: '0 auto 16px auto', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ margin: '0 auto 10px auto', display: 'flex', justifyContent: 'center' }}>
           {appIdentity && appIdentity.company_logo ? (
-            <div style={{ width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <img 
                 src={appIdentity.company_logo.includes('/api/v1/settings/logo/image') ? '/api/v1/settings/logo/image' : appIdentity.company_logo} 
                 alt="Logo" 
@@ -62,32 +62,32 @@ export default function Login({ onLoginSuccess, appIdentity }) {
               />
             </div>
           ) : (
-            <div className="login-logo" style={{ width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Shield size={36} />
+            <div className="login-logo" style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={28} />
             </div>
           )}
         </div>
         <div className="login-header">
-          <h1 style={{ textTransform: 'uppercase', fontSize: '1.5rem' }}>{appIdentity ? appIdentity.company_name : 'CAMS PANDAAN'}</h1>
-          <p>Cleaning Activity Monitoring System</p>
+          <h1 style={{ textTransform: 'uppercase', fontSize: '1.35rem', margin: '0 0 2px 0' }}>{appIdentity ? appIdentity.company_name : 'CAMS PANDAAN'}</h1>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Cleaning Activity Monitoring System</p>
         </div>
 
         {error && (
-          <div className="alert alert-danger">
-            <AlertTriangle size={18} />
+          <div className="alert alert-danger" style={{ padding: '8px 12px', fontSize: '0.82rem', marginBottom: '14px' }}>
+            <AlertTriangle size={16} />
             <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="email">Alamat Email</label>
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label className="form-label" htmlFor="email" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Alamat Email</label>
             <div style={{ position: 'relative' }}>
               <Mail 
-                size={18} 
+                size={16} 
                 style={{ 
                   position: 'absolute', 
-                  left: '14px', 
+                  left: '12px', 
                   top: '50%', 
                   transform: 'translateY(-50%)', 
                   color: 'var(--text-muted)' 
@@ -98,7 +98,7 @@ export default function Login({ onLoginSuccess, appIdentity }) {
                 type="email"
                 className="form-control"
                 placeholder="Masukkan email Anda"
-                style={{ paddingLeft: '44px', width: '100%' }}
+                style={{ paddingLeft: '38px', width: '100%', height: '38px', fontSize: '0.85rem' }}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -107,14 +107,14 @@ export default function Login({ onLoginSuccess, appIdentity }) {
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '30px' }}>
-            <label className="form-label" htmlFor="password">Kata Sandi</label>
+          <div className="form-group" style={{ marginBottom: '18px' }}>
+            <label className="form-label" htmlFor="password" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Kata Sandi</label>
             <div style={{ position: 'relative' }}>
               <Lock 
-                size={18} 
+                size={16} 
                 style={{ 
                   position: 'absolute', 
-                  left: '14px', 
+                  left: '12px', 
                   top: '50%', 
                   transform: 'translateY(-50%)', 
                   color: 'var(--text-muted)' 
@@ -125,7 +125,7 @@ export default function Login({ onLoginSuccess, appIdentity }) {
                 type="password"
                 className="form-control"
                 placeholder="Masukkan kata sandi"
-                style={{ paddingLeft: '44px', width: '100%' }}
+                style={{ paddingLeft: '38px', width: '100%', height: '38px', fontSize: '0.85rem' }}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
@@ -137,12 +137,12 @@ export default function Login({ onLoginSuccess, appIdentity }) {
           <button 
             type="submit" 
             className="btn btn-primary" 
-            style={{ width: '100%', height: '46px' }}
+            style={{ width: '100%', height: '40px', fontWeight: 600, fontSize: '0.88rem' }}
             disabled={loading}
           >
             {loading ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div className="spinner" style={{ width: '18px', height: '18px' }}></div>
+                <div className="spinner" style={{ width: '16px', height: '16px' }}></div>
                 <span>Memproses...</span>
               </div>
             ) : (
@@ -153,20 +153,20 @@ export default function Login({ onLoginSuccess, appIdentity }) {
 
         {/* Akun Khusus Lapor Temuan Kerusakan & Tatacara */}
         <div style={{
-          marginTop: '22px',
-          paddingTop: '18px',
+          marginTop: '16px',
+          paddingTop: '14px',
           borderTop: '1px solid var(--border-color)',
         }}>
           <div style={{
-            background: 'rgba(239, 246, 255, 0.6)',
+            background: 'rgba(239, 246, 255, 0.7)',
             border: '1px solid #bfdbfe',
             borderRadius: 'var(--radius-lg)',
-            padding: '14px 16px',
+            padding: '12px 14px',
             textAlign: 'left'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <AlertOctagon size={15} /> Akun Khusus Lapor Kerusakan Fasilitas
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '4px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <AlertOctagon size={14} /> Lapor Kerusakan Fasilitas
               </span>
               <button
                 type="button"
@@ -175,27 +175,27 @@ export default function Login({ onLoginSuccess, appIdentity }) {
                   setEmail('pelapor@cams.com');
                   setPassword('password');
                 }}
-                style={{ fontSize: '0.74rem', padding: '3px 8px', minHeight: '26px', height: '26px', fontWeight: 600 }}
+                style={{ fontSize: '0.72rem', padding: '2px 8px', minHeight: '24px', height: '24px', fontWeight: 600 }}
                 title="Klik untuk otomatis mengisi email & kata sandi akun pelapor"
               >
                 Gunakan Akun Ini
               </button>
             </div>
 
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 8px 0', lineHeight: 1.4 }}>
-              Bagi karyawan umum / staf yang tidak memiliki akun operasional dan ingin melaporkan fasilitas ruangan yang rusak:
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: 1.35 }}>
+              Karyawan/tamu yang ingin melapor fasilitas rusak tanpa akun operasional:
             </p>
 
-            <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: '0.76rem', fontFamily: 'var(--mono)', color: '#334155', marginBottom: '10px' }}>
+            <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: '0.74rem', fontFamily: 'var(--mono)', color: '#334155', marginBottom: '8px' }}>
               Email: <b>pelapor@cams.com</b> &bull; Sandi: <b>password</b>
             </div>
 
-            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-              <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '3px' }}>Tata Cara Melaporkan Kerusakan:</strong>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '2px' }}>Tata Cara Melaporkan:</strong>
               <ol style={{ margin: 0, paddingLeft: '16px' }}>
-                <li style={{ marginBottom: '2px' }}>Gunakan akun pelapor di atas, lalu klik tombol <b>Masuk Sistem</b>.</li>
-                <li style={{ marginBottom: '2px' }}>Pilih menu <b>Temuan Kerusakan</b> &rarr; klik <b>+ Laporkan Kerusakan Baru</b>.</li>
-                <li>Pilih lokasi ruangan, lampirkan 1 foto bukti kerusakan, dan kirim laporan untuk segera ditindaklanjuti.</li>
+                <li style={{ marginBottom: '1px' }}>Klik <b>Gunakan Akun Ini</b> &rarr; <b>Masuk Sistem</b>.</li>
+                <li style={{ marginBottom: '1px' }}>Masuk menu <b>Temuan Kerusakan</b> &rarr; <b>+ Laporkan Kerusakan Baru</b>.</li>
+                <li>Pilih ruangan, upload 1 foto bukti, dan kirim.</li>
               </ol>
             </div>
           </div>
