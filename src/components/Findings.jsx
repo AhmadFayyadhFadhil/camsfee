@@ -447,15 +447,15 @@ export default function Findings({ user, isOb = false }) {
     };
   }, [cameraStream]);
 
-  const isAdmin = user.roles && user.roles.includes('admin');
-  const isSupervisor = user.roles && user.roles.includes('supervisor');
-  const isPic = user.roles && user.roles.includes('pic');
-  const isCs = user.roles && user.roles.includes('cleaning_service');
+  const isAdmin = Boolean(user?.roles && user.roles.includes('admin'));
+  const isSupervisor = Boolean(user?.roles && user.roles.includes('supervisor'));
+  const isPic = Boolean(user?.roles && user.roles.includes('pic'));
+  const isCs = Boolean(user?.roles && user.roles.includes('cleaning_service'));
   
   // Otorisasi penyelesaian temuan
   const getCanResolve = (f) => {
     if (isAdmin || isSupervisor) return true;
-    if (f.assigned_to === user.id) return true;
+    if (user?.id && f.assigned_to === user.id) return true;
     return false;
   };
   

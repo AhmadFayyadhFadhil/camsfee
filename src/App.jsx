@@ -389,25 +389,21 @@ export default function App() {
     }
   };
 
-  if (!isAuthenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} appIdentity={appIdentity} />;
-  }
-
-  // Get active roles for menu rendering
-  const isAdmin = user.roles && user.roles.includes('admin');
-  const isSupervisor = user.roles && user.roles.includes('supervisor');
-  const isPic = user.roles && user.roles.includes('pic');
-  const isCs = user.roles && user.roles.includes('cleaning_service');
-  const isOb = user.roles && user.roles.includes('ob');
-  const isManager = user.roles && user.roles.includes('manager');
-  const isGuest = user.roles && (user.roles.includes('guest') || user.roles.includes('pelapor'));
+  // Get active roles for menu rendering & permissions (always evaluated before conditional returns)
+  const isAdmin = Boolean(user?.roles && user.roles.includes('admin'));
+  const isSupervisor = Boolean(user?.roles && user.roles.includes('supervisor'));
+  const isPic = Boolean(user?.roles && user.roles.includes('pic'));
+  const isCs = Boolean(user?.roles && user.roles.includes('cleaning_service'));
+  const isOb = Boolean(user?.roles && user.roles.includes('ob'));
+  const isManager = Boolean(user?.roles && user.roles.includes('manager'));
+  const isGuest = Boolean(user?.roles && (user.roles.includes('guest') || user.roles.includes('pelapor')));
 
   // Redirect guest automatically to findings if landing on dashboard or disallowed tabs
   useEffect(() => {
-    if (isGuest && (currentTab === 'dashboard' || !['findings', 'profile', 'notifications_panel'].includes(currentTab))) {
+    if (isAuthenticated && isGuest && (currentTab === 'dashboard' || !['findings', 'profile', 'notifications_panel'].includes(currentTab))) {
       selectTab('findings');
     }
-  }, [isGuest, currentTab]);
+  }, [isAuthenticated, isGuest, currentTab]);
 
   const getRoleLabel = () => {
     if (isAdmin) return 'Admin';
@@ -429,6 +425,10 @@ export default function App() {
     if (isGuest) return 'role-pic';
     return 'role-manager';
   };
+
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} appIdentity={appIdentity} />;
+  }
 
   return (
     <div className="app-container">
