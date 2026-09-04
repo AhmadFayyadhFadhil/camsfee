@@ -1236,9 +1236,11 @@ export default function Findings({ user, isOb = false }) {
                       {f.status === 'in_progress' && <span className="status-badge status-in_progress">Sedang Dikerjakan</span>}
                       {f.status === 'unresolved' && <span className="status-badge status-rejected">Belum Diperbaiki</span>}
 
-                      <span className="status-badge status-pending" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Folder size={12} /> {f.category_name || 'Lainnya'}
-                      </span>
+                      {f.category_name && (
+                        <span className="status-badge status-pending" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Folder size={12} /> {f.category_name}
+                        </span>
+                      )}
                       {f.status !== 'resolved' && f.deadline_perbaikan && (
                         <span className={f.is_overdue ? "status-badge status-overdue" : "status-badge status-waiting_verification"} style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           <Clock size={12} /> {f.is_overdue ? 'Melewati Deadline' : 'Dalam Batas Waktu'}
