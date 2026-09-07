@@ -211,9 +211,12 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         return;
       }
 
-      const { Html5Qrcode } = await import('html5-qrcode');
-      // Aktifkan Native BarcodeDetector (C++/GPU Engine) untuk deteksi instan tanpa delay
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
+      // Aktifkan Native BarcodeDetector (C++/GPU Engine) dan fokuskan pencarian hanya ke format QR Code untuk efisiensi CPU 100%
       const qrCode = new Html5Qrcode("dashboard-qr-reader", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
         },
@@ -243,15 +246,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       await qrCode.start(
         activeCamConfig,
         {
-          fps: 25, // Kecepatan scan 25 frame/detik (responsif instan)
-          qrbox: (width, height) => {
-            const minEdge = Math.min(width, height);
-            const qrboxEdgeSize = Math.floor(minEdge * 0.88);
-            return {
-              width: Math.max(qrboxEdgeSize, 260),
-              height: Math.max(qrboxEdgeSize, 260)
-            };
-          },
+          fps: 30, // Kecepatan scan 30 frame/detik (ultra-cepat)
           aspectRatio: 1.0,
           videoConstraints: {
             facingMode: { ideal: "environment" },
