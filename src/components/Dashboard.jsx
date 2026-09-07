@@ -17,7 +17,9 @@ import {
   MapPin,
   Navigation,
   ShieldCheck,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  CameraOff
 } from 'lucide-react';
 import InspectionMapTrail from './InspectionMapTrail.jsx';
 
@@ -39,6 +41,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   const [availableCameras, setAvailableCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [scanSuccessMsg, setScanSuccessMsg] = useState(null);
+  const [isCameraOff, setIsCameraOff] = useState(false);
   const inlineQrCodeRef = useRef(null);
   const isProcessingScanRef = useRef(false);
 
@@ -189,6 +192,19 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       }
     }
     setInlineScannerActive(false);
+  };
+
+  const handleStopCamera = async () => {
+    setIsCameraOff(true);
+    setInlineScannerLoading(false);
+    await stopInlineScanner();
+  };
+
+  const handleStartCamera = async () => {
+    setIsCameraOff(false);
+    setTimeout(() => {
+      startInlineScanner();
+    }, 100);
   };
 
   const startInlineScanner = async (cameraId = null) => {
@@ -369,7 +385,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   // Lifecycle Inline Scanner di Dashboard CS
   useEffect(() => {
     let mounted = true;
-    if (isCs && !loading && data) {
+    if (isCs && !loading && data && !isCameraOff) {
       const timer = setTimeout(() => {
         if (mounted) {
           startInlineScanner();
@@ -384,7 +400,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     } else {
       stopInlineScanner();
     }
-  }, [isCs, loading, data, selectedCameraId]);
+  }, [isCs, loading, data, selectedCameraId, isCameraOff]);
 
   if (loading) {
     return (
@@ -502,8 +518,8 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             borderRadius: '24px',
             overflow: 'hidden',
             background: '#070a13',
-            boxShadow: '0 12px 36px rgba(7, 10, 19, 0.35)',
-            border: '2px solid rgba(16, 185, 129, 0.35)',
+            boxShadow: isCameraOff ? '0 8px 24px rgba(7, 10, 19, 0.2)' : '0 12px 36px rgba(7, 10, 19, 0.35)',
+            border: isCameraOff ? '2px solid rgba(148, 163, 184, 0.25)' : '2px solid rgba(16, 185, 129, 0.35)',
             minHeight: '300px',
             display: 'flex',
             flexDirection: 'column',
@@ -511,24 +527,24 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             justifyContent: 'center'
           }}>
             {/* Viewport HUD Corner Brackets */}
-            <div style={{ position: 'absolute', top: '14px', left: '14px', width: '26px', height: '26px', borderTop: '3.5px solid #10b981', borderLeft: '3.5px solid #10b981', borderTopLeftRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', top: '14px', right: '14px', width: '26px', height: '26px', borderTop: '3.5px solid #10b981', borderRight: '3.5px solid #10b981', borderTopRightRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', bottom: '14px', left: '14px', width: '26px', height: '26px', borderBottom: '3.5px solid #10b981', borderLeft: '3.5px solid #10b981', borderBottomLeftRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', bottom: '14px', right: '14px', width: '26px', height: '26px', borderBottom: '3.5px solid #10b981', borderRight: '3.5px solid #10b981', borderBottomRightRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', top: '14px', left: '14px', width: '26px', height: '26px', borderTop: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderLeft: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderTopLeftRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', top: '14px', right: '14px', width: '26px', height: '26px', borderTop: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderRight: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderTopRightRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: '14px', left: '14px', width: '26px', height: '26px', borderBottom: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderLeft: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderBottomLeftRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: '14px', right: '14px', width: '26px', height: '26px', borderBottom: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderRight: isCameraOff ? '3px solid #64748b' : '3.5px solid #10b981', borderBottomRightRadius: '8px', zIndex: 10, pointerEvents: 'none' }} />
 
             {/* Laser scanning beam */}
-            {inlineScannerActive && (
+            {inlineScannerActive && !isCameraOff && (
               <div className="scanning-laser-line" />
             )}
 
             {/* Live Camera Scanner DOM element */}
             <div 
               id="dashboard-qr-reader" 
-              style={{ width: '100%', minHeight: '300px', display: inlineScannerActive ? 'block' : 'none' }} 
+              style={{ width: '100%', minHeight: '300px', display: (inlineScannerActive && !isCameraOff) ? 'block' : 'none' }} 
             />
 
             {/* Initializing / Waiting for Camera State */}
-            {inlineScannerLoading && !inlineScannerError && (
+            {inlineScannerLoading && !inlineScannerError && !isCameraOff && (
               <div style={{ padding: '30px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
                 <div className="spinner" style={{ borderColor: 'rgba(16, 185, 129, 0.3)', borderTopColor: '#10b981', margin: '0 auto 16px auto', width: '38px', height: '38px' }} />
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#10b981' }}>Menginisialisasi Kamera...</div>
@@ -537,7 +553,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             )}
 
             {/* Hardware/Permission Camera Access Error State */}
-            {inlineScannerError && !inlineScannerActive && !inlineScannerLoading && (
+            {inlineScannerError && !inlineScannerActive && !inlineScannerLoading && !isCameraOff && (
               <div style={{ padding: '30px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
                 <AlertTriangle size={34} color="#ef4444" style={{ marginBottom: '12px' }} />
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ef4444' }}>Akses Kamera Terkendala</div>
@@ -545,6 +561,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                   {inlineScannerError}
                 </div>
                 <button 
+                  type="button"
                   className="btn btn-primary btn-sm"
                   onClick={() => startInlineScanner()}
                   style={{ fontWeight: 700 }}
@@ -553,11 +570,77 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                 </button>
               </div>
             )}
+
+            {/* Standby / Camera Turned Off State */}
+            {isCameraOff && (
+              <div style={{ padding: '36px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '14px',
+                  border: '1.5px solid rgba(239, 68, 68, 0.3)'
+                }}>
+                  <CameraOff size={26} />
+                </div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff' }}>Kamera Dinonaktifkan</div>
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginTop: '6px', marginBottom: '18px', maxWidth: '240px', lineHeight: 1.4 }}>
+                  Kamera pemindai dimatikan. Tekan tombol di bawah untuk mengaktifkan kembali.
+                </div>
+                <button 
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleStartCamera}
+                  style={{ 
+                    fontWeight: 700, 
+                    padding: '8px 18px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: 'none',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Camera size={16} /> Nyalakan Kamera
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Action options under camera: Device selector (jika multi-kamera) */}
-          {availableCameras.length > 1 && (
-            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          {/* Action options under camera: Matikan Kamera button & Device selector */}
+          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            {!isCameraOff && (
+              <button 
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleStopCamera}
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  fontSize: '0.84rem',
+                  padding: '7px 15px',
+                  borderRadius: '10px',
+                  color: '#ef4444',
+                  borderColor: 'rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(239, 68, 68, 0.06)',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+                title="Matikan kamera pemindai"
+              >
+                <CameraOff size={15} /> Matikan Kamera
+              </button>
+            )}
+
+            {availableCameras.length > 1 && !isCameraOff && (
               <select 
                 className="form-control form-select"
                 value={selectedCameraId}
@@ -565,14 +648,14 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                   setSelectedCameraId(e.target.value);
                   startInlineScanner(e.target.value);
                 }}
-                style={{ maxWidth: '230px', fontSize: '0.84rem' }}
+                style={{ maxWidth: '230px', fontSize: '0.84rem', height: '36px' }}
               >
                 {availableCameras.map(cam => (
                   <option key={cam.id} value={cam.id}>{cam.label || `Kamera ${cam.id.substring(0, 6)}`}</option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* SECTION HEADER: RINGKASAN AREA TUGAS */}
