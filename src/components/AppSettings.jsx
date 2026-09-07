@@ -16,10 +16,7 @@ export default function AppSettings({ onSettingsUpdated }) {
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
 
-  // System Parameter Settings
-  const [bufferShift, setBufferShift] = useState(30);
-  const [escalationPic, setEscalationPic] = useState(120);
-  const [taskReminder, setTaskReminder] = useState(60);
+  // Geofencing Settings
   const [geofenceEnabled, setGeofenceEnabled] = useState(false);
   const [geofenceDistance, setGeofenceDistance] = useState(50);
 
@@ -38,9 +35,6 @@ export default function AppSettings({ onSettingsUpdated }) {
           if (item.key === 'company_logo' && item.value) {
             setLogoUrl(`/api/v1/settings/logo/image?t=${new Date().getTime()}`);
           }
-          if (item.key === 'buffer_shift_minutes') setBufferShift(parseInt(item.value));
-          if (item.key === 'escalation_pic_timeout_minutes') setEscalationPic(parseInt(item.value));
-          if (item.key === 'task_reminder_before_end_minutes') setTaskReminder(parseInt(item.value));
           if (item.key === 'geofence_verification_enabled') setGeofenceEnabled(item.value === 'true' || item.value === true);
           if (item.key === 'geofence_allowed_distance_meters') setGeofenceDistance(parseInt(item.value));
         });
@@ -102,9 +96,6 @@ export default function AppSettings({ onSettingsUpdated }) {
           { key: 'company_name', value: companyName },
           { key: 'company_description', value: companyDescription },
           { key: 'app_footer_text', value: footerText },
-          { key: 'buffer_shift_minutes', value: bufferShift.toString() },
-          { key: 'escalation_pic_timeout_minutes', value: escalationPic.toString() },
-          { key: 'task_reminder_before_end_minutes', value: taskReminder.toString() },
           { key: 'geofence_verification_enabled', value: geofenceEnabled.toString() },
           { key: 'geofence_allowed_distance_meters', value: geofenceDistance.toString() }
         ]
@@ -275,47 +266,9 @@ export default function AppSettings({ onSettingsUpdated }) {
 
           <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '5px 0' }} />
 
-          {/* Bagian 2: Parameter Sistem */}
+          {/* Bagian 2: Parameter Lokasi & Geofencing GPS */}
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--primary)' }}>2. Parameter Operasional Sistem</h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Toleransi Shift CS (Menit)</label>
-                <input 
-                  type="number" 
-                  className="form-control" 
-                  value={bufferShift} 
-                  onChange={(e) => setBufferShift(parseInt(e.target.value) || 0)} 
-                  min="0" 
-                  required 
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Eskalasi Laporan PIC (Menit)</label>
-                <input 
-                  type="number" 
-                  className="form-control" 
-                  value={escalationPic} 
-                  onChange={(e) => setEscalationPic(parseInt(e.target.value) || 0)} 
-                  min="0" 
-                  required 
-                />
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label" style={{ fontWeight: 600 }}>Pengingat Sisa Waktu Shift (Menit)</label>
-              <input 
-                type="number" 
-                className="form-control" 
-                value={taskReminder} 
-                onChange={(e) => setTaskReminder(parseInt(e.target.value) || 0)} 
-                min="0" 
-                required 
-              />
-            </div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--primary)' }}>2. Parameter Lokasi & Geofencing (GPS)</h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
