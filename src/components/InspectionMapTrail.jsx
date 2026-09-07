@@ -22,6 +22,51 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Classic Leaflet Blue Marker Pin (Standard Leaflet theme as in reference)
+const leafletBlueIcon = new L.Icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Green Leaflet Pin (for verified rooms / on-site points)
+const leafletGreenIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Gold/Orange Leaflet Pin (for user current location)
+const leafletGoldIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+// Red Leaflet Pin (for alert / outside geofence)
+const leafletRedIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
 });
 
 // Formula Haversine dalam satuan Meter
@@ -219,98 +264,39 @@ export default function InspectionMapTrail({
         `);
         layerGroupRef.current.addLayer(geofenceCircle);
 
-        // Marker Pusat Gedung
-        const buildingIcon = L.divIcon({
-          className: 'bld-pin',
-          html: `
-            <div style="
-              background: #0f766e;
-              color: white;
-              width: 30px;
-              height: 30px;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              border: 2.5px solid white;
-              box-shadow: 0 3px 8px rgba(0,0,0,0.25);
-              font-size: 11px;
-              font-weight: 800;
-              letter-spacing: 0.5px;
-            ">
-              GD
-            </div>
-          `,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15]
-        });
-
-        const buildingMarker = L.marker([centerLat, centerLng], { icon: buildingIcon });
+        // Marker Pusat Gedung (Classic Leaflet Blue Pin)
+        const buildingMarker = L.marker([centerLat, centerLng], { icon: leafletBlueIcon });
         buildingMarker.bindPopup(`
-          <div style="font-family: inherit; font-size: 12px; padding: 4px;">
-            <strong style="font-size: 13px;">${selectedBuilding.name}</strong><br/>
-            <span>Titik Pusat Geofence (${radius}m)</span>
+          <div style="font-family: inherit; font-size: 13px; line-height: 1.45; padding: 2px;">
+            <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 3px;">${selectedBuilding.name}</strong>
+            <span style="color: #475569; font-size: 12px;">Pusat Kawasan &amp; Titik Geofence</span><br/>
+            <span style="display: inline-block; margin-top: 5px; padding: 3px 8px; background: rgba(37, 99, 235, 0.1); color: #2563eb; border-radius: 6px; font-weight: 700; font-size: 11px;">
+              Radius: ${radius} meter
+            </span>
           </div>
         `);
         layerGroupRef.current.addLayer(buildingMarker);
 
-        // Tampilkan Marker Posisi Pengguna Real-Time (untuk Semua Role: CS, Supervisor, Admin, PIC)
+        // Auto-open building popup on initial load to match classic Leaflet demo
+        buildingMarker.openPopup();
+
+        // Tampilkan Marker Posisi Pengguna Real-Time (Gold / Red Leaflet Pin)
         if (userLocation) {
-          const userColor = isCs 
-            ? (isInsideGeofence ? '#059669' : '#dc2626')
-            : (isInsideGeofence ? '#2563eb' : '#d97706');
-          
-          const labelText = isCs ? 'CS' : 'ANDA';
-          const haloColor = isInsideGeofence ? 'rgba(37, 99, 235, 0.25)' : 'rgba(217, 119, 6, 0.25)';
-
-          const userIcon = L.divIcon({
-            className: 'usr-pin',
-            html: `
-              <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-                <div style="
-                  position: absolute;
-                  inset: 0;
-                  border-radius: 50%;
-                  background: ${haloColor};
-                  animation: pulse 2s infinite ease-out;
-                "></div>
-                <div style="
-                  position: relative;
-                  background: ${userColor};
-                  color: white;
-                  width: 26px;
-                  height: 26px;
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  border: 2px solid white;
-                  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-                  font-size: 9px;
-                  font-weight: 800;
-                  letter-spacing: 0.5px;
-                ">
-                  ${labelText}
-                </div>
-              </div>
-            `,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
+          const userMarker = L.marker([userLocation.latitude, userLocation.longitude], { 
+            icon: isInsideGeofence ? leafletGoldIcon : leafletRedIcon 
           });
-
-          const userMarker = L.marker([userLocation.latitude, userLocation.longitude], { icon: userIcon });
           userMarker.bindPopup(`
-            <div style="font-family: inherit; font-size: 12px; padding: 4px; min-width: 170px;">
-              <div style="font-weight: 700; color: ${userColor}; margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
+            <div style="font-family: inherit; font-size: 12px; line-height: 1.45; padding: 2px; min-width: 175px;">
+              <strong style="font-size: 13px; color: #0f172a; display: flex; align-items: center; gap: 4px; margin-bottom: 3px;">
                 <span>📍 Posisi Anda ${isLiveTracking ? '(Real-Time)' : ''}</span>
+              </strong>
+              <div style="color: #475569;">Jarak: <b>${Math.round(distanceToBuilding || 0)}m</b> dari pusat gedung</div>
+              <div style="margin-top: 5px;">
+                <span style="display: inline-block; padding: 2px 7px; background: ${isInsideGeofence ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${isInsideGeofence ? '#059669' : '#dc2626'}; border-radius: 6px; font-weight: 700; font-size: 11px;">
+                  ${isInsideGeofence ? '✓ Dalam Radius Geofence' : '⚠ Di Luar Radius'}
+                </span>
               </div>
-              <div>Jarak: <b>${Math.round(distanceToBuilding || 0)}m</b> dari pusat gedung</div>
-              <div style="margin-top: 2px;">
-                Status: <b style="color: ${isInsideGeofence ? '#059669' : '#dc2626'}">
-                  ${isInsideGeofence ? 'Dalam Geofence' : 'Di Luar Geofence'}
-                </b>
-              </div>
-              <div style="font-size: 10px; color: #64748b; margin-top: 3px;">
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">
                 Akurasi GPS: ±${userLocation.accuracy || 5}m
               </div>
             </div>
@@ -318,7 +304,7 @@ export default function InspectionMapTrail({
           layerGroupRef.current.addLayer(userMarker);
         }
 
-        // Jika Supervisor/Admin/PIC: Tampilkan Pin Jejak Ruangan
+        // Jika Supervisor/Admin/PIC: Tampilkan Pin Jejak Ruangan (Green Leaflet Pins)
         if (!isCs) {
           const displayTrail = currentBuildingInspections.length > 0 ? currentBuildingInspections : [
             { id: 'pos-1', room_name: 'FA DEPT. HEAD', room_code: 'RKFA', cs_name: 'Budi CS', time: '09:49 WIB', status: 'Terverifikasi On-Site' }
@@ -338,37 +324,13 @@ export default function InspectionMapTrail({
             const roomLat = centerLat + offset[0];
             const roomLng = centerLng + offset[1];
 
-            const roomIcon = L.divIcon({
-              className: 'room-pin',
-              html: `
-                <div style="
-                  background: #10b981;
-                  color: white;
-                  width: 24px;
-                  height: 24px;
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  border: 2px solid white;
-                  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
-                  font-size: 11px;
-                  font-weight: 700;
-                ">
-                  ${idx + 1}
-                </div>
-              `,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12]
-            });
-
-            const roomMarker = L.marker([roomLat, roomLng], { icon: roomIcon });
+            const roomMarker = L.marker([roomLat, roomLng], { icon: leafletGreenIcon });
             roomMarker.bindPopup(`
-              <div style="font-family: inherit; font-size: 12px; padding: 4px;">
-                <b style="font-size: 13px;">${t.room_name} (${t.room_code || '-'})</b><br/>
-                <span>Petugas: <b>${t.cs_name}</b></span><br/>
-                <span>Waktu: ${t.time}</span><br/>
-                <span style="display: inline-block; margin-top: 3px; padding: 2px 6px; background: rgba(16, 185, 129, 0.1); color: #059669; border-radius: 4px; font-weight: 600; font-size: 11px;">
+              <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px;">
+                <strong style="font-size: 13px; color: #0f172a; display: block; margin-bottom: 3px;">${t.room_name} (${t.room_code || '-'})</strong>
+                <span style="color: #475569;">Petugas CS: <b>${t.cs_name}</b></span><br/>
+                <span style="color: #64748b; font-size: 11px;">Waktu: ${t.time}</span><br/>
+                <span style="display: inline-block; margin-top: 4px; padding: 2px 7px; background: rgba(16, 185, 129, 0.12); color: #059669; border-radius: 6px; font-weight: 700; font-size: 11px;">
                   ${t.status}
                 </span>
               </div>
