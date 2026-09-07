@@ -34,11 +34,13 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   // CS Inline Scanner states on Dashboard
   const [inlineScannerActive, setInlineScannerActive] = useState(false);
   const [inlineScannerLoading, setInlineScannerLoading] = useState(true);
-  const [inlineScannerError, setInlineScannerError] = useState(null);
+  const [inlineScannerError, setInlineScannerError] = useState(null); // Khusus kegagalan hardware/izin kamera
+  const [scanErrorMsg, setScanErrorMsg] = useState(null); // Notifikasi jika QR salah / ditolak backend
   const [availableCameras, setAvailableCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [scanSuccessMsg, setScanSuccessMsg] = useState(null);
   const inlineQrCodeRef = useRef(null);
+  const isProcessingScanRef = useRef(false);
 
   // Greeting Banner visibility (auto-dismiss after 10 seconds across all roles)
   const [showGreeting, setShowGreeting] = useState(true);
@@ -61,6 +63,20 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       clearTimeout(removeTimer);
     };
   }, [user]);
+
+  useEffect(() => {
+    if (scanErrorMsg) {
+      const timer = setTimeout(() => setScanErrorMsg(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [scanErrorMsg]);
+
+  useEffect(() => {
+    if (scanSuccessMsg) {
+      const timer = setTimeout(() => setScanSuccessMsg(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [scanSuccessMsg]);
 
   const todayFormatted = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -179,6 +195,8 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     if (!isCs) return;
     setInlineScannerLoading(true);
     setInlineScannerError(null);
+    setScanErrorMsg(null);
+    isProcessingScanRef.current = false;
 
     try {
       if (inlineQrCodeRef.current && inlineQrCodeRef.current.isScanning) {
@@ -194,7 +212,13 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       }
 
       const { Html5Qrcode } = await import('html5-qrcode');
-      const qrCode = new Html5Qrcode("dashboard-qr-reader");
+      // Aktifkan Native BarcodeDetector (C++/GPU Engine) untuk deteksi instan tanpa delay
+      const qrCode = new Html5Qrcode("dashboard-qr-reader", {
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
+        verbose: false
+      });
       inlineQrCodeRef.current = qrCode;
 
       try {
@@ -219,16 +243,27 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       await qrCode.start(
         activeCamConfig,
         {
-          fps: 10,
+          fps: 25, // Kecepatan scan 25 frame/detik (responsif instan)
           qrbox: (width, height) => {
-            const size = Math.min(width, height) * 0.75;
-            return { width: size, height: size };
+            const minEdge = Math.min(width, height);
+            const qrboxEdgeSize = Math.floor(minEdge * 0.88);
+            return {
+              width: Math.max(qrboxEdgeSize, 260),
+              height: Math.max(qrboxEdgeSize, 260)
+            };
+          },
+          aspectRatio: 1.0,
+          videoConstraints: {
+            facingMode: { ideal: "environment" },
+            focusMode: "continuous",
+            width: { min: 640, ideal: 1280 },
+            height: { min: 480, ideal: 720 }
           }
         },
         async (decodedText) => {
           await handleDashboardQrDetected(decodedText);
         },
-        () => {}
+        () => {} // Abaikan frame scan kosong
       );
 
       setInlineScannerActive(true);
@@ -242,18 +277,46 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   };
 
   const handleDashboardQrDetected = async (decodedText) => {
+    if (isProcessingScanRef.current) return;
+    isProcessingScanRef.current = true;
+    setScanErrorMsg(null);
+
     try {
-      let qrData;
+      const cleanText = (decodedText || '').trim();
+      let scannedRoomId = '';
+      let scannedToken = '';
+      
       try {
-        qrData = JSON.parse(decodedText);
-      } catch (jsonErr) {
-        throw new Error("QR Code tidak valid. Pastikan Anda melakukan scan pada QR Code CAMS yang tepat.");
+        const parsed = JSON.parse(cleanText);
+        scannedRoomId = parsed.room_id || '';
+        scannedToken = parsed.token || '';
+      } catch (e) {
+        if (cleanText.includes('token=')) {
+          const urlParams = new URLSearchParams(cleanText.split('?')[1] || cleanText);
+          scannedRoomId = urlParams.get('room_id') || '';
+          scannedToken = urlParams.get('token') || '';
+        } else {
+          scannedToken = cleanText;
+        }
       }
 
-      const { room_id, token } = qrData;
-      if (!room_id || !token) {
-        throw new Error("Format data QR Code CAMS tidak lengkap.");
+      if (!scannedToken && !scannedRoomId) {
+        throw new Error("QR Code tidak dikenali sebagai format CAMS. Pastikan scan stiker QR resmi di ruangan.");
       }
+
+      // Ambil GPS dengan High Accuracy untuk verifikasi geofencing
+      let currentGps = { latitude: null, longitude: null, accuracy: null };
+      try {
+        if (navigator.geolocation) {
+          currentGps = await new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+              () => resolve({ latitude: null, longitude: null, accuracy: null }),
+              { enableHighAccuracy: true, timeout: 3500, maximumAge: 0 }
+            );
+          });
+        }
+      } catch (e) {}
 
       let capturedBlob = null;
       try {
@@ -261,8 +324,8 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         const videoElement = readerElement?.querySelector("video");
         if (videoElement) {
           const canvas = document.createElement("canvas");
-          canvas.width = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
+          canvas.width = videoElement.videoWidth || 640;
+          canvas.height = videoElement.videoHeight || 480;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
           capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
@@ -272,8 +335,11 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       }
 
       const payload = {
-        room_id: room_id,
-        qr_code_token: token
+        room_id: scannedRoomId || undefined,
+        qr_code_token: scannedToken || cleanText,
+        latitude: currentGps.latitude,
+        longitude: currentGps.longitude,
+        accuracy: currentGps.accuracy
       };
 
       const response = await api.post('/submissions/scan', payload);
@@ -295,8 +361,14 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       }
     } catch (err) {
       console.error('Error during dashboard QR decode:', err);
-      setInlineScannerError(err.message || 'Gagal memproses QR Code.');
+      setScanErrorMsg(err.message || 'QR Code tidak valid atau berada di luar jangkauan lokasi.');
+      // Beri jeda 2.5 detik sebelum scan berikutnya agar tidak spam dan user bisa membaca pesan error
+      setTimeout(() => {
+        isProcessingScanRef.current = false;
+      }, 2500);
+      return;
     }
+    isProcessingScanRef.current = false;
   };
 
   // Lifecycle Inline Scanner di Dashboard CS
@@ -414,8 +486,15 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
           </p>
 
           {scanSuccessMsg && (
-            <div className="alert alert-success" style={{ maxWidth: '420px', margin: '0 auto 16px auto' }}>
+            <div className="alert alert-success" style={{ maxWidth: '420px', margin: '0 auto 16px auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>{scanSuccessMsg}</span>
+            </div>
+          )}
+
+          {scanErrorMsg && (
+            <div className="alert alert-danger" style={{ maxWidth: '420px', margin: '0 auto 16px auto', display: 'flex', alignItems: 'center', gap: '10px', textAlign: 'left', animation: 'fadeIn 0.25s ease' }}>
+              <AlertTriangle size={20} style={{ flexShrink: 0, color: '#ef4444' }} />
+              <span style={{ fontSize: '0.85rem' }}>{scanErrorMsg}</span>
             </div>
           )}
 
@@ -432,6 +511,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             border: '2px solid rgba(16, 185, 129, 0.35)',
             minHeight: '300px',
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
@@ -453,7 +533,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             />
 
             {/* Initializing / Waiting for Camera State */}
-            {inlineScannerLoading && (
+            {inlineScannerLoading && !inlineScannerError && (
               <div style={{ padding: '30px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
                 <div className="spinner" style={{ borderColor: 'rgba(16, 185, 129, 0.3)', borderTopColor: '#10b981', margin: '0 auto 16px auto', width: '38px', height: '38px' }} />
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#10b981' }}>Menginisialisasi Kamera...</div>
@@ -461,8 +541,8 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
               </div>
             )}
 
-            {/* Error / Fallback State */}
-            {inlineScannerError && !inlineScannerLoading && (
+            {/* Hardware/Permission Camera Access Error State */}
+            {inlineScannerError && !inlineScannerActive && !inlineScannerLoading && (
               <div style={{ padding: '30px 20px', color: '#ffffff', textAlign: 'center', zIndex: 5 }}>
                 <AlertTriangle size={34} color="#ef4444" style={{ marginBottom: '12px' }} />
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ef4444' }}>Akses Kamera Terkendala</div>
