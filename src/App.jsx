@@ -327,10 +327,12 @@ export default function App() {
   const handleLoginSuccess = (loggedInUser, token) => {
     setUser(loggedInUser);
     setIsAuthenticated(true);
-    const isGuestUser = loggedInUser.roles && (loggedInUser.roles.includes('guest') || loggedInUser.roles.includes('pelapor'));
-    const initial = isGuestUser ? 'findings' : getInitialTab();
+    const roles = loggedInUser.roles || [];
+    const isGuestUser = roles.includes('guest') || roles.includes('pelapor');
+    const initial = isGuestUser ? 'findings' : 'dashboard';
     setCurrentTab(initial);
     window.location.hash = initial;
+    localStorage.setItem('cams_active_tab', initial);
     setAlert({ type: 'success', message: `Selamat datang kembali, ${loggedInUser.name}!` });
   };
 
