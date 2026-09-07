@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { 
@@ -99,6 +99,7 @@ export default function InspectionMapTrail({
   const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [isLiveTracking, setIsLiveTracking] = useState(true);
   const [gpsError, setGpsError] = useState(null);
+  const lastOpenedBuildingRef = useRef(null);
 
   // Set default gedung penugasan
   useEffect(() => {
@@ -211,10 +212,12 @@ export default function InspectionMapTrail({
     }
   }, [isLiveTracking, selectedBuildingId]);
 
-  // Filter trail untuk supervisor
-  const currentBuildingInspections = inspectionTrail.filter(t => 
-    !selectedBuildingId || t.building_id === selectedBuildingId || !t.building_id
-  );
+  // Filter trail untuk supervisor (memoized untuk mencegah render ulang tanpa perubahan data)
+  const currentBuildingInspections = useMemo(() => {
+    return inspectionTrail.filter(t => 
+      !selectedBuildingId || t.building_id === selectedBuildingId || !t.building_id
+    );
+  }, [inspectionTrail, selectedBuildingId]);
 
   // Inisialisasi & Render Peta
   useEffect(() => {
@@ -277,8 +280,11 @@ export default function InspectionMapTrail({
         `);
         layerGroupRef.current.addLayer(buildingMarker);
 
-        // Auto-open building popup on initial load to match classic Leaflet demo
-        buildingMarker.openPopup();
+        // Auto-open building popup HANYA saat pertama kali gedung dipilih
+        if (lastOpenedBuildingRef.current !== selectedBuildingId) {
+          buildingMarker.openPopup();
+          lastOpenedBuildingRef.current = selectedBuildingId;
+        }
 
         // Tampilkan Marker Posisi Pengguna Real-Time (Gold / Red Leaflet Pin)
         if (userLocation) {

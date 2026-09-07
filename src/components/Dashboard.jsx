@@ -65,7 +65,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       clearTimeout(fadeTimer);
       clearTimeout(removeTimer);
     };
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (scanErrorMsg) {
@@ -159,10 +159,10 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   useEffect(() => {
     fetchDashboardData(period);
 
-    // Auto-refresh data secara berkala (setiap 15 detik) untuk sinkronisasi jejak inspeksi real-time
+    // Auto-refresh data secara berkala (setiap 30 detik) untuk sinkronisasi jejak inspeksi real-time
     const refreshInterval = setInterval(() => {
       fetchDashboardData(period, true);
-    }, 15000);
+    }, 30000);
 
     return () => clearInterval(refreshInterval);
   }, [user, period]);
@@ -382,10 +382,10 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     isProcessingScanRef.current = false;
   };
 
-  // Lifecycle Inline Scanner di Dashboard CS
+  // Lifecycle Inline Scanner di Dashboard CS (hanya jalan saat mount atau toggle kamera, tidak terpengaruh auto-refresh data)
   useEffect(() => {
     let mounted = true;
-    if (isCs && !loading && data && !isCameraOff) {
+    if (isCs && !loading && !isCameraOff) {
       const timer = setTimeout(() => {
         if (mounted) {
           startInlineScanner();
@@ -400,7 +400,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     } else {
       stopInlineScanner();
     }
-  }, [isCs, loading, data, selectedCameraId, isCameraOff]);
+  }, [isCs, loading, selectedCameraId, isCameraOff]);
 
   if (loading) {
     return (
