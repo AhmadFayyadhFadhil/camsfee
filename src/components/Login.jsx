@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { api } from '../utils/api';
-import { Shield, Lock, Mail, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
+import { Shield, AlertTriangle, AlertOctagon, Eye, EyeOff } from 'lucide-react';
 
 export default function Login({ onLoginSuccess, appIdentity }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -40,167 +41,139 @@ export default function Login({ onLoginSuccess, appIdentity }) {
     }
   };
 
+  const companyName = appIdentity ? appIdentity.company_name : 'CAMS PANDAAN';
+  const footerText = (appIdentity && appIdentity.app_footer_text) || `© 2026 ${companyName}. All rights reserved.`;
+
   return (
-    <div className="login-page">
-      <div className="login-card glass-panel">
-        <div style={{ margin: '0 auto 10px auto', display: 'flex', justifyContent: 'center' }}>
-          {appIdentity && appIdentity.company_logo ? (
-            <div style={{ width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <img 
-                src={appIdentity.company_logo.includes('/api/v1/settings/logo/image') ? '/api/v1/settings/logo/image' : appIdentity.company_logo} 
-                alt="Logo" 
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = '/favicon.svg';
-                }}
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  objectFit: 'contain',
-                  mixBlendMode: 'multiply'
-                }} 
-              />
-            </div>
-          ) : (
-            <div className="login-logo" style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Shield size={28} />
+    <div className="lg-page">
+      <div className="lg-card">
+        {/* Panel kiri: form login */}
+        <div className="lg-form-side">
+          <div className="lg-brand">
+            {appIdentity && appIdentity.company_logo ? (
+              <div className="lg-brand-logo">
+                <img
+                  src={appIdentity.company_logo.includes('/api/v1/settings/logo/image') ? '/api/v1/settings/logo/image' : appIdentity.company_logo}
+                  alt="Logo"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = '/favicon.svg';
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="lg-brand-logo lg-brand-logo-fallback">
+                <Shield size={22} />
+              </div>
+            )}
+            <span className="lg-brand-name">{companyName}</span>
+          </div>
+
+          <h1 className="lg-title">Hello<br />Welcome Back</h1>
+          <p className="lg-subtitle">Masuk ke Cleaning Activity Monitoring System</p>
+
+          {error && (
+            <div className="alert alert-danger lg-alert">
+              <AlertTriangle size={16} />
+              <span>{error}</span>
             </div>
           )}
-        </div>
-        <div className="login-header">
-          <h1 style={{ textTransform: 'uppercase', fontSize: '1.35rem', margin: '0 0 2px 0' }}>{appIdentity ? appIdentity.company_name : 'CAMS PANDAAN'}</h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Cleaning Activity Monitoring System</p>
-        </div>
 
-        {error && (
-          <div className="alert alert-danger" style={{ padding: '8px 12px', fontSize: '0.82rem', marginBottom: '14px' }}>
-            <AlertTriangle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <label className="form-label" htmlFor="email" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Alamat Email</label>
-            <div style={{ position: 'relative' }}>
-              <Mail 
-                size={16} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '12px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)', 
-                  color: 'var(--text-muted)' 
-                }} 
-              />
+          <form onSubmit={handleSubmit} noValidate={false}>
+            <div className="lg-field">
+              <label className="lg-label" htmlFor="email">Email</label>
               <input
                 id="email"
                 type="email"
-                className="form-control"
+                className="lg-input"
                 placeholder="Masukkan email Anda"
-                style={{ paddingLeft: '38px', width: '100%', height: '38px', fontSize: '0.85rem' }}
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 required
               />
             </div>
-          </div>
 
-          <div className="form-group" style={{ marginBottom: '18px' }}>
-            <label className="form-label" htmlFor="password" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Kata Sandi</label>
-            <div style={{ position: 'relative' }}>
-              <Lock 
-                size={16} 
-                style={{ 
-                  position: 'absolute', 
-                  left: '12px', 
-                  top: '50%', 
-                  transform: 'translateY(-50%)', 
-                  color: 'var(--text-muted)' 
-                }} 
-              />
-              <input
-                id="password"
-                type="password"
-                className="form-control"
-                placeholder="Masukkan kata sandi"
-                style={{ paddingLeft: '38px', width: '100%', height: '38px', fontSize: '0.85rem' }}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                required
-              />
-            </div>
-          </div>
-
-          <button 
-            type="submit" 
-            className="btn btn-primary" 
-            style={{ width: '100%', height: '40px', fontWeight: 600, fontSize: '0.88rem' }}
-            disabled={loading}
-          >
-            {loading ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div className="spinner" style={{ width: '16px', height: '16px' }}></div>
-                <span>Memproses...</span>
+            <div className="lg-field">
+              <label className="lg-label" htmlFor="password">Password</label>
+              <div className="lg-input-wrap">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  className="lg-input lg-input-password"
+                  placeholder="Masukkan kata sandi"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+                <button
+                  type="button"
+                  className="lg-eye"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                  title={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
-            ) : (
-              <span>Masuk Sistem</span>
-            )}
-          </button>
-        </form>
+            </div>
 
-        {/* Akun Khusus Lapor Temuan Kerusakan & Tatacara */}
-        <div style={{
-          marginTop: '16px',
-          paddingTop: '14px',
-          borderTop: '1px solid var(--border-color)',
-        }}>
-          <div style={{
-            background: 'rgba(239, 246, 255, 0.7)',
-            border: '1px solid #bfdbfe',
-            borderRadius: 'var(--radius-lg)',
-            padding: '12px 14px',
-            textAlign: 'left'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '4px' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <button type="submit" className="lg-submit" disabled={loading}>
+              {loading ? (
+                <span className="lg-submit-loading">
+                  <span className="spinner" style={{ width: '16px', height: '16px' }}></span>
+                  <span>Memproses...</span>
+                </span>
+              ) : (
+                <span>Masuk Sistem</span>
+              )}
+            </button>
+          </form>
+
+          {/* Akun Khusus Lapor Temuan Kerusakan & Tatacara */}
+          <div className="lg-report">
+            <div className="lg-report-head">
+              <span className="lg-report-title">
                 <AlertOctagon size={14} /> Lapor Kerusakan Fasilitas
               </span>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="lg-report-btn"
                 onClick={() => {
                   setEmail('pelapor@cams.com');
                   setPassword('Pass123');
                 }}
-                style={{ fontSize: '0.72rem', padding: '2px 8px', minHeight: '24px', height: '24px', fontWeight: 600 }}
                 title="Klik untuk otomatis mengisi email & kata sandi akun pelapor"
               >
                 Gunakan Akun Ini
               </button>
             </div>
-
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: 1.35 }}>
+            <p className="lg-report-text">
               Karyawan/tamu yang ingin melapor fasilitas rusak tanpa akun operasional:
             </p>
-
-            <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: '0.74rem', fontFamily: 'var(--mono)', color: '#334155', marginBottom: '8px' }}>
+            <div className="lg-report-cred">
               Email: <b>pelapor@cams.com</b> &bull; Sandi: <b>Pass123</b>
             </div>
-
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-              <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '2px' }}>Tata Cara Melaporkan:</strong>
-              <ol style={{ margin: 0, paddingLeft: '16px' }}>
-                <li style={{ marginBottom: '1px' }}>Klik <b>Gunakan Akun Ini</b> &rarr; <b>Masuk Sistem</b>.</li>
-                <li style={{ marginBottom: '1px' }}>Masuk menu <b>Temuan Kerusakan</b> &rarr; <b>+ Laporkan Kerusakan Baru</b>.</li>
+            <details className="lg-report-steps">
+              <summary>Tata Cara Melaporkan</summary>
+              <ol>
+                <li>Klik <b>Gunakan Akun Ini</b> &rarr; <b>Masuk Sistem</b>.</li>
+                <li>Masuk menu <b>Temuan Kerusakan</b> &rarr; <b>+ Laporkan Kerusakan Baru</b>.</li>
                 <li>Pilih ruangan, upload 1 foto bukti, dan kirim.</li>
               </ol>
-            </div>
+            </details>
           </div>
+
+          <div className="lg-footer">{footerText}</div>
         </div>
 
+        {/* Panel kanan: foto gedung */}
+        <div className="lg-photo-side" aria-hidden="true">
+          <img src="/login-building.jpg" alt="" />
+        </div>
       </div>
     </div>
   );
