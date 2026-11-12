@@ -404,36 +404,11 @@ export default function Schedules() {
     }
   };
 
-  const handleDeactivateSchedule = async (id) => {
+  const handleDeleteSchedule = async (id) => {
     if (!(await confirm({
-      title: 'Nonaktifkan Jadwal',
-      message: 'Apakah Anda yakin ingin menonaktifkan jadwal ini?',
-      confirmText: 'Ya, Nonaktifkan',
-      cancelText: 'Batal',
-      type: 'warning'
-    }))) {
-      return;
-    }
-    setError(null);
-    setSuccessMsg(null);
-    try {
-      const response = await api.delete(`/schedules/${id}`);
-      if (response.success) {
-        setSuccessMsg('Jadwal berhasil dinonaktifkan.');
-        fetchData();
-      }
-    } catch (err) {
-      setError(err.message || 'Gagal menonaktifkan jadwal.');
-    }
-  };
-
-  const handleDeleteGroupedSchedule = async (groupedItem) => {
-    const roomName = groupedItem.room?.name || 'Ruangan ini';
-    const shiftName = groupedItem.shift?.name || 'Shift ini';
-    if (!(await confirm({
-      title: 'Hapus / Nonaktifkan Jadwal Ruangan',
-      message: `Apakah Anda yakin ingin menonaktifkan seluruh jadwal (${groupedItem.schedules.length} item) untuk ${roomName} (${shiftName})?`,
-      confirmText: 'Ya, Nonaktifkan Semua',
+      title: 'Hapus Jadwal Pembersihan',
+      message: 'Apakah Anda yakin ingin menghapus jadwal pembersihan ini secara permanen?',
+      confirmText: 'Ya, Hapus',
       cancelText: 'Batal',
       type: 'danger'
     }))) {
@@ -442,13 +417,42 @@ export default function Schedules() {
     setError(null);
     setSuccessMsg(null);
     try {
-      for (const s of groupedItem.schedules) {
+      const response = await api.delete(`/schedules/${id}`);
+      if (response.success) {
+        setSchedulesList(prev => prev.filter(item => item.id !== id));
+        setSuccessMsg('Jadwal pembersihan berhasil dihapus.');
+        fetchData();
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal menghapus jadwal.');
+    }
+  };
+
+  const handleDeleteGroupedSchedule = async (groupedItem) => {
+    const roomName = groupedItem.room?.name || 'Ruangan ini';
+    const shiftName = groupedItem.shift?.name || 'Shift ini';
+    const itemCount = groupedItem.schedules?.length || 1;
+    if (!(await confirm({
+      title: 'Hapus Jadwal Ruangan',
+      message: `Apakah Anda yakin ingin menghapus seluruh jadwal (${itemCount} item checklist) untuk ${roomName} (${shiftName}) secara permanen?`,
+      confirmText: 'Ya, Hapus Semua',
+      cancelText: 'Batal',
+      type: 'danger'
+    }))) {
+      return;
+    }
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const scheduleIds = (groupedItem.schedules || []).map(s => s.id);
+      for (const s of (groupedItem.schedules || [])) {
         await api.delete(`/schedules/${s.id}`);
       }
-      setSuccessMsg(`Seluruh jadwal untuk ${roomName} (${shiftName}) berhasil dinonaktifkan.`);
+      setSchedulesList(prev => prev.filter(item => !scheduleIds.includes(item.id)));
+      setSuccessMsg(`Seluruh jadwal untuk ${roomName} (${shiftName}) berhasil dihapus.`);
       fetchData();
     } catch (err) {
-      setError(err.message || 'Gagal menonaktifkan jadwal ruangan.');
+      setError(err.message || 'Gagal menghapus jadwal ruangan.');
       fetchData();
     }
   };
@@ -1378,17 +1382,15 @@ export default function Schedules() {
                           >
                             <Edit2 size={14} />
                           </button>
-                          {g.is_active && (
-                            <button 
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => handleDeleteGroupedSchedule(g)}
-                              style={{ color: 'var(--danger)', padding: '6px' }}
-                              title="Nonaktifkan Seluruh Jadwal Ruangan Ini"
-                              aria-label={`Nonaktifkan seluruh jadwal untuk ruangan ${g.room?.name || ''}`}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                          <button 
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleDeleteGroupedSchedule(g)}
+                            style={{ color: 'var(--danger)', padding: '6px' }}
+                            title="Hapus Seluruh Jadwal Ruangan Ini"
+                            aria-label={`Hapus seluruh jadwal untuk ruangan ${g.room?.name || ''}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>

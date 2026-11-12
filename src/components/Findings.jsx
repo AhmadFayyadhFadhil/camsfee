@@ -460,7 +460,7 @@ export default function Findings({ user, isOb = false }) {
   };
   
   const canDelete = (finding) => {
-    if (isAdmin || isPic) return true;
+    if (isAdmin || isSupervisor || isPic) return true;
     return false;
   };
 
