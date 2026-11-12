@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Plus, Edit2, Trash2, Check, X, ShieldAlert, QrCode, Download, Eye, Printer, Layers } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, ShieldAlert, QrCode, Download, Eye, Printer, Layers, Search } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 import BulkQrPrint from './BulkQrPrint.jsx';
 
@@ -10,6 +10,7 @@ export default function Rooms() {
   const [buildings, setBuildings] = useState([]);
   const [users, setUsers] = useState([]); // Filtered for PICs
   const [templates, setTemplates] = useState([]); // Checklist Templates
+  const [areas, setAreas] = useState([]); // Master Area Ruangan (dari API /room-areas)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -24,6 +25,7 @@ export default function Rooms() {
   const [code, setCode] = useState('');
   const [floor, setFloor] = useState(1);
   const [buildingId, setBuildingId] = useState('');
+  const [areaId, setAreaId] = useState('');
   const [picUserId, setPicUserId] = useState('');
   const [checklistTemplateId, setChecklistTemplateId] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -39,6 +41,8 @@ export default function Rooms() {
   // Filter State
   const [selectedBuildingFilter, setSelectedBuildingFilter] = useState('');
   const [selectedPicFilter, setSelectedPicFilter] = useState('');
+  const [selectedAreaFilter, setSelectedAreaFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Logika Filter Ruangan berdasarkan Gedung + PIC Aktif
   const filteredRooms = rooms.filter(r => {
@@ -51,15 +55,36 @@ export default function Rooms() {
       (selectedPicFilter === '__no_pic__' && !activePicId) ||
       activePicId === selectedPicFilter;
 
-    return matchBuilding && matchPic;
+    const roomAreaId = r.room_area_id || r.area?.id || null;
+    const matchArea = selectedAreaFilter === '' ||
+      (selectedAreaFilter === '__no_area__' && !roomAreaId) ||
+      roomAreaId === selectedAreaFilter;
+
+    const keyword = searchTerm.trim().toLowerCase();
+    const matchSearch = keyword === '' ||
+      (r.name || r.nama_ruangan || '').toLowerCase().includes(keyword) ||
+      (r.code || r.kode_ruangan || '').toLowerCase().includes(keyword) ||
+      (r.area?.nama_area || r.area_name || '').toLowerCase().includes(keyword);
+
+    return matchBuilding && matchPic && matchArea && matchSearch;
   });
 
-  const hasActiveFilter = selectedBuildingFilter !== '' || selectedPicFilter !== '';
+  const hasActiveFilter = selectedBuildingFilter !== '' || selectedPicFilter !== '' ||
+    selectedAreaFilter !== '' || searchTerm.trim() !== '';
 
   const handleResetFilters = () => {
     setSelectedBuildingFilter('');
     setSelectedPicFilter('');
+    setSelectedAreaFilter('');
+    setSearchTerm('');
   };
+
+  // Jumlah ruangan per area (untuk judul grup di tabel)
+  const areaCounts = filteredRooms.reduce((acc, r) => {
+    const key = r.room_area_id || r.area?.id || '__none__';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   // Refetch hanya data ruangan tanpa memuat ulang master lookup
   const fetchRooms = async () => {
@@ -77,16 +102,18 @@ export default function Rooms() {
     setLoading(true);
     setError(null);
     try {
-      const [roomsRes, buildingsRes, usersRes, templatesRes] = await Promise.all([
+      const [roomsRes, buildingsRes, usersRes, templatesRes, areasRes] = await Promise.all([
         api.get('/rooms?per_page=1000'),
         api.get('/buildings?is_active=true&per_page=1000', { lookup: true }),
         api.get('/users?per_page=1000', { lookup: true }), // Admin only route
-        api.get('/checklist-templates?per_page=100', { lookup: true })
+        api.get('/checklist-templates?per_page=100', { lookup: true }),
+        api.get('/room-areas', { lookup: true }).catch(() => ({ success: false }))
       ]);
 
       if (roomsRes.success) setRooms(roomsRes.data.data || roomsRes.data || []);
       if (buildingsRes.success) setBuildings(buildingsRes.data.data || buildingsRes.data || []);
       if (templatesRes.success) setTemplates(templatesRes.data.data || templatesRes.data || []);
+      if (areasRes.success) setAreas(areasRes.data.data || areasRes.data || []);
       
       if (usersRes.success) {
         const allUsers = usersRes.data.data || usersRes.data || [];
@@ -124,6 +151,7 @@ export default function Rooms() {
     setCode('');
     setFloor(1);
     setBuildingId(buildings[0]?.id || '');
+    setAreaId('');
     setPicUserId(users[0]?.id || '');
     setChecklistTemplateId('');
     setLatitude('');
@@ -137,8 +165,9 @@ export default function Rooms() {
     setEditingRoom(room);
     setName(room.name || room.nama_ruangan || '');
     setCode(room.code || room.kode_ruangan || '');
-    setFloor(room.floor || room.lantai || 1);
+    setFloor(room.floor ?? room.lantai ?? '');
     setBuildingId(room.building_id || room.building?.id || '');
+    setAreaId(room.room_area_id || room.area?.id || '');
     setPicUserId(room.active_pic?.user_id || room.active_pic?.user?.id || room.pic_user_id || '');
     setChecklistTemplateId(room.checklist_template_id || room.template?.id || '');
     setLatitude(room.latitude !== null && room.latitude !== undefined ? room.latitude : '');
@@ -177,9 +206,10 @@ export default function Rooms() {
 
     const payload = {
       building_id: buildingId,
+      room_area_id: areaId || null,
       name,
       code,
-      floor: parseInt(floor),
+      floor: floor !== '' && floor !== null ? parseInt(floor, 10) : null,
       pic_user_id: picUserId || null,
       checklist_template_id: checklistTemplateId || null,
       latitude: latitude !== '' ? parseFloat(latitude) : null,
@@ -313,6 +343,22 @@ export default function Rooms() {
         <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
 
+            {/* Pencarian */}
+            <div style={{ flex: '1', minWidth: '200px', maxWidth: '260px' }}>
+              <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '5px', display: 'block' }}>Cari Ruangan</label>
+              <div style={{ position: 'relative' }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Nama, kode, atau area..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ height: '36px', fontSize: '0.88rem', paddingLeft: '30px' }}
+                />
+              </div>
+            </div>
+
             {/* Filter Gedung */}
             <div style={{ flex: '1', minWidth: '200px', maxWidth: '280px' }}>
               <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '5px', display: 'block' }}>Filter Gedung</label>
@@ -325,6 +371,23 @@ export default function Rooms() {
                 <option value="">Semua Gedung</option>
                 {buildings.map(b => (
                   <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter Area */}
+            <div style={{ flex: '1', minWidth: '200px', maxWidth: '260px' }}>
+              <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '5px', display: 'block' }}>Filter Area</label>
+              <select
+                className="form-control form-select"
+                value={selectedAreaFilter}
+                onChange={(e) => setSelectedAreaFilter(e.target.value)}
+                style={{ height: '36px', fontSize: '0.88rem' }}
+              >
+                <option value="">Semua Area</option>
+                <option value="__no_area__">— Belum ada area —</option>
+                {areas.map(a => (
+                  <option key={a.id} value={a.id}>{a.nomor} {a.nama_area}</option>
                 ))}
               </select>
             </div>
@@ -438,16 +501,31 @@ export default function Rooms() {
                   </div>
                 </div>
 
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 700 }}>Area Ruangan *</label>
+                  <select
+                    className="form-control form-select"
+                    value={areaId}
+                    onChange={(e) => setAreaId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Pilih Area</option>
+                    {areas.map(a => (
+                      <option key={a.id} value={a.id}>{a.nomor} {a.nama_area}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="grid-3-cols" style={{ gap: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 700 }}>Lantai *</label>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Lantai</label>
                     <input 
                       type="number" 
                       className="form-control" 
                       value={floor} 
                       onChange={(e) => setFloor(e.target.value)} 
                       min="1"
-                      required 
+                      placeholder="Opsional"
                     />
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
@@ -606,7 +684,7 @@ export default function Rooms() {
               {previewingRoom.name || previewingRoom.nama_ruangan}
             </h3>
             <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.88rem' }}>
-              Kode: <strong>{previewingRoom.code || previewingRoom.kode_ruangan}</strong> • Lantai {previewingRoom.floor || previewingRoom.lantai} • Gedung: {previewingRoom.building?.nama_gedung || previewingRoom.building?.name}
+              Kode: <strong>{previewingRoom.code || previewingRoom.kode_ruangan}</strong> • Area: {previewingRoom.area ? `${previewingRoom.area.nomor} ${previewingRoom.area.nama_area}` : 'Belum ada area'} • {(previewingRoom.floor || previewingRoom.lantai) ? `Lantai ${previewingRoom.floor || previewingRoom.lantai}` : 'Lantai belum diisi'} • Gedung: {previewingRoom.building?.nama_gedung || previewingRoom.building?.name}
             </p>
 
             <div className="modal-footer" style={{ justifyContent: 'center' }}>
@@ -648,11 +726,29 @@ export default function Rooms() {
               </tr>
             </thead>
             <tbody>
-              {filteredRooms.map(r => (
-                <tr key={r.id}>
+              {filteredRooms.map((r, idx) => {
+                const areaKey = r.room_area_id || r.area?.id || '__none__';
+                const prevRoom = idx > 0 ? filteredRooms[idx - 1] : null;
+                const prevKey = prevRoom ? (prevRoom.room_area_id || prevRoom.area?.id || '__none__') : null;
+                const isNewGroup = idx === 0 || areaKey !== prevKey;
+                return (
+                <React.Fragment key={r.id}>
+                {isNewGroup && (
+                  <tr>
+                    <td colSpan="9" style={{ background: 'rgba(37, 99, 235, 0.06)', fontWeight: 700, fontSize: '0.82rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--primary)', padding: '10px 16px' }}>
+                      {areaKey === '__none__'
+                        ? 'Belum ada area'
+                        : `${r.area?.nomor || ''} ${r.area?.nama_area || r.area_name || ''}`.trim()}
+                      <span style={{ marginLeft: '10px', fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--text-muted)' }}>
+                        {areaCounts[areaKey]} ruangan
+                      </span>
+                    </td>
+                  </tr>
+                )}
+                <tr>
                   <td style={{ fontWeight: 600 }}>{r.name || r.nama_ruangan}</td>
                   <td><code>{r.code || r.kode_ruangan}</code></td>
-                  <td>Lantai {r.floor || r.lantai}</td>
+                  <td>{(r.floor || r.lantai) ? `Lantai ${r.floor || r.lantai}` : '-'}</td>
                   <td>{r.building?.nama_gedung || r.building?.name || '-'}</td>
                   <td>
                     {r.latitude !== null && r.longitude !== null ? (
@@ -716,7 +812,9 @@ export default function Rooms() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                </React.Fragment>
+                );
+              })}
               {filteredRooms.length === 0 && (
                 <tr>
                   <td colSpan="9" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px 24px' }}>

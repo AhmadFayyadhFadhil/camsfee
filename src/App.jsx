@@ -38,13 +38,20 @@ import {
   Layers, 
   Check, 
   X,
-  Menu, 
   ShieldAlert, 
   Sliders, 
   Zap, 
   Box, 
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  LayoutDashboard,
+  ChevronDown,
+  PanelLeft,
+  Activity,
+  Wrench,
+  Database,
+  Settings,
+  History
 } from 'lucide-react';
 import { useConfirm } from './context/ConfirmContext.jsx';
 
@@ -54,6 +61,25 @@ const VALID_TABS = [
   'schedules',
   'reports', 'users', 'app_settings', 'audit_logs', 'notifications_panel', 'profile'
 ];
+
+// Peta tab -> id grup sidebar. Dipakai agar grup yang berisi halaman tujuan otomatis terbuka.
+const TAB_GROUPS = {
+  tasks: ['cs_activity'],
+  cs_adhoc: ['cs_activity'],
+  room_assets: ['cs_activity', 'master'],
+  verifications: ['monitoring'],
+  adhoc_tasks: ['monitoring'],
+  findings: ['facilities'],
+  buildings: ['master'],
+  rooms: ['master'],
+  checklist_templates: ['master'],
+  schedules: ['master'],
+  reports: ['master'],
+  users: ['user_admin'],
+  app_settings: ['user_admin'],
+  audit_logs: ['logs'],
+  profile: ['settings']
+};
 
 const getInitialTab = () => {
   try {
@@ -84,6 +110,15 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState(getInitialTab);
   const [openScanModalOnMount, setOpenScanModalOnMount] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('cams_sidebar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  // Status buka/tutup tiap grup menu (kunci = id grup). Jika belum diatur, memakai nilai bawaan grup.
+  const [openGroups, setOpenGroups] = useState({});
   const contentBodyRef = useRef(null);
 
   // Mapping judul halaman — Bahasa Indonesia bersih (untuk pengguna non-teknis)
@@ -112,6 +147,15 @@ export default function App() {
     if (!VALID_TABS.includes(targetTab)) return;
     setCurrentTab(targetTab);
     setIsSidebarOpen(false);
+
+    const groupIds = TAB_GROUPS[targetTab];
+    if (groupIds) {
+      setOpenGroups((prev) => {
+        const next = { ...prev };
+        groupIds.forEach((id) => { next[id] = true; });
+        return next;
+      });
+    }
 
     if (window.location.hash !== `#${targetTab}`) {
       window.location.hash = targetTab;
@@ -418,14 +462,151 @@ export default function App() {
     return 'Staf';
   };
 
-  const getRoleBadgeClass = () => {
-    if (isAdmin) return 'role-admin';
-    if (isSupervisor) return 'role-supervisor';
-    if (isPic) return 'role-pic';
-    if (isCs) return 'role-cs';
-    if (isOb) return 'role-ob';
-    if (isGuest) return 'role-pic';
-    return 'role-manager';
+  // ── Definisi menu sidebar (aturan role sama persis dengan sebelumnya) ──
+  const mainNavItems = !isGuest ? [
+    { tab: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { tab: 'notifications_panel', label: 'Notifikasi', icon: Bell, badge: unreadCount }
+  ] : [];
+
+  const navGroups = [
+    {
+      id: 'cs_activity',
+      title: 'Aktivitas CS',
+      icon: ClipboardCheck,
+      defaultOpen: true,
+      visible: isCs,
+      items: [
+        { tab: 'tasks', label: 'Tugas Hari Ini', icon: ClipboardCheck },
+        { tab: 'cs_adhoc', label: 'Tugas Khusus & Acara', icon: FileText },
+        { tab: 'room_assets', label: 'Audit Aset Ruangan', icon: Box }
+      ]
+    },
+    {
+      id: 'monitoring',
+      title: 'Monitoring & Approval',
+      icon: Activity,
+      defaultOpen: true,
+      visible: isPic || isSupervisor || isAdmin,
+      items: [
+        { tab: 'verifications', label: 'Verifikasi Laporan', icon: CheckSquare },
+        { tab: 'adhoc_tasks', label: 'Tugas Khusus & Acara', icon: FileText, visible: isSupervisor || isAdmin }
+      ]
+    },
+    {
+      id: 'facilities',
+      title: 'Fasilitas',
+      icon: Wrench,
+      defaultOpen: true,
+      visible: true,
+      items: [
+        { tab: 'findings', label: 'Temuan Kerusakan', icon: AlertOctagon }
+      ]
+    },
+    {
+      id: 'master',
+      title: 'Master Data',
+      icon: Database,
+      defaultOpen: false,
+      visible: isSupervisor || isAdmin,
+      items: [
+        { tab: 'buildings', label: 'Kelola Gedung', icon: Building },
+        { tab: 'rooms', label: 'Kelola Ruangan', icon: Home },
+        { tab: 'checklist_templates', label: 'Template Checklist', icon: Layers },
+        { tab: 'room_assets', label: 'Aset Ruangan', icon: Box },
+        { tab: 'schedules', label: 'Jadwal & Penugasan', icon: Clock },
+        { tab: 'reports', label: 'Export Laporan', icon: FileText }
+      ]
+    },
+    {
+      id: 'user_admin',
+      title: isAdmin ? 'System Admin' : 'Manajemen Pengguna',
+      icon: Users,
+      defaultOpen: false,
+      visible: isAdmin || isSupervisor,
+      items: [
+        { tab: 'users', label: 'Kelola Pengguna', icon: Users },
+        { tab: 'app_settings', label: 'System Company', icon: Sliders, visible: isAdmin }
+      ]
+    },
+    {
+      id: 'logs',
+      title: 'Logs',
+      icon: History,
+      defaultOpen: false,
+      visible: isAdmin || isSupervisor || isPic || isCs,
+      items: [
+        { tab: 'audit_logs', label: 'Audit Trails', icon: FileText }
+      ]
+    },
+    {
+      id: 'settings',
+      title: 'Pengaturan',
+      icon: Settings,
+      defaultOpen: false,
+      visible: true,
+      items: [
+        { tab: 'profile', label: 'Profil Saya', icon: User }
+      ]
+    }
+  ];
+
+  const isGroupOpen = (group) => {
+    if (openGroups[group.id] !== undefined) return openGroups[group.id];
+    return group.defaultOpen || group.items.some((item) => item.tab === currentTab);
+  };
+
+  const toggleGroup = (group) => {
+    const open = isGroupOpen(group);
+    setOpenGroups((prev) => ({ ...prev, [group.id]: !open }));
+  };
+
+  // Tombol sidebar: di layar kecil membuka drawer, di desktop menciutkan sidebar
+  const handleToggleSidebar = () => {
+    const isSmallScreen = window.matchMedia('(max-width: 992px)').matches;
+    if (isSmallScreen) {
+      setIsSidebarOpen((prev) => !prev);
+      return;
+    }
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cams_sidebar_collapsed', next ? '1' : '0');
+      } catch {
+        // penyimpanan lokal tidak tersedia: abaikan
+      }
+      return next;
+    });
+  };
+
+  // Pintasan keyboard Ctrl + B
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'b') return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+      e.preventDefault();
+      handleToggleSidebar();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isAuthenticated]);
+
+  const renderNavButton = (item, nested = false) => {
+    const Icon = item.icon;
+    return (
+      <button
+        key={`${item.tab}-${item.label}`}
+        type="button"
+        className={`nav-link ${nested ? 'nav-sublink' : ''} ${currentTab === item.tab ? 'active' : ''}`}
+        onClick={() => selectTab(item.tab)}
+        aria-current={currentTab === item.tab ? 'page' : undefined}
+      >
+        <Icon size={nested ? 16 : 18} />
+        <span className="nav-label">{item.label}</span>
+        {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
+      </button>
+    );
   };
 
   if (!isAuthenticated) {
@@ -436,267 +617,85 @@ export default function App() {
     <div className="app-container">
       
       {/* Sidebar Navigation */}
-      <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px' }}>
+      <nav
+        className={`sidebar ${isSidebarOpen ? 'open' : ''} ${isSidebarCollapsed ? 'collapsed' : ''}`}
+        aria-label="Navigasi utama"
+      >
+        <div className="nav-brand">
           {appIdentity.company_logo ? (
-            <div style={{ width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <img 
-                src={normalizeLogoUrl(appIdentity.company_logo)} 
-                alt="Logo" 
+            <div className="nav-brand-logo">
+              <img
+                src={normalizeLogoUrl(appIdentity.company_logo)}
+                alt="Logo"
                 onError={(e) => {
                   e.target.onerror = null;
                   e.target.src = '/favicon.svg';
                 }}
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  objectFit: 'contain',
-                  mixBlendMode: 'multiply'
-                }} 
               />
             </div>
           ) : (
-            <div className="sidebar-logo" style={{ width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+            <div className="nav-brand-logo nav-brand-logo-fallback">
               <Shield size={20} />
             </div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, flex: 1 }}>
-            <span style={{ fontSize: '1.05rem', fontWeight: '800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--primary)', lineHeight: 1.1 }}>
-              {appIdentity.company_name}
-            </span>
-            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '3px', letterSpacing: '0.2px' }}>
-              {appIdentity.company_description || 'Cleaning Activity Monitor'}
-            </span>
+          <div className="nav-brand-text">
+            <span className="nav-brand-title">CAMS</span>
+            <span className="nav-brand-subtitle">{appIdentity.company_name}</span>
           </div>
-          <button 
-            type="button" 
-            className="sidebar-close-btn" 
-            onClick={() => setIsSidebarOpen(false)} 
+          <button
+            type="button"
+            className="sidebar-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
             aria-label="Tutup Menu"
           >
             <X size={18} />
           </button>
         </div>
 
-        <ul className="sidebar-menu">
-          {!isGuest && (
-            <>
-              <li className="sidebar-item-group-title">Menu Utama</li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => selectTab('dashboard')}
+        <div className="nav-scroll">
+          {mainNavItems.length > 0 && (
+            <div className="nav-section">
+              <div className="nav-section-title">Menu Utama</div>
+              {mainNavItems.map((item) => renderNavButton(item))}
+            </div>
+          )}
+
+          {navGroups.filter((group) => group.visible).map((group) => {
+            const GroupIcon = group.icon;
+            const open = isGroupOpen(group);
+            const visibleItems = group.items.filter((item) => item.visible !== false);
+            const hasActive = visibleItems.some((item) => item.tab === currentTab);
+            return (
+              <div className="nav-group" key={group.id}>
+                <button
+                  type="button"
+                  className={`nav-group-btn ${hasActive ? 'has-active' : ''}`}
+                  onClick={() => toggleGroup(group)}
+                  aria-expanded={open}
                 >
-                  <Layers size={18} /> Dashboard
+                  <GroupIcon size={18} />
+                  <span className="nav-label">{group.title}</span>
+                  <ChevronDown size={16} className={`nav-chevron ${open ? 'open' : ''}`} />
                 </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'notifications_panel' ? 'active' : ''}`}
-                  onClick={() => selectTab('notifications_panel')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <Bell size={18} /> Notifikasi
-                    </div>
-                    {unreadCount > 0 && (
-                      <span 
-                        className="notification-badge-sidebar" 
-                        style={{ 
-                          background: 'var(--danger)', 
-                          color: '#ffffff', 
-                          padding: '2px 7px', 
-                          borderRadius: '10px', 
-                          fontSize: '0.7rem', 
-                          fontWeight: 'bold',
-                          boxShadow: '0 2px 5px rgba(220, 38, 38, 0.4)'
-                        }}
-                      >
-                        {unreadCount}
-                      </span>
-                    )}
+                {open && (
+                  <div className="nav-submenu">
+                    {visibleItems.map((item) => renderNavButton(item, true))}
                   </div>
-                </button>
-              </li>
-            </>
-          )}
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-          {/* Cleaning Service menu */}
-          {isCs && (
-            <>
-              <li className="sidebar-item-group-title">Aktivitas CS</li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'tasks' ? 'active' : ''}`}
-                  onClick={() => selectTab('tasks')}
-                >
-                  <ClipboardCheck size={18} /> Tugas Hari Ini
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'cs_adhoc' ? 'active' : ''}`}
-                  onClick={() => selectTab('cs_adhoc')}
-                >
-                  <FileText size={18} /> Tugas Khusus & Acara
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'room_assets' ? 'active' : ''}`}
-                  onClick={() => selectTab('room_assets')}
-                >
-                  <Box size={18} /> Audit Aset Ruangan
-                </button>
-              </li>
-            </>
-          )}
-
-          {/* PIC / Supervisor approvals menu */}
-          {(isPic || isSupervisor || isAdmin) && (
-            <>
-              <li className="sidebar-item-group-title">Monitoring & Approval</li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'verifications' ? 'active' : ''}`}
-                  onClick={() => selectTab('verifications')}
-                >
-                  <CheckSquare size={18} /> Verifikasi Laporan
-                </button>
-              </li>
-              {(isSupervisor || isAdmin) && (
-                <li>
-                  <button 
-                    className={`sidebar-link ${currentTab === 'adhoc_tasks' ? 'active' : ''}`}
-                    onClick={() => selectTab('adhoc_tasks')}
-                  >
-                    <FileText size={18} /> Tugas Khusus & Acara
-                  </button>
-                </li>
-              )}
-            </>
-          )}
-
-          {/* Findings - accessible by everyone */}
-          <li className="sidebar-item-group-title">Fasilitas</li>
-          <li>
-            <button 
-              className={`sidebar-link ${currentTab === 'findings' ? 'active' : ''}`}
-              onClick={() => selectTab('findings')}
-            >
-              <AlertOctagon size={18} /> Temuan Kerusakan
-            </button>
-          </li>
-
-          {/* Master data (Supervisor / Admin only) */}
-          {(isSupervisor || isAdmin) && (
-            <>
-              <li className="sidebar-item-group-title">Master Data</li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'buildings' ? 'active' : ''}`}
-                  onClick={() => selectTab('buildings')}
-                >
-                  <Building size={18} /> Kelola Gedung
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'rooms' ? 'active' : ''}`}
-                  onClick={() => selectTab('rooms')}
-                >
-                  <Home size={18} /> Kelola Ruangan
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'checklist_templates' ? 'active' : ''}`}
-                  onClick={() => selectTab('checklist_templates')}
-                >
-                  <Layers size={18} /> Template Checklist
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'room_assets' ? 'active' : ''}`}
-                  onClick={() => selectTab('room_assets')}
-                >
-                  <Box size={18} /> Aset Ruangan
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'schedules' ? 'active' : ''}`}
-                  onClick={() => selectTab('schedules')}
-                >
-                  <Clock size={18} /> Jadwal & Penugasan
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'reports' ? 'active' : ''}`}
-                  onClick={() => selectTab('reports')}
-                >
-                  <FileText size={18} /> Export Laporan
-                </button>
-              </li>
-            </>
-          )}
-
-          {/* User Management & System Admin */}
-          {(isAdmin || isSupervisor) && (
-            <>
-              <li className="sidebar-item-group-title">{isAdmin ? 'System Admin' : 'Manajemen Pengguna'}</li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'users' ? 'active' : ''}`}
-                  onClick={() => selectTab('users')}
-                >
-                  <Users size={18} /> Kelola Pengguna
-                </button>
-              </li>
-              {isAdmin && (
-                <li>
-                  <button 
-                    className={`sidebar-link ${currentTab === 'app_settings' ? 'active' : ''}`}
-                    onClick={() => selectTab('app_settings')}
-                  >
-                    <Sliders size={18} /> System Company
-                  </button>
-                </li>
-              )}
-            </>
-          )}
-
-          {/* Logs accessible by Admin, Supervisor, PIC, CS */}
-          {(isAdmin || isSupervisor || isPic || isCs) && (
-            <>
-              <li className="sidebar-item-group-title">Logs</li>
-              <li>
-                <button 
-                  className={`sidebar-link ${currentTab === 'audit_logs' ? 'active' : ''}`}
-                  onClick={() => selectTab('audit_logs')}
-                >
-                  <FileText size={18} /> Audit Trails
-                </button>
-              </li>
-            </>
-          )}
-
-          <li className="sidebar-item-group-title">Pengaturan</li>
-          <li>
-            <button 
-              className={`sidebar-link ${currentTab === 'profile' ? 'active' : ''}`}
-              onClick={() => selectTab('profile')}
-            >
-              <User size={18} /> Profil Saya
-            </button>
-          </li>
-        </ul>
-
-        {/* Dynamic Sidebar Footer */}
-        <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', marginTop: 'auto', fontSize: '0.72rem', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.3 }}>
-          {appIdentity.app_footer_text}
+        <div className="nav-footer">
+          <button type="button" className="nav-link nav-logout" onClick={handleLogout}>
+            <LogOut size={18} />
+            <span className="nav-label">Keluar Akun</span>
+          </button>
+          <div className="nav-footer-meta">
+            <span className="nav-footer-text">{appIdentity.app_footer_text}</span>
+            <span className="nav-shortcut-hint">Ctrl + B</span>
+          </div>
         </div>
       </nav>
 
@@ -711,8 +710,14 @@ export default function App() {
         {/* Header Bar */}
         <header className="header-bar">
           <div className="header-title-section" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="hamburger-btn" onClick={() => setIsSidebarOpen(true)} aria-label="Buka Sidebar Navigasi">
-              <Menu size={20} />
+            <button
+              type="button"
+              className="header-toggle-btn"
+              onClick={handleToggleSidebar}
+              aria-label="Buka atau tutup sidebar navigasi"
+              title="Buka atau tutup sidebar (Ctrl + B)"
+            >
+              <PanelLeft size={18} />
             </button>
             <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>
               {TAB_TITLES[currentTab] || currentTab}
@@ -832,22 +837,9 @@ export default function App() {
               </div>
               <div className="user-info col-hide-mobile">
                 <span className="user-name">{user.name}</span>
-                <span className={`role-badge ${getRoleBadgeClass()}`}>
-                  {getRoleLabel()}
-                </span>
+                <span className="user-role-text">{getRoleLabel()}</span>
               </div>
             </div>
-
-            {/* Logout Button */}
-            <button 
-              className="btn btn-secondary btn-sm" 
-              onClick={handleLogout}
-              title="Keluar dari sistem"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <LogOut size={16} />
-              <span className="col-hide-mobile">Keluar</span>
-            </button>
           </div>
         </header>
 
@@ -937,4 +929,3 @@ export default function App() {
     </div>
   );
 }
-

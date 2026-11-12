@@ -922,120 +922,131 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
   const breakdown = data.breakdown_per_building || [];
   const overdue = data.overdue_tasks || [];
 
+  const periodLabel = { today: 'hari ini', week: 'minggu ini', month: 'bulan ini' }[period] || 'hari ini';
+  const monthYear = new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const fullDate = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const displayName = user?.name || activeUser.name || (isAdminOrSupervisor ? 'Supervisor' : 'PIC Area');
+
+  const statCards = [
+    {
+      key: 'buildings',
+      label: 'Gedung Dipantau',
+      value: data.total_buildings || 0,
+      caption: 'Gedung dalam cakupan pemantauan',
+      icon: Building,
+      tone: 'blue',
+      tab: isAdminOrSupervisor ? 'buildings' : null
+    },
+    {
+      key: 'rooms',
+      label: 'Ruangan Terdaftar',
+      value: data.total_rooms || 0,
+      caption: 'Ruangan yang terdaftar di sistem',
+      icon: Home,
+      tone: 'green',
+      tab: isAdminOrSupervisor ? 'rooms' : null
+    },
+    {
+      key: 'compliance',
+      label: 'Tingkat Kepatuhan',
+      value: `${data.compliance_rate || 0}%`,
+      caption: `Rata-rata kepatuhan tugas ${periodLabel}`,
+      icon: CheckSquare,
+      tone: 'purple',
+      tab: null
+    },
+    {
+      key: 'pending',
+      label: 'Menunggu Verifikasi',
+      value: data.pending_verifications || 0,
+      caption: 'Laporan menunggu persetujuan',
+      icon: Eye,
+      tone: 'amber',
+      tab: 'verifications'
+    },
+    {
+      key: 'findings',
+      label: 'Temuan Kerusakan',
+      value: data.active_findings || 0,
+      caption: 'Temuan kerusakan yang masih aktif',
+      icon: AlertOctagon,
+      tone: 'red',
+      tab: 'findings'
+    }
+  ];
+
   return (
     <div>
-      {/* GREETING BANNER (Auto-dismiss in 3s) */}
-      {showGreeting && (
-        <div className={`greeting-banner ${isGreetingFading ? 'fade-out' : ''}`}>
-          <div className="greeting-name">Halo, {user?.name || (isAdminOrSupervisor ? (user?.roles?.includes('admin') ? 'Administrator' : 'Supervisor') : 'PIC Area')}!</div>
-          <div className="greeting-date">Hari ini {todayFormatted} • Selamat datang di sistem monitoring kebersihan fasilitas CAMS.</div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+      {/* Judul halaman + filter periode */}
+      <div className="gb-page-head">
         <div>
-          <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 700 }}>
+          <h1 className="gb-page-title">
             {isAdminOrSupervisor ? 'Dashboard Supervisor' : 'Dashboard PIC Area'}
           </h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Status operasional kebersihan fasilitas PT Widatra Bhakti</p>
+          <p className="gb-page-sub">Status operasional kebersihan fasilitas PT Widatra Bhakti</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className={`btn btn-sm ${period === 'today' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPeriod('today')}>Hari Ini</button>
-          <button className={`btn btn-sm ${period === 'week' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPeriod('week')}>Minggu Ini</button>
-          <button className={`btn btn-sm ${period === 'month' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPeriod('month')}>Bulan Ini</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => fetchDashboardData(period)}>
+        <div className="gb-toolbar">
+          <div className="gb-segment" role="group" aria-label="Filter periode">
+            <button type="button" className={period === 'today' ? 'active' : ''} onClick={() => setPeriod('today')}>Hari Ini</button>
+            <button type="button" className={period === 'week' ? 'active' : ''} onClick={() => setPeriod('week')}>Minggu Ini</button>
+            <button type="button" className={period === 'month' ? 'active' : ''} onClick={() => setPeriod('month')}>Bulan Ini</button>
+          </div>
+          <button type="button" className="gb-refresh" onClick={() => fetchDashboardData(period)}>
             <RefreshCw size={16} /> Segarkan
           </button>
         </div>
       </div>
 
-      {/* WELCOME HERO BANNER FOR SUPERVISOR/PIC */}
-      <div className="glass-panel" style={{ 
-        padding: '24px', 
-        borderRadius: 'var(--radius-lg)', 
-        marginBottom: '24px', 
-        background: 'linear-gradient(135deg, rgba(14, 49, 146, 0.06) 0%, rgba(26, 75, 196, 0.02) 100%)',
-        border: '1px solid var(--border-color)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '16px'
-      }}>
+      {/* Welcome card */}
+      <div className="gb-welcome">
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--primary)' }}>
-            Selamat Datang Kembali, {user.name}!
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '6px' }}>
-            Pantau kepatuhan kebersihan gedung secara real-time. Hari ini, tingkat kepatuhan kebersihan berada di angka <strong style={{ color: 'var(--primary)' }}>{data.compliance_rate || 0}%</strong>.
-          </p>
+          <h2>Selamat datang, {displayName}!</h2>
+          <p>{monthYear} — begini kondisi kebersihan fasilitas di seluruh gedung {periodLabel}.</p>
         </div>
-        <div style={{ background: 'var(--gradient-primary)', color: 'white', padding: '10px 18px', borderRadius: 'var(--radius-md)', fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 10px rgba(14, 49, 146, 0.15)' }}>
-          {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        <div className="gb-welcome-chips">
+          <span className="gb-welcome-chip">{fullDate}</span>
+          <span className="gb-welcome-chip">Kepatuhan {data.compliance_rate || 0}%</span>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="dashboard-grid">
-        <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--primary)', background: 'rgba(14, 49, 146, 0.02)' }}>
-          <div className="stats-icon" style={{ background: 'rgba(14, 49, 146, 0.08)', color: 'var(--primary)' }}>
-            <Building size={24} />
-          </div>
-          <div className="stats-details">
-            <span className="stats-number">{data.total_buildings || 0}</span>
-            <span className="stats-label">Gedung Dipantau</span>
-          </div>
-        </div>
-
-        <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--secondary)', background: 'rgba(26, 75, 196, 0.02)' }}>
-          <div className="stats-icon" style={{ background: 'rgba(26, 75, 196, 0.08)', color: 'var(--secondary)' }}>
-            <Home size={24} />
-          </div>
-          <div className="stats-details">
-            <span className="stats-number">{data.total_rooms || 0}</span>
-            <span className="stats-label">Ruangan Terdaftar</span>
-          </div>
-        </div>
-
-        <div className="glass-card stats-card" style={{ borderLeft: '4px solid #a855f7', background: 'rgba(168, 85, 247, 0.02)' }}>
-          <div className="stats-icon" style={{ background: 'rgba(168, 85, 247, 0.08)', color: '#a855f7' }}>
-            <CheckSquare size={24} />
-          </div>
-          <div className="stats-details">
-            <span className="stats-number" style={{ color: 'var(--text-primary)' }}>
-              {data.compliance_rate || 0}%
-            </span>
-            <span className="stats-label">Tingkat Kepatuhan</span>
-          </div>
-        </div>
-
-        <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--info)', background: 'rgba(26, 75, 196, 0.02)' }}>
-          <div className="stats-icon" style={{ background: 'rgba(26, 75, 196, 0.08)', color: 'var(--info)' }}>
-            <Eye size={24} />
-          </div>
-          <div className="stats-details">
-            <span className="stats-number">{data.pending_verifications || 0}</span>
-            <span className="stats-label">Menunggu Verifikasi</span>
-          </div>
-        </div>
-
-        <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--danger)', background: 'rgba(255, 0, 0, 0.02)' }}>
-          <div className="stats-icon" style={{ background: 'rgba(255, 0, 0, 0.08)', color: 'var(--danger)' }}>
-            <AlertOctagon size={24} />
-          </div>
-          <div className="stats-details">
-            <span className="stats-number">{data.active_findings || 0}</span>
-            <span className="stats-label">Temuan Kerusakan</span>
-          </div>
-        </div>
+      {/* Kartu statistik */}
+      <div className="gb-stats">
+        {statCards.map((card) => {
+          const CardIcon = card.icon;
+          const clickable = Boolean(card.tab && setCurrentTab);
+          return (
+            <div
+              key={card.key}
+              className={`gb-stat ${clickable ? 'clickable' : ''}`}
+              onClick={clickable ? () => setCurrentTab(card.tab) : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentTab(card.tab); } } : undefined}
+            >
+              <div>
+                <div className="gb-stat-label">{card.label}</div>
+                <div className="gb-stat-value">{card.value}</div>
+                <div className="gb-stat-caption">{card.caption}</div>
+              </div>
+              <div className={`gb-stat-icon gb-tone-${card.tone}`}>
+                <CardIcon size={22} />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Buildings Compliance Grid */}
-      <div className="grid-2fr-1fr">
+      <div className="gb-grid">
         
         {/* Breakdown per Gedung */}
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '16px' }}>Tingkat Kepatuhan per Gedung</h2>
+        <div className="gb-panel">
+          <div className="gb-panel-head">
+            <div>
+              <h2 className="gb-panel-title"><Building size={18} /> Tingkat Kepatuhan per Gedung</h2>
+              <p className="gb-panel-sub">Progres tugas dan kepatuhan kebersihan {periodLabel}</p>
+            </div>
+          </div>
           
           {/* Tampilan Desktop (Tabel) */}
           <div className="desktop-view">
@@ -1044,7 +1055,6 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                 <thead>
                   <tr>
                     <th style={{ whiteSpace: 'nowrap' }}>Nama Gedung</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>Kode</th>
                     <th style={{ whiteSpace: 'nowrap' }}>Jumlah Ruang</th>
                     <th style={{ width: '160px', whiteSpace: 'nowrap' }}>Progress Tugas</th>
                     <th style={{ width: '120px', whiteSpace: 'nowrap' }}>Kepatuhan</th>
@@ -1054,18 +1064,9 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                 <tbody>
                   {breakdown.map(b => (
                     <tr key={b.building_id}>
-                      <td style={{ fontWeight: 600, color: 'var(--on-surface)', whiteSpace: 'nowrap' }}>{b.building_name}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <span style={{ 
-                          background: 'rgba(255, 255, 255, 0.05)', 
-                          padding: '3px 8px', 
-                          borderRadius: 'var(--radius-sm)', 
-                          fontFamily: 'monospace', 
-                          fontSize: '0.8rem',
-                          border: '1px solid var(--border-color)'
-                        }}>
-                          {b.building_code}
-                        </span>
+                        <div style={{ fontWeight: 600, color: 'var(--on-surface)' }}>{b.building_name}</div>
+                        <span className="gb-code" style={{ display: 'inline-block', marginTop: '4px' }}>{b.building_code}</span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{b.total_rooms} Ruang</td>
                       <td>
@@ -1073,31 +1074,16 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
                             {b.completed_tasks} / {b.total_tasks} Selesai
                           </span>
-                          <div style={{ width: '120px', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ 
-                              width: `${b.total_tasks > 0 ? (b.completed_tasks / b.total_tasks) * 100 : 0}%`, 
-                              height: '100%', 
-                              background: b.compliance_rate >= 80 ? 'var(--success)' : b.compliance_rate >= 50 ? 'var(--warning)' : 'var(--danger)',
-                              borderRadius: '3px',
-                              transition: 'width 0.4s ease'
+                          <div className="gb-progress">
+                            <span style={{
+                              width: `${b.total_tasks > 0 ? (b.completed_tasks / b.total_tasks) * 100 : 0}%`,
+                              background: b.compliance_rate >= 80 ? 'var(--success)' : b.compliance_rate >= 50 ? 'var(--warning)' : 'var(--danger)'
                             }} />
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span style={{ 
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          background: b.compliance_rate >= 80 ? 'rgba(16, 185, 129, 0.1)' : b.compliance_rate >= 50 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                          color: b.compliance_rate >= 80 ? '#10b981' : b.compliance_rate >= 50 ? '#f59e0b' : '#ef4444',
-                          border: b.compliance_rate >= 80 ? '1px solid rgba(16, 185, 129, 0.2)' : b.compliance_rate >= 50 ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                          padding: '4px 12px',
-                          borderRadius: 'var(--radius-lg)',
-                          fontSize: '0.85rem',
-                          fontWeight: 700
-                        }}>
-                          {b.compliance_rate}%
-                        </span>
+                        <span className={`gb-pill ${b.compliance_rate >= 80 ? 'good' : b.compliance_rate >= 50 ? 'warn' : 'bad'}`}>{b.compliance_rate}%</span>
                       </td>
                       <td>
                         <button 
@@ -1112,7 +1098,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                   ))}
                   {breakdown.length === 0 && (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada data gedung.</td>
+                      <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Tidak ada data gedung.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1177,38 +1163,32 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         </div>
 
         {/* Overdue Tasks */}
-        <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-md)' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '16px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertOctagon size={20} /> Tugas Terlambat (Overdue)
-          </h2>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="gb-panel">
+          <div className="gb-panel-head">
+            <div>
+              <h2 className="gb-panel-title danger"><AlertOctagon size={18} /> Tugas Terlambat (Overdue)</h2>
+              <p className="gb-panel-sub">Tugas yang melewati batas waktu pengerjaan</p>
+            </div>
+          </div>
+
+          <div className="gb-overdue-list">
             {overdue.map(t => (
-              <div 
-                key={t.task_id} 
-                className="glass-card" 
-                style={{ 
-                  padding: '12px 16px', 
-                  borderLeft: '3px solid var(--danger)', 
-                  background: 'rgba(230, 0, 0, 0.03)',
-                  margin: 0
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <div key={t.task_id} className="gb-overdue-item">
+                <div className="gb-overdue-row">
                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{t.room_name}</span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t.task_date}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <div className="gb-overdue-row">
                   <span>CS: {t.cs_name}</span>
                   <span style={{ color: 'var(--danger)' }}>Due: {t.due_datetime ? (t.due_datetime.includes('T') ? t.due_datetime.split('T')[1]?.substring(0, 5) : t.due_datetime.split(' ')[1]?.substring(0, 5)) : '-'}</span>
                 </div>
               </div>
             ))}
-            
+
             {overdue.length === 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30px 0', color: 'var(--text-muted)', gap: '10px' }}>
+              <div className="gb-empty">
                 <ThumbsUp size={24} style={{ color: 'var(--success)', opacity: 0.8 }} />
-                <span style={{ fontSize: '0.9rem' }}>Tidak ada tugas terlambat hari ini.</span>
+                <span>Tidak ada tugas terlambat hari ini.</span>
               </div>
             )}
           </div>
@@ -1424,4 +1404,3 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
     </div>
   );
 }
-

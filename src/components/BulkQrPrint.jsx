@@ -34,7 +34,7 @@ function RoomQrCard({ room }) {
     <div className="qr-print-card">
       <div className="qr-card-header">
         <span className="qr-building-name">{room.building?.nama_gedung || room.building?.name || 'CAMS'}</span>
-        <span className="qr-room-floor">Lantai {room.lantai || room.floor || 1}</span>
+        <span className="qr-room-floor">{(room.lantai || room.floor) ? `Lantai ${room.lantai || room.floor}` : (room.area?.nama_area || '')}</span>
       </div>
 
       <div className="qr-image-container">
