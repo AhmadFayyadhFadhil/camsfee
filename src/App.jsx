@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import api from './utils/api';
 import Login from './components/Login';
 import ErrorBoundary from './components/ErrorBoundary';
+import logoWida from './assets/logo-wida.png';
+
+// Identitas tampilan (sidebar, judul tab, footer)
+const BRAND_NAME = 'PT WIDATRA BHAKTI';
+const BRAND_FOOTER = '© 2026 PT Widatra Bhakti. All rights reserved.';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Buildings = lazy(() => import('./components/Buildings'));
@@ -23,7 +28,6 @@ const CsAdhocTasks = lazy(() => import('./components/CsAdhocTasks'));
 import { resolveNotificationTarget } from './utils/notificationRouter';
 
 import { 
-  Shield, 
   LogOut, 
   Bell, 
   User, 
@@ -199,10 +203,10 @@ export default function App() {
     const cached = getCachedSettings();
     if (cached) return cached;
     return {
-      company_name: 'PT WIDARTA BHAKTI',
+      company_name: BRAND_NAME,
       company_logo: '/api/v1/settings/logo/image',
       company_description: 'Cleaning Activity Monitor',
-      app_footer_text: '© 2026 CAMS Pandaan. All rights reserved.'
+      app_footer_text: BRAND_FOOTER
     };
   });
 
@@ -217,7 +221,7 @@ export default function App() {
         setAppIdentity(normData);
         localStorage.setItem('cams_public_settings', JSON.stringify(normData));
         if (normData.company_name) {
-          document.title = normData.company_name + " - Cleaning Activity Monitoring System";
+          document.title = BRAND_NAME + " - Cleaning Activity Monitoring System";
         }
         if (normData.company_logo) {
           const link = document.querySelector("link[rel~='icon']");
@@ -622,25 +626,12 @@ export default function App() {
         aria-label="Navigasi utama"
       >
         <div className="nav-brand">
-          {appIdentity.company_logo ? (
-            <div className="nav-brand-logo">
-              <img
-                src={normalizeLogoUrl(appIdentity.company_logo)}
-                alt="Logo"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = '/favicon.svg';
-                }}
-              />
-            </div>
-          ) : (
-            <div className="nav-brand-logo nav-brand-logo-fallback">
-              <Shield size={20} />
-            </div>
-          )}
+          <div className="nav-brand-logo">
+            <img src={logoWida} alt="Logo PT Widatra Bhakti" />
+          </div>
           <div className="nav-brand-text">
-            <span className="nav-brand-title">CAMS</span>
-            <span className="nav-brand-subtitle">{appIdentity.company_name}</span>
+            <span className="nav-brand-title">CLEANING</span>
+            <span className="nav-brand-subtitle">{BRAND_NAME}</span>
           </div>
           <button
             type="button"
@@ -693,7 +684,7 @@ export default function App() {
             <span className="nav-label">Keluar Akun</span>
           </button>
           <div className="nav-footer-meta">
-            <span className="nav-footer-text">{appIdentity.app_footer_text}</span>
+            <span className="nav-footer-text">{BRAND_FOOTER}</span>
             <span className="nav-shortcut-hint">Ctrl + B</span>
           </div>
         </div>

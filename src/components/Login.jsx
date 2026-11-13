@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { api } from '../utils/api';
-import { Shield, AlertTriangle, AlertOctagon, Eye, EyeOff } from 'lucide-react';
+import { AlertTriangle, AlertOctagon, Eye, EyeOff } from 'lucide-react';
+import logoWida from '../assets/logo-wida.png';
+import loginPhoto from '../assets/Foto_Widatra_Bhakti_2.png';
 
 export default function Login({ onLoginSuccess, appIdentity }) {
   const [email, setEmail] = useState('');
@@ -41,6 +43,7 @@ export default function Login({ onLoginSuccess, appIdentity }) {
     }
   };
 
+  const brandName = 'PT WIDATRA BHAKTI';
   const companyName = appIdentity ? appIdentity.company_name : 'CAMS PANDAAN';
   const footerText = (appIdentity && appIdentity.app_footer_text) || `© 2026 ${companyName}. All rights reserved.`;
 
@@ -50,23 +53,10 @@ export default function Login({ onLoginSuccess, appIdentity }) {
         {/* Panel kiri: form login */}
         <div className="lg-form-side">
           <div className="lg-brand">
-            {appIdentity && appIdentity.company_logo ? (
-              <div className="lg-brand-logo">
-                <img
-                  src={appIdentity.company_logo.includes('/api/v1/settings/logo/image') ? '/api/v1/settings/logo/image' : appIdentity.company_logo}
-                  alt="Logo"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = '/favicon.svg';
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="lg-brand-logo lg-brand-logo-fallback">
-                <Shield size={22} />
-              </div>
-            )}
-            <span className="lg-brand-name">{companyName}</span>
+            <div className="lg-brand-logo">
+              <img src={logoWida} alt="Logo PT Widatra Bhakti" />
+            </div>
+            <span className="lg-brand-name">{brandName}</span>
           </div>
 
           <h1 className="lg-title">Hello<br />Welcome Back</h1>
@@ -172,7 +162,7 @@ export default function Login({ onLoginSuccess, appIdentity }) {
 
         {/* Panel kanan: foto gedung */}
         <div className="lg-photo-side" aria-hidden="true">
-          <img src="/login-building.jpg" alt="" />
+          <img src={loginPhoto} alt="" />
         </div>
       </div>
     </div>
