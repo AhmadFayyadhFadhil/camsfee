@@ -630,6 +630,7 @@ export default function App() {
             <img src={logoWida} alt="Logo PT Widatra Bhakti" />
           </div>
           <div className="nav-brand-text">
+            {/* ganti */}
             <span className="nav-brand-title">CLEANING</span>
             <span className="nav-brand-subtitle">{BRAND_NAME}</span>
           </div>
