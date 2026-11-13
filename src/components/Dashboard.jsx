@@ -263,6 +263,14 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         activeCamConfig,
         {
           fps: 30, // Kecepatan scan 30 frame/detik (ultra-cepat)
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const qrboxEdgeSize = Math.floor(minEdge * 0.88);
+            return {
+              width: Math.max(qrboxEdgeSize, 260),
+              height: Math.max(qrboxEdgeSize, 260)
+            };
+          },
           aspectRatio: 1.0,
           videoConstraints: {
             facingMode: { ideal: "environment" },
@@ -296,11 +304,13 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       const cleanText = (decodedText || '').trim();
       let scannedRoomId = '';
       let scannedToken = '';
+      let scannedCode = '';
       
       try {
         const parsed = JSON.parse(cleanText);
-        scannedRoomId = parsed.room_id || '';
-        scannedToken = parsed.token || '';
+        scannedRoomId = (parsed.room_id || parsed.r || '').trim();
+        scannedToken = (parsed.token || parsed.t || '').trim();
+        scannedCode = (parsed.code || parsed.c || parsed.kode_ruangan || '').trim();
       } catch (e) {
         if (cleanText.includes('token=')) {
           const urlParams = new URLSearchParams(cleanText.split('?')[1] || cleanText);
@@ -311,7 +321,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         }
       }
 
-      if (!scannedToken && !scannedRoomId) {
+      if (!scannedToken && !scannedRoomId && !scannedCode) {
         throw new Error("QR Code tidak dikenali sebagai format CAMS. Pastikan scan stiker QR resmi di ruangan.");
       }
 
@@ -347,7 +357,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
 
       const payload = {
         room_id: scannedRoomId || undefined,
-        qr_code_token: scannedToken || cleanText,
+        qr_code_token: scannedToken || scannedCode || cleanText,
         latitude: currentGps.latitude,
         longitude: currentGps.longitude,
         accuracy: currentGps.accuracy
@@ -659,7 +669,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
         </div>
 
         {/* SECTION HEADER: RINGKASAN AREA TUGAS */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
           <div>
             <h2 style={{ fontSize: '1.4rem', margin: 0, fontWeight: 800 }}>Ringkasan Area Tugas</h2>
             <p style={{ color: 'var(--text-secondary)', marginTop: '2px', fontSize: '0.9rem' }}>Status penugasan kebersihan area / ruangan Anda hari ini</p>
@@ -737,7 +747,8 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
               <AlertOctagon size={24} />
               <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Tugas Mendesak (Batas Waktu &lt; 60 Menit)</h2>
             </div>
-            <div className="table-container">
+            {/* Tampilan Desktop (Tabel) */}
+            <div className="desktop-view table-container">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -768,6 +779,30 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Tampilan Mobile (Kartu Tugas Mendesak) */}
+            <div className="mobile-view">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {urgent.map(t => (
+                  <div key={t.task_id} style={{ background: '#ffffff', borderRadius: 'var(--radius-lg)', padding: '14px', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>{t.room_name}</strong>
+                      <span className="status-badge status-overdue" style={{ fontSize: '0.72rem' }}>{t.minutes_left} Menit Lagi</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Kode: <strong>{t.room_code}</strong> • Batas: <strong>{new Date(t.due_datetime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB</strong>
+                    </div>
+                    <button 
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setCurrentTab && setCurrentTab('tasks')}
+                      style={{ width: '100%', height: '40px', fontWeight: 700 }}
+                    >
+                      Kerjakan Sekarang
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -1200,11 +1235,11 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       <InspectionMapTrail 
         buildings={breakdown.map(b => ({
           id: b.building_id,
-          name: b.building_name,
-          code: b.building_code,
-          radius_meter: b.radius_meter || 250,
-          latitude: b.latitude,
-          longitude: b.longitude
+          name: b.building_name || 'Gedung',
+          code: b.building_code || '-',
+          radius_meter: b.radius_meter ? Number(b.radius_meter) : 250,
+          latitude: (b.latitude !== null && b.latitude !== undefined && !isNaN(Number(b.latitude))) ? Number(b.latitude) : null,
+          longitude: (b.longitude !== null && b.longitude !== undefined && !isNaN(Number(b.longitude))) ? Number(b.longitude) : null
         }))} 
         inspectionTrail={data?.inspection_trail || []}
         onNavigateBuildings={() => setCurrentTab && setCurrentTab('buildings')}

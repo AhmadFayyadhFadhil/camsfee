@@ -707,31 +707,25 @@ export default function Verifications() {
             )}
           </div>
 
-          {/* FOTO BUKTI 4 SUDUT DARI PETUGAS CS */}
+          {/* FOTO BUKTI PENGERJAAN PETUGAS CS (TAMPAK KESELURUHAN) */}
           <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'rgba(255,255,255,0.02)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '6px' }}>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                <Camera size={18} /> Foto Bukti Pengerjaan Petugas CS (4 Sudut)
+                <Camera size={18} /> Foto Bukti Pengerjaan Petugas CS (Tampak Keseluruhan)
               </h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ketuk foto untuk memperbesar (zoom)</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-              {[
-                { label: 'Foto Sudut 1 (Depan)', src: `/submissions/${selectedSubmission.id}/foto-after-1` },
-                { label: 'Foto Sudut 2 (Belakang)', src: `/submissions/${selectedSubmission.id}/foto-after-2` },
-                { label: 'Foto Sudut 3 (Kiri)', src: `/submissions/${selectedSubmission.id}/foto-after-3` },
-                { label: 'Foto Sudut 4 (Kanan / Detail)', src: `/submissions/${selectedSubmission.id}/foto-after-4` },
-              ].map((photo) => (
-                <div key={photo.label} style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', border: '1px solid var(--border-color)', background: 'white' }}>
-                  <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: 'rgba(14, 49, 146, 0.03)' }}>
-                    <strong style={{ fontSize: '0.85rem' }}>{photo.label}</strong>
-                  </div>
-                  <div style={{ width: '100%', height: '180px', overflow: 'hidden', background: '#f8fbff' }}>
-                    <SecureImage src={photo.src} alt={`Foto ${photo.label}`} />
-                  </div>
-                </div>
-              ))}
+            <div style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', border: '1px solid var(--border-color)', background: 'white', maxWidth: '640px' }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: 'rgba(14, 49, 146, 0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: '0.85rem' }}>Foto Kondisi Keseluruhan Ruangan</strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  <Check size={12} /> Terverifikasi Lapangan
+                </span>
+              </div>
+              <div style={{ width: '100%', maxHeight: '380px', aspectRatio: '16/9', overflow: 'hidden', background: '#070a13' }}>
+                <SecureImage src={`/submissions/${selectedSubmission.id}/foto-after-1`} alt="Foto Bukti Keseluruhan Ruangan" />
+              </div>
             </div>
           </div>
 
@@ -845,7 +839,7 @@ export default function Verifications() {
             <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
               KEPUTUSAN VERIFIKASI SUPERVISOR:
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+            <div className="verification-decision-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
               
               {/* TOMBOL APPROVE (TERKUNCI JIKA BELUM SCAN QR ATAU BELUM AMBIL FOTO) */}
               {(() => {
@@ -908,72 +902,122 @@ export default function Verifications() {
               <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Memuat antrean verifikasi kebersihan...</div>
             </div>
           ) : (
-            <div className="table-responsive glass-panel" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Ruangan &amp; Gedung</th>
-                    <th>Petugas CS</th>
-                    <th>Waktu Serah Laporan</th>
-                    <th>Status Verifikasi Fisik</th>
-                    <th style={{ textAlign: 'right' }}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <>
+              {/* Tampilan Desktop (Tabel) */}
+              <div className="desktop-view">
+                <div className="table-responsive glass-panel" style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Ruangan &amp; Gedung</th>
+                        <th>Petugas CS</th>
+                        <th>Waktu Serah Laporan</th>
+                        <th>Status Verifikasi Fisik</th>
+                        <th style={{ textAlign: 'right' }}>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {submissions.map((sub) => (
+                        <tr key={sub.id}>
+                          <td>
+                            <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                              {sub.task?.room?.name || 'Ruangan'}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              Kode: {sub.task?.room?.code || '-'} • Gedung: {sub.task?.room?.building?.name || '-'}
+                            </div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{sub.user?.name || sub.cs_name || 'Petugas CS'}</div>
+                          </td>
+
+                          <td>
+                            <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
+                              {formatSubmissionTime(sub)}
+                            </div>
+                          </td>
+
+                          <td>
+                            <span className="status-badge status-waiting_verification" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Lock size={12} />
+                              Wajib Cek On-Site
+                            </span>
+                          </td>
+
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => handleSelectSubmission(sub)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                            >
+                              <Eye size={14} />
+                              Tinjau &amp; Cek Fisik
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {submissions.length === 0 && (
+                        <tr>
+                          <td colSpan="5" style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+                            <CheckCircle2 size={40} style={{ margin: '0 auto 12px', color: 'var(--success)', opacity: 0.8 }} />
+                            <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Tidak Ada Antrean Verifikasi</h4>
+                            <p style={{ margin: 0, fontSize: '0.85rem' }}>Seluruh laporan kebersihan telah diverifikasi atau belum ada laporan baru yang diserahkan CS.</p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Tampilan Mobile (Kartu Antrean Verifikasi Ramah Layar Sentuh) */}
+              <div className="mobile-view">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {submissions.map((sub) => (
-                    <tr key={sub.id}>
-                      <td>
-                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                          {sub.task?.room?.name || 'Ruangan'}
+                    <div key={sub.id} className="verification-card-mobile">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+                            {sub.task?.room?.name || 'Ruangan'}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Kode: {sub.task?.room?.code || '-'} • Gedung: {sub.task?.room?.building?.name || '-'}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          Kode: {sub.task?.room?.code || '-'} • Gedung: {sub.task?.room?.building?.name || '-'}
-                        </div>
-                      </td>
-
-                      <td>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{sub.user?.name || sub.cs_name || 'Petugas CS'}</div>
-                      </td>
-
-                      <td>
-                        <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>
-                          {formatSubmissionTime(sub)}
-                        </div>
-                      </td>
-
-                      <td>
-                        <span className="status-badge status-waiting_verification" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Lock size={12} />
-                          Wajib Cek On-Site
+                        <span className="status-badge status-waiting_verification" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                          <Lock size={11} /> Cek On-Site
                         </span>
-                      </td>
+                      </div>
 
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          onClick={() => handleSelectSubmission(sub)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
-                        >
-                          <Eye size={14} />
-                          Tinjau &amp; Cek Fisik
-                        </button>
-                      </td>
-                    </tr>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)', color: 'var(--text-secondary)' }}>
+                        <div>Petugas: <strong style={{ color: 'var(--text-primary)' }}>{sub.user?.name || sub.cs_name || 'Petugas CS'}</strong></div>
+                        <div>Waktu: <strong style={{ color: 'var(--text-primary)' }}>{formatSubmissionTime(sub)}</strong></div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => handleSelectSubmission(sub)}
+                        style={{ width: '100%', height: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 700 }}
+                      >
+                        <Eye size={16} /> Tinjau &amp; Cek Fisik Ruangan
+                      </button>
+                    </div>
                   ))}
 
                   {submissions.length === 0 && (
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
-                        <CheckCircle2 size={40} style={{ margin: '0 auto 12px', color: 'var(--success)', opacity: 0.8 }} />
-                        <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Tidak Ada Antrean Verifikasi</h4>
-                        <p style={{ margin: 0, fontSize: '0.85rem' }}>Seluruh laporan kebersihan telah diverifikasi atau belum ada laporan baru yang diserahkan CS.</p>
-                      </td>
-                    </tr>
+                    <div className="glass-panel" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                      <CheckCircle2 size={36} style={{ margin: '0 auto 10px', color: 'var(--success)', opacity: 0.8 }} />
+                      <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Tidak Ada Antrean Verifikasi</h4>
+                      <p style={{ margin: 0, fontSize: '0.82rem' }}>Seluruh laporan kebersihan telah diverifikasi.</p>
+                    </div>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}

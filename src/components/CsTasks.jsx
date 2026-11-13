@@ -24,7 +24,7 @@ import {
   CheckCircle2,
   Send
 } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { compressImage } from '../utils/imageCompressor';
 
 export default function CsTasks({ 
@@ -404,6 +404,9 @@ export default function CsTasks({
     if (showScanner && scanningTask) {
       const scannerId = 'cs-room-scanner';
       const html5QrCode = new Html5Qrcode(scannerId, {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
         },
@@ -412,16 +415,22 @@ export default function CsTasks({
       setHtml5QrCodeInstance(html5QrCode);
 
       const config = { 
-        fps: 25, 
+        fps: 30, 
         qrbox: (viewfinderWidth, viewfinderHeight) => {
           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const qrboxEdgeSize = Math.floor(minEdge * 0.85);
+          const qrboxEdgeSize = Math.floor(minEdge * 0.88);
           return {
             width: Math.max(qrboxEdgeSize, 260),
             height: Math.max(qrboxEdgeSize, 260)
           };
         },
-        aspectRatio: 1.0
+        aspectRatio: 1.0,
+        videoConstraints: {
+          facingMode: { ideal: "environment" },
+          focusMode: "continuous",
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 }
+        }
       };
 
       html5QrCode.start(
@@ -437,10 +446,10 @@ export default function CsTasks({
 
           try {
             parsed = JSON.parse(cleanText);
-            scannedRoomId = (parsed.room_id || '').trim().toLowerCase();
-            scannedToken = (parsed.token || '').trim().toLowerCase();
-            scannedCode = (parsed.code || parsed.kode_ruangan || '').trim().toLowerCase();
-            scannedName = (parsed.name || parsed.nama_ruangan || '').trim().toLowerCase();
+            scannedRoomId = (parsed.room_id || parsed.r || '').trim().toLowerCase();
+            scannedToken = (parsed.token || parsed.t || '').trim().toLowerCase();
+            scannedCode = (parsed.code || parsed.c || parsed.kode_ruangan || '').trim().toLowerCase();
+            scannedName = (parsed.name || parsed.n || parsed.nama_ruangan || '').trim().toLowerCase();
           } catch (e) {
             scannedRoomId = cleanText.toLowerCase();
             scannedToken = cleanText.toLowerCase();
@@ -452,12 +461,18 @@ export default function CsTasks({
           const targetRoomName = (scanningTask.room?.name || scanningTask.room?.nama_ruangan || 'Ruangan Terkait').trim();
           const cleanLower = cleanText.toLowerCase();
 
+          // Normalisasi nama ruangan (hilangkan awalan "ruang " atau "r. " agar fleksibel)
+          const stripPrefix = (str) => (str || '').replace(/^(ruang|r\.)\s+/i, '').trim().toLowerCase();
+          const normTargetName = stripPrefix(targetRoomName);
+          const normScannedName = stripPrefix(scannedName);
+
           // Cek kecocokan berdasarkan Token, ID Ruangan, Kode Ruangan, atau Nama
           const isMatch = (
             (targetRoomToken && (scannedToken === targetRoomToken || cleanLower.includes(targetRoomToken))) ||
             (targetRoomId && (scannedRoomId === targetRoomId || cleanLower.includes(targetRoomId))) ||
             (targetRoomCode && (scannedCode === targetRoomCode || scannedRoomId === targetRoomCode || cleanLower.includes(targetRoomCode))) ||
-            (targetRoomName && (scannedName === targetRoomName.toLowerCase() || cleanLower.includes(targetRoomName.toLowerCase()))) ||
+            (normTargetName && normScannedName && (normTargetName === normScannedName || normTargetName.includes(normScannedName) || normScannedName.includes(normTargetName))) ||
+            (normTargetName && cleanLower.includes(normTargetName)) ||
             (!targetRoomToken && !targetRoomId) // Fallback ke backend jika data lokal belum lengkap
           );
 
@@ -1141,20 +1156,12 @@ export default function CsTasks({
   const handleAutoGeneratePhotos = async () => {
     setError(null);
     try {
-      const afterBlob1 = await generateMockImage('after', `${activeTask.room?.name || 'Ruangan'} - After 1`);
-      const afterBlob2 = await generateMockImage('after', `${activeTask.room?.name || 'Ruangan'} - After 2`);
-      const afterBlob3 = await generateMockImage('after', `${activeTask.room?.name || 'Ruangan'} - After 3`);
-      const afterBlob4 = await generateMockImage('after', `${activeTask.room?.name || 'Ruangan'} - After 4`);
+      const afterBlob1 = await generateMockImage('after', `${activeTask.room?.name || 'Ruangan'} - Tampak Keseluruhan`);
       setBarcodePhoto(afterBlob1);
       setBarcodePhotoName(`mock-barcode-${activeTask.id.substring(0,8)}.png`);
-      setFotoAfterFiles([afterBlob1, afterBlob2, afterBlob3, afterBlob4]);
-      setFotoAfterPreviews([
-        URL.createObjectURL(afterBlob1),
-        URL.createObjectURL(afterBlob2),
-        URL.createObjectURL(afterBlob3),
-        URL.createObjectURL(afterBlob4)
-      ]);
-      setSuccessMsg('Bukti 4 foto setelah pembersihan berhasil di-generate secara otomatis! Siap diserahkan.');
+      setFotoAfterFiles([afterBlob1]);
+      setFotoAfterPreviews([URL.createObjectURL(afterBlob1)]);
+      setSuccessMsg('Bukti foto tampak keseluruhan ruangan berhasil di-generate secara otomatis! Siap diserahkan.');
     } catch (err) {
       setError('Gagal men-generate foto mock.');
     }
@@ -1198,8 +1205,8 @@ export default function CsTasks({
     setSuccessMsg(null);
     setSubmitting(true);
 
-    if (fotoAfterFiles.some((file) => !file)) {
-      setError('Semua 4 foto bukti setelah pembersihan harus diisi sebelum pengiriman.');
+    if (!fotoAfterFiles[0]) {
+      setError('Foto bukti kondisi keseluruhan ruangan harus diambil sebelum menyerahkan laporan.');
       setSubmitting(false);
       return;
     }
@@ -1211,10 +1218,8 @@ export default function CsTasks({
     }
 
     try {
-      // Pastikan seluruh 4 foto terkompresi di bawah 1MB
-      const compressedPhotos = await Promise.all(
-        fotoAfterFiles.map(f => compressImage(f, 1600, 1000 * 1024))
-      );
+      // Pastikan foto terkompresi di bawah 1MB
+      const compressedPhoto = await compressImage(fotoAfterFiles[0], 1600, 1000 * 1024);
 
       const formData = new FormData();
       formData.append('task_id', activeTask.id);
@@ -1236,10 +1241,9 @@ export default function CsTasks({
         }
       });
 
-      formData.append('foto_after_1', compressedPhotos[0] || fotoAfterFiles[0], `after-1-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after_2', compressedPhotos[1] || fotoAfterFiles[1], `after-2-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after_3', compressedPhotos[2] || fotoAfterFiles[2], `after-3-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after_4', compressedPhotos[3] || fotoAfterFiles[3], `after-4-${activeTask.id.substring(0, 8)}.jpg`);
+      const photoFile = compressedPhoto || fotoAfterFiles[0];
+      formData.append('foto_after_1', photoFile, `after-${activeTask.id.substring(0, 8)}.jpg`);
+      formData.append('foto_after', photoFile, `after-${activeTask.id.substring(0, 8)}.jpg`);
 
       const response = await api.post('/submissions', formData);
       if (response.success) {
@@ -1249,8 +1253,8 @@ export default function CsTasks({
         setActiveTask(null);
         setChecklistItems([]);
         setSubmissionNotes('');
-        setFotoAfterFiles([null, null, null, null]);
-        setFotoAfterPreviews([null, null, null, null]);
+        setFotoAfterFiles([null]);
+        setFotoAfterPreviews([null]);
         fetchMyTasks(false);
       }
     } catch (err) {
@@ -1414,7 +1418,7 @@ export default function CsTasks({
           </div>
 
           {/* Detailed Filters Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
+          <div className="tasks-filter-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
             
             {/* Search Input */}
             <div className="form-group" style={{ margin: 0 }}>
@@ -1568,8 +1572,8 @@ export default function CsTasks({
       {activeTask && (() => {
         const completedChecklistCount = checklistItems.filter(item => checklistResults[item.id]?.status).length;
         const totalChecklistCount = checklistItems.length;
-        const photosTakenCount = fotoAfterFiles.filter(Boolean).length;
-        const isAllPhotosTaken = photosTakenCount === 4;
+        const photosTakenCount = fotoAfterFiles[0] ? 1 : 0;
+        const isAllPhotosTaken = photosTakenCount === 1;
         const isReadyToSubmit = isAllPhotosTaken && gpsState.ready;
 
         return (
@@ -1591,7 +1595,7 @@ export default function CsTasks({
                   {isAllPhotosTaken ? <Check size={14} /> : '2'}
                 </div>
                 <div className={`step-label ${isAllPhotosTaken ? 'done' : completedChecklistCount === totalChecklistCount ? 'active' : ''}`}>
-                  2. Ambil 4 Foto ({photosTakenCount}/4)
+                  2. Ambil Foto Ruangan ({photosTakenCount}/1)
                 </div>
               </div>
               <div className={`step-divider ${isAllPhotosTaken ? 'done' : ''}`}></div>
@@ -1605,7 +1609,7 @@ export default function CsTasks({
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
+            <div className="active-task-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
               <div>
                 <span className="status-badge status-in_progress" style={{ marginBottom: '6px' }}>Sedang Dikerjakan</span>
                 <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800 }}>Laporan Ruang: {activeTask.room?.name || 'Ruangan'}</h2>
@@ -1652,7 +1656,7 @@ export default function CsTasks({
                             {item.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>SOP: {item.description}</p>}
                           </div>
                           
-                          <div>
+                          <div className="checklist-item-action">
                             {isDone ? (
                               <button
                                 type="button"
@@ -1700,88 +1704,85 @@ export default function CsTasks({
                 </div>
               </div>
 
-              {/* STEP 2: FOTO BUKTI 4 SUDUT */}
+              {/* STEP 2: FOTO BUKTI KESELURUHAN RUANGAN (1 FOTO WIDE-ANGLE) */}
               <div style={{ marginBottom: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ marginBottom: '12px' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--primary)' }}>
-                    Langkah 2: Ambil 4 Foto Bukti Sudut Ruangan
+                    Langkah 2: Ambil Foto Bukti Keseluruhan Ruangan
                   </h3>
                   <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    Wajib ambil 4 foto langsung dari kamera HP Anda (menghadap 4 arah/sudut ruangan yang berbeda).
+                    Wajib ambil 1 foto tampak keseluruhan ruangan (ambil dari pintu atau sudut ruangan agar seluruh area kebersihan terlihat jelas).
                   </p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '12px' }}>
-                  {[0, 1, 2, 3].map((slotIndex) => {
-                    const angleNames = [
-                      'Foto Sudut 1 (Depan)',
-                      'Foto Sudut 2 (Belakang)',
-                      'Foto Sudut 3 (Kiri)',
-                      'Foto Sudut 4 (Kanan / Detail)'
-                    ];
-                    const label = angleNames[slotIndex];
-                    const preview = fotoAfterPreviews[slotIndex];
-                    const isTaken = Boolean(preview);
+                {(() => {
+                  const preview = fotoAfterPreviews[0];
+                  const isTaken = Boolean(preview);
 
-                    return (
-                      <div 
-                        key={`after-${slotIndex}`} 
-                        style={{ 
-                          border: isTaken ? '1.5px solid var(--success)' : '1.5px dashed rgba(14, 49, 146, 0.25)', 
-                          borderRadius: 'var(--radius-xl)', 
-                          overflow: 'hidden', 
-                          background: isTaken ? 'rgba(15, 118, 110, 0.02)' : 'white'
-                        }}
-                      >
-                        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: isTaken ? 'rgba(15, 118, 110, 0.08)' : 'rgba(14, 49, 146, 0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong style={{ fontSize: '0.85rem', color: isTaken ? 'var(--success)' : 'var(--text-primary)' }}>
-                            {label}
-                          </strong>
-                          {isTaken && <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Check size={12} /> Ada</span>}
-                        </div>
-                        <div style={{ height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: '#f8fbff' }}>
-                          {preview ? (
-                            <img src={preview} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', padding: '12px', textAlign: 'center' }}>
-                              <ImageIcon size={32} opacity={0.4} />
-                              <span style={{ fontSize: '0.78rem' }}>Belum ada foto</span>
+                  return (
+                    <div className={`room-single-photo-box ${isTaken ? 'has-photo' : ''}`}>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', background: isTaken ? 'rgba(15, 118, 110, 0.08)' : 'rgba(14, 49, 146, 0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ fontSize: '0.9rem', color: isTaken ? 'var(--success)' : 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <Camera size={16} /> Foto Bukti Ruangan (Tampak Keseluruhan)
+                        </strong>
+                        {isTaken ? (
+                          <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Check size={14} /> Foto Siap
+                          </span>
+                        ) : (
+                          <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.78rem' }}>
+                            * Wajib Diambil
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="room-single-photo-preview">
+                        {preview ? (
+                          <img src={preview} alt="Foto Bukti Keseluruhan Ruangan" />
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#94a3b8', padding: '24px', textAlign: 'center' }}>
+                            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Camera size={32} opacity={0.6} />
                             </div>
-                          )}
-                        </div>
-                        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#ffffff' }}>Belum Ada Foto Bukti</div>
+                              <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px', maxWidth: '320px' }}>
+                                Arahkan kamera ke seluruh sudut ruangan dari posisi pintu/sudut agar ruangan tampak menyeluruh
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ padding: '14px', display: 'flex', gap: '10px', flexWrap: 'wrap', background: '#ffffff', borderTop: '1px solid var(--border-color)' }}>
+                        <button
+                          type="button"
+                          className={isTaken ? "btn btn-secondary" : "btn btn-primary"}
+                          disabled={submitting}
+                          onClick={() => handleStartRoomCamera(0, 'after')}
+                          style={{ flex: 1, minWidth: '160px', height: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 700 }}
+                        >
+                          <Camera size={18} /> {isTaken ? 'Ambil Ulang Foto' : 'Buka Kamera & Ambil Foto'}
+                        </button>
+
+                        {isTaken && (
                           <button
                             type="button"
-                            className={isTaken ? "btn btn-secondary btn-sm" : "btn btn-primary btn-sm"}
+                            className="btn btn-secondary"
                             disabled={submitting}
-                            onClick={() => handleStartRoomCamera(slotIndex, 'after')}
-                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', fontWeight: 700 }}
+                            onClick={() => {
+                              setFotoAfterFiles([null]);
+                              setFotoAfterPreviews([null]);
+                            }}
+                            style={{ color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '0 16px', height: '44px' }}
                           >
-                            <ImageIcon size={16} /> {isTaken ? 'Ambil Ulang' : 'Buka Kamera'}
+                            Hapus Foto
                           </button>
-                          {isTaken && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              disabled={submitting}
-                              onClick={() => {
-                                const newFiles = [...fotoAfterFiles];
-                                const newPreviews = [...fotoAfterPreviews];
-                                newFiles[slotIndex] = null;
-                                newPreviews[slotIndex] = null;
-                                setFotoAfterFiles(newFiles);
-                                setFotoAfterPreviews(newPreviews);
-                              }}
-                              style={{ color: 'var(--danger)', fontSize: '0.75rem', padding: '4px 8px' }}
-                            >
-                              Hapus Foto
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* STEP 3: CATATAN TAMBAHAN */}
@@ -1805,7 +1806,7 @@ export default function CsTasks({
                 </div>
                 <div className={`readiness-item ${isAllPhotosTaken ? 'ready' : 'not-ready'}`}>
                   {isAllPhotosTaken ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
-                  <span>Foto bukti: {photosTakenCount}/4 sudut</span>
+                  <span>Foto bukti: {photosTakenCount}/1 ruangan</span>
                 </div>
                 <div className={`readiness-item ${gpsState.ready ? 'ready' : 'not-ready'}`}>
                   {gpsState.ready ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
@@ -2047,11 +2048,11 @@ export default function CsTasks({
           padding: '20px',
           backdropFilter: 'blur(8px)'
         }}>
-          <div className="glass-panel" style={{
+          <div className="glass-panel camera-modal-panel" style={{
             width: '100%',
             maxWidth: '500px',
             borderRadius: 'var(--radius-lg)',
-            padding: '28px',
+            padding: '24px',
             border: '1px solid rgba(16, 185, 129, 0.3)',
             boxShadow: 'var(--shadow-lg), 0 0 30px rgba(16, 185, 129, 0.1)'
           }}>
@@ -2121,7 +2122,7 @@ export default function CsTasks({
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            <div className="camera-modal-actions" style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
               <button 
                 type="button" 
                 className="btn btn-primary" 
@@ -2134,7 +2135,7 @@ export default function CsTasks({
                 type="button" 
                 className="btn btn-secondary" 
                 onClick={handleCloseRoomCamera}
-                style={{ width: '120px' }}
+                style={{ minWidth: '100px', height: '44px' }}
               >
                 Batal
               </button>

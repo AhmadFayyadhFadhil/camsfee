@@ -728,7 +728,7 @@ export default function App() {
                 {/* Notification Dropdown */}
                 {showNotifications && (
                   <div 
-                    className="glass-panel" 
+                    className="glass-panel notification-dropdown" 
                     style={{ 
                       position: 'absolute', 
                       top: '40px', 

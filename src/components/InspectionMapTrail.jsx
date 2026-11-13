@@ -82,6 +82,13 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// Helper validasi angka koordinat aman
+const isNumericCoord = (val) => val !== null && val !== undefined && val !== '' && !isNaN(Number(val)) && Number.isFinite(Number(val));
+const parseCoord = (val, fallback) => {
+  if (isNumericCoord(val)) return Number(val);
+  return fallback;
+};
+
 export default function InspectionMapTrail({ 
   isCs = false, 
   buildings = [], 
@@ -103,28 +110,47 @@ export default function InspectionMapTrail({
 
   // Set default gedung penugasan
   useEffect(() => {
-    if (buildings.length > 0 && !selectedBuildingId) {
-      const activeBld = buildings.find(b => b.latitude !== null && b.longitude !== null) || buildings[0];
-      setSelectedBuildingId(activeBld.id);
+    if (Array.isArray(buildings) && buildings.length > 0 && !selectedBuildingId) {
+      const activeBld = buildings.find(b => b && isNumericCoord(b.latitude) && isNumericCoord(b.longitude)) || buildings[0];
+      if (activeBld?.id) {
+        setSelectedBuildingId(activeBld.id);
+      }
     }
   }, [buildings, selectedBuildingId]);
 
-  const selectedBuilding = buildings.find(b => b.id === selectedBuildingId) || buildings[0];
-  const hasGps = selectedBuilding && selectedBuilding.latitude !== null && selectedBuilding.longitude !== null;
-  const radius = selectedBuilding?.radius_meter ? Number(selectedBuilding.radius_meter) : 250;
+  const selectedBuilding = (Array.isArray(buildings) && buildings.length > 0)
+    ? (buildings.find(b => b && b.id === selectedBuildingId) || buildings[0])
+    : null;
+
+  const hasGps = Boolean(
+    selectedBuilding && 
+    isNumericCoord(selectedBuilding.latitude) && 
+    isNumericCoord(selectedBuilding.longitude)
+  );
+
+  const centerLat = parseCoord(selectedBuilding?.latitude, -7.643212);
+  const centerLng = parseCoord(selectedBuilding?.longitude, 112.698765);
+  const radius = parseCoord(selectedBuilding?.radius_meter, 250);
+  const buildingName = selectedBuilding?.name || selectedBuilding?.building_name || 'Gedung Terkait';
 
   // Jarak live ke gedung
   let distanceToBuilding = null;
   let isInsideGeofence = false;
 
-  if (hasGps && userLocation) {
+  const hasValidUserGps = Boolean(
+    userLocation && 
+    isNumericCoord(userLocation.latitude) && 
+    isNumericCoord(userLocation.longitude)
+  );
+
+  if (hasGps && hasValidUserGps) {
     distanceToBuilding = calculateDistanceMeters(
-      userLocation.latitude,
-      userLocation.longitude,
-      Number(selectedBuilding.latitude),
-      Number(selectedBuilding.longitude)
+      Number(userLocation.latitude),
+      Number(userLocation.longitude),
+      centerLat,
+      centerLng
     );
-    isInsideGeofence = distanceToBuilding <= radius;
+    isInsideGeofence = Number.isFinite(distanceToBuilding) && distanceToBuilding <= radius;
   }
 
   // Handler Deteksi / Pusatkan Lokasi GPS
@@ -147,7 +173,7 @@ export default function InspectionMapTrail({
         setUserLocation(newLoc);
         setIsDetectingGps(false);
 
-        if (shouldFlyTo && mapInstanceRef.current) {
+        if (shouldFlyTo && mapInstanceRef.current && isNumericCoord(newLoc.latitude) && isNumericCoord(newLoc.longitude)) {
           mapInstanceRef.current.flyTo([newLoc.latitude, newLoc.longitude], 17, {
             duration: 1.2
           });
@@ -219,134 +245,158 @@ export default function InspectionMapTrail({
     );
   }, [inspectionTrail, selectedBuildingId]);
 
-  // Inisialisasi & Render Peta
+  // Inisialisasi & Render Peta Leaflet
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    const centerLat = hasGps ? Number(selectedBuilding.latitude) : -7.64549;
-    const centerLng = hasGps ? Number(selectedBuilding.longitude) : 112.69375;
-    const zoomLevel = radius <= 100 ? 17 : 16;
+    try {
+      const zoomLevel = radius <= 100 ? 17 : 16;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [centerLat, centerLng],
-        zoom: zoomLevel,
-        zoomControl: true,
-      });
+      // Bersihkan instance leaflet orphan di container jika ada
+      if (mapContainerRef.current._leaflet_id && !mapInstanceRef.current) {
+        delete mapContainerRef.current._leaflet_id;
+      }
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19,
-      }).addTo(map);
-
-      const layerGroup = L.layerGroup().addTo(map);
-      layerGroupRef.current = layerGroup;
-      mapInstanceRef.current = map;
-    } else {
-      mapInstanceRef.current.setView([centerLat, centerLng], zoomLevel);
-    }
-
-    if (layerGroupRef.current) {
-      layerGroupRef.current.clearLayers();
-
-      if (hasGps) {
-        // Lingkaran Geofence Gedung
-        const geofenceCircle = L.circle([centerLat, centerLng], {
-          color: isInsideGeofence ? '#059669' : '#0284c7',
-          fillColor: isInsideGeofence ? '#10b981' : '#38bdf8',
-          fillOpacity: 0.12,
-          radius: radius,
-          weight: 1.5,
-          dashArray: '4, 4'
+      if (!mapInstanceRef.current) {
+        const map = L.map(mapContainerRef.current, {
+          center: [centerLat, centerLng],
+          zoom: zoomLevel,
+          zoomControl: true,
         });
-        geofenceCircle.bindPopup(`
-          <div style="font-family: inherit; font-size: 12px; padding: 4px;">
-            <b style="color: #0f172a; font-size: 13px;">${selectedBuilding.name}</b><br/>
-            <span>Radius Geofence: <b>${radius}m</b></span>
-          </div>
-        `);
-        layerGroupRef.current.addLayer(geofenceCircle);
 
-        // Marker Pusat Gedung (Classic Leaflet Blue Pin)
-        const buildingMarker = L.marker([centerLat, centerLng], { icon: leafletBlueIcon });
-        buildingMarker.bindPopup(`
-          <div style="font-family: inherit; font-size: 13px; line-height: 1.45; padding: 2px;">
-            <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 3px;">${selectedBuilding.name}</strong>
-            <span style="color: #475569; font-size: 12px;">Pusat Kawasan &amp; Titik Geofence</span><br/>
-            <span style="display: inline-block; margin-top: 5px; padding: 3px 8px; background: rgba(37, 99, 235, 0.1); color: #2563eb; border-radius: 6px; font-weight: 700; font-size: 11px;">
-              Radius: ${radius} meter
-            </span>
-          </div>
-        `);
-        layerGroupRef.current.addLayer(buildingMarker);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(map);
 
-        // Auto-open building popup HANYA saat pertama kali gedung dipilih
-        if (lastOpenedBuildingRef.current !== selectedBuildingId) {
-          buildingMarker.openPopup();
-          lastOpenedBuildingRef.current = selectedBuildingId;
-        }
+        const layerGroup = L.layerGroup().addTo(map);
+        layerGroupRef.current = layerGroup;
+        mapInstanceRef.current = map;
+      } else {
+        mapInstanceRef.current.setView([centerLat, centerLng], zoomLevel);
+      }
 
-        // Tampilkan Marker Posisi Pengguna Real-Time (Gold / Red Leaflet Pin)
-        if (userLocation) {
-          const userMarker = L.marker([userLocation.latitude, userLocation.longitude], { 
-            icon: isInsideGeofence ? leafletGoldIcon : leafletRedIcon 
+      if (layerGroupRef.current) {
+        layerGroupRef.current.clearLayers();
+
+        if (hasGps) {
+          // Lingkaran Geofence Gedung
+          const geofenceCircle = L.circle([centerLat, centerLng], {
+            color: isInsideGeofence ? '#059669' : '#0284c7',
+            fillColor: isInsideGeofence ? '#10b981' : '#38bdf8',
+            fillOpacity: 0.12,
+            radius: radius,
+            weight: 1.5,
+            dashArray: '4, 4'
           });
-          userMarker.bindPopup(`
-            <div style="font-family: inherit; font-size: 12px; line-height: 1.45; padding: 2px; min-width: 175px;">
-              <strong style="font-size: 13px; color: #0f172a; display: flex; align-items: center; gap: 4px; margin-bottom: 3px;">
-                <span>📍 Posisi Anda ${isLiveTracking ? '(Real-Time)' : ''}</span>
-              </strong>
-              <div style="color: #475569;">Jarak: <b>${Math.round(distanceToBuilding || 0)}m</b> dari pusat gedung</div>
-              <div style="margin-top: 5px;">
-                <span style="display: inline-block; padding: 2px 7px; background: ${isInsideGeofence ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${isInsideGeofence ? '#059669' : '#dc2626'}; border-radius: 6px; font-weight: 700; font-size: 11px;">
-                  ${isInsideGeofence ? '✓ Dalam Radius Geofence' : '⚠ Di Luar Radius'}
-                </span>
-              </div>
-              <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">
-                Akurasi GPS: ±${userLocation.accuracy || 5}m
-              </div>
+          geofenceCircle.bindPopup(`
+            <div style="font-family: inherit; font-size: 12px; padding: 4px;">
+              <b style="color: #0f172a; font-size: 13px;">${buildingName}</b><br/>
+              <span>Radius Geofence: <b>${radius}m</b></span>
             </div>
           `);
-          layerGroupRef.current.addLayer(userMarker);
-        }
+          layerGroupRef.current.addLayer(geofenceCircle);
 
-        // Jika Supervisor/Admin/PIC: Tampilkan Pin Jejak Ruangan (Green Leaflet Pins)
-        if (!isCs) {
-          const displayTrail = currentBuildingInspections.length > 0 ? currentBuildingInspections : [
-            { id: 'pos-1', room_name: 'FA DEPT. HEAD', room_code: 'RKFA', cs_name: 'Budi CS', time: '09:49 WIB', status: 'Terverifikasi On-Site' }
-          ];
+          // Marker Pusat Gedung (Classic Leaflet Blue Pin)
+          const buildingMarker = L.marker([centerLat, centerLng], { icon: leafletBlueIcon });
+          buildingMarker.bindPopup(`
+            <div style="font-family: inherit; font-size: 13px; line-height: 1.45; padding: 2px;">
+              <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 3px;">${buildingName}</strong>
+              <span style="color: #475569; font-size: 12px;">Pusat Kawasan &amp; Titik Geofence</span><br/>
+              <span style="display: inline-block; margin-top: 5px; padding: 3px 8px; background: rgba(37, 99, 235, 0.1); color: #2563eb; border-radius: 6px; font-weight: 700; font-size: 11px;">
+                Radius: ${radius} meter
+              </span>
+            </div>
+          `);
+          layerGroupRef.current.addLayer(buildingMarker);
 
-          const offsets = [
-            [0.00015, 0.00020],
-            [-0.00018, 0.00015],
-            [0.00010, -0.00022],
-            [-0.00012, -0.00018],
-            [0.00022, -0.00010],
-            [-0.00020, -0.00025]
-          ];
+          // Auto-open building popup HANYA saat pertama kali gedung dipilih
+          if (lastOpenedBuildingRef.current !== selectedBuildingId) {
+            buildingMarker.openPopup();
+            lastOpenedBuildingRef.current = selectedBuildingId;
+          }
 
-          displayTrail.forEach((t, idx) => {
-            const offset = offsets[idx % offsets.length];
-            const roomLat = centerLat + offset[0];
-            const roomLng = centerLng + offset[1];
-
-            const roomMarker = L.marker([roomLat, roomLng], { icon: leafletGreenIcon });
-            roomMarker.bindPopup(`
-              <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px;">
-                <strong style="font-size: 13px; color: #0f172a; display: block; margin-bottom: 3px;">${t.room_name} (${t.room_code || '-'})</strong>
-                <span style="color: #475569;">Petugas CS: <b>${t.cs_name}</b></span><br/>
-                <span style="color: #64748b; font-size: 11px;">Waktu: ${t.time}</span><br/>
-                <span style="display: inline-block; margin-top: 4px; padding: 2px 7px; background: rgba(16, 185, 129, 0.12); color: #059669; border-radius: 6px; font-weight: 700; font-size: 11px;">
-                  ${t.status}
-                </span>
+          // Tampilkan Marker Posisi Pengguna Real-Time (Gold / Red Leaflet Pin)
+          if (hasValidUserGps) {
+            const userMarker = L.marker([Number(userLocation.latitude), Number(userLocation.longitude)], { 
+              icon: isInsideGeofence ? leafletGoldIcon : leafletRedIcon 
+            });
+            userMarker.bindPopup(`
+              <div style="font-family: inherit; font-size: 12px; line-height: 1.45; padding: 2px; min-width: 175px;">
+                <strong style="font-size: 13px; color: #0f172a; display: flex; align-items: center; gap: 4px; margin-bottom: 3px;">
+                  <span>📍 Posisi Anda ${isLiveTracking ? '(Real-Time)' : ''}</span>
+                </strong>
+                <div style="color: #475569;">Jarak: <b>${Math.round(distanceToBuilding || 0)}m</b> dari pusat gedung</div>
+                <div style="margin-top: 5px;">
+                  <span style="display: inline-block; padding: 2px 7px; background: ${isInsideGeofence ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'}; color: ${isInsideGeofence ? '#059669' : '#dc2626'}; border-radius: 6px; font-weight: 700; font-size: 11px;">
+                    ${isInsideGeofence ? '✓ Dalam Radius Geofence' : '⚠ Di Luar Radius'}
+                  </span>
+                </div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">
+                  Akurasi GPS: ±${userLocation.accuracy || 5}m
+                </div>
               </div>
             `);
-            layerGroupRef.current.addLayer(roomMarker);
-          });
+            layerGroupRef.current.addLayer(userMarker);
+          }
+
+          // Jika Supervisor/Admin/PIC: Tampilkan Pin Jejak Ruangan (Green Leaflet Pins)
+          if (!isCs) {
+            const displayTrail = currentBuildingInspections.length > 0 ? currentBuildingInspections : [
+              { id: 'pos-1', room_name: 'FA DEPT. HEAD', room_code: 'RKFA', cs_name: 'Budi CS', time: '09:49 WIB', status: 'Terverifikasi On-Site' }
+            ];
+
+            const offsets = [
+              [0.00015, 0.00020],
+              [-0.00018, 0.00015],
+              [0.00010, -0.00022],
+              [-0.00012, -0.00018],
+              [0.00022, -0.00010],
+              [-0.00020, -0.00025]
+            ];
+
+            displayTrail.forEach((t, idx) => {
+              const offset = offsets[idx % offsets.length];
+              const roomLat = centerLat + offset[0];
+              const roomLng = centerLng + offset[1];
+
+              if (Number.isFinite(roomLat) && Number.isFinite(roomLng)) {
+                const roomMarker = L.marker([roomLat, roomLng], { icon: leafletGreenIcon });
+                roomMarker.bindPopup(`
+                  <div style="font-family: inherit; font-size: 12px; line-height: 1.4; padding: 2px;">
+                    <strong style="font-size: 13px; color: #0f172a; display: block; margin-bottom: 3px;">${t.room_name} (${t.room_code || '-'})</strong>
+                    <span style="color: #475569;">Petugas CS: <b>${t.cs_name}</b></span><br/>
+                    <span style="color: #64748b; font-size: 11px;">Waktu: ${t.time}</span><br/>
+                    <span style="display: inline-block; margin-top: 4px; padding: 2px 7px; background: rgba(16, 185, 129, 0.12); color: #059669; border-radius: 6px; font-weight: 700; font-size: 11px;">
+                      ${t.status}
+                    </span>
+                  </div>
+                `);
+                layerGroupRef.current.addLayer(roomMarker);
+              }
+            });
+          }
         }
       }
+    } catch (mapErr) {
+      console.warn("Leaflet map initialization caught:", mapErr);
     }
-  }, [selectedBuildingId, hasGps, selectedBuilding, userLocation, isInsideGeofence, isCs, isLiveTracking, currentBuildingInspections]);
+  }, [selectedBuildingId, hasGps, centerLat, centerLng, radius, buildingName, hasValidUserGps, userLocation, isInsideGeofence, isCs, isLiveTracking, currentBuildingInspections, distanceToBuilding]);
+
+  // Cleanup Leaflet instance saat unmount
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {
+          // ignore cleanup
+        }
+        mapInstanceRef.current = null;
+        layerGroupRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="glass-panel" style={{ marginTop: '20px', padding: '20px', borderRadius: 'var(--radius-xl)' }}>
@@ -559,7 +609,7 @@ export default function InspectionMapTrail({
                   marginBottom: '14px'
                 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.98rem', color: '#065f46', marginBottom: '4px' }}>
-                    Anda Masuk di Kawasan {selectedBuilding?.name}
+                    Anda Masuk di Kawasan {buildingName}
                   </div>
                   <span className="status-badge status-completed" style={{ fontSize: '0.72rem', display: 'inline-block', marginBottom: '8px' }}>
                     Terverifikasi di Lokasi
@@ -580,13 +630,13 @@ export default function InspectionMapTrail({
                   marginBottom: '14px'
                 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.98rem', color: '#991b1b', marginBottom: '4px' }}>
-                    Anda Berada di Luar Kawasan {selectedBuilding?.name}
+                    Anda Berada di Luar Kawasan {buildingName}
                   </div>
                   <span className="status-badge status-rejected" style={{ fontSize: '0.72rem', display: 'inline-block', marginBottom: '8px' }}>
                     Di Luar Radius
                   </span>
                   <p style={{ fontSize: '0.82rem', color: '#7f1d1d', margin: 0, lineHeight: 1.45 }}>
-                    Jarak Anda saat ini <b>{Math.round(distanceToBuilding || 0)}m</b> dari {selectedBuilding?.name} (Batas radius: {radius}m). Silakan merapat ke kawasan gedung.
+                    Jarak Anda saat ini <b>{Math.round(distanceToBuilding || 0)}m</b> dari {buildingName} (Batas radius: {radius}m). Silakan merapat ke kawasan gedung.
                   </p>
                 </div>
               )}

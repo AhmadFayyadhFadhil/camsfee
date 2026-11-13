@@ -324,16 +324,14 @@ function RenderAuditPhotos({ log }) {
   if (log.entity_type === 'checklist_submissions') {
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Bukti Foto Pembersihan (4 Foto):</span>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Bukti Foto Pembersihan Ruangan:</span>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {[1, 2, 3, 4].map(idx => (
-            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Foto {idx} (After):</span>
-              <div style={{ width: '130px', height: '95px', overflow: 'hidden', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                <SecureImage src={`/submissions/${log.entity_id}/foto-after-${idx}`} alt={`Foto After ${idx}`} />
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Foto Tampak Keseluruhan:</span>
+            <div style={{ width: '160px', height: '105px', overflow: 'hidden', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <SecureImage src={`/submissions/${log.entity_id}/foto-after-1`} alt="Foto Bukti Ruangan" />
             </div>
-          ))}
+          </div>
         </div>
       </div>
     );

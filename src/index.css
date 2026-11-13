@@ -3168,3 +3168,165 @@ textarea.form-control {
     font-size: 1.9rem;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVENESS & TOUCH OPTIMIZATION ENGINE
+   ══════════════════════════════════════════════════════════════ */
+
+/* Prevent horizontal scroll bleed across all devices */
+html, body, #root, .app-container {
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Touch-friendly Single Photo Upload Box (1 Foto Tampak Keseluruhan) */
+.room-single-photo-box {
+  border-radius: var(--radius-xl);
+  border: 1.5px dashed rgba(14, 49, 146, 0.25);
+  background: #ffffff;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.room-single-photo-box.has-photo {
+  border: 1.5px solid var(--success);
+  background: rgba(15, 118, 110, 0.02);
+}
+
+.room-single-photo-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 380px;
+  background: #070a13;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.room-single-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Mobile Verifications Card */
+.verification-card-mobile {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.verification-card-mobile:active {
+  transform: scale(0.99);
+}
+
+/* Hide scrollbar for step indicator while preserving touch swipe */
+.step-indicator {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.step-indicator::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile-Specific Breakpoints */
+@media (max-width: 768px) {
+  .header-bar {
+    height: 54px !important;
+    padding: 0 12px !important;
+  }
+
+  .header-title-section {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .header-title-section h2 {
+    font-size: 0.95rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+
+  .content-body {
+    padding: 12px 10px !important;
+  }
+
+  /* Form header stack */
+  .active-task-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  /* Checklist item button mobile full width */
+  .checklist-item-action {
+    width: 100% !important;
+    margin-top: 8px !important;
+  }
+
+  .checklist-item-action button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Filters stack cleanly */
+  .tasks-filter-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Camera modal mobile padding */
+  .camera-modal-panel {
+    padding: 16px 14px !important;
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+
+  .camera-modal-actions {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+
+  .camera-modal-actions button {
+    width: 100% !important;
+  }
+
+  /* Verification action buttons stack */
+  .verification-decision-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .verification-decision-grid button {
+    width: 100% !important;
+    height: 48px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-title-section h2 {
+    max-width: 130px;
+  }
+
+  .notification-dropdown {
+    width: calc(100vw - 24px) !important;
+    max-width: 320px !important;
+    right: -10px !important;
+  }
+
+  .room-single-photo-preview {
+    aspect-ratio: 4 / 3;
+  }
+}
