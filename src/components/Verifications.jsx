@@ -18,6 +18,10 @@ import {
   MapPin,
   RefreshCw,
   Sparkles,
+  Clock,
+  BookOpen,
+  UserCheck,
+  UserX,
   Image as ImageIcon
 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
@@ -201,11 +205,31 @@ export default function Verifications() {
 
   const currentUser = api.getUser() || {};
 
-  const fetchPendingSubmissions = async (showLoading = true) => {
+  // Workflow: CS submit -> Supervisor Verifikator (Pak Kusnan) -> Supervisor tertinggi (Pak Winaryo) -> Selesai
+  const myLevel = currentUser.supervisor_level || null;
+  const canActOnQueue = myLevel === 'head' || myLevel === 'verifier';
+  const [scope, setScope] = useState(canActOnQueue ? 'mine' : 'all');
+  const [summary, setSummary] = useState(null);
+  const [dutyReason, setDutyReason] = useState('');
+  const [showDutyForm, setShowDutyForm] = useState(false);
+  const [dutySaving, setDutySaving] = useState(false);
+  const [sopItem, setSopItem] = useState(null); // item checklist yang SOP-nya sedang dilihat
+
+  const fetchSummary = async () => {
+    try {
+      const res = await api.get('/verifications/workflow-summary');
+      if (res.success) setSummary(res.data);
+    } catch (err) {
+      // ringkasan bersifat pelengkap; antrean tetap dapat dipakai
+      console.error('Gagal memuat ringkasan workflow:', err);
+    }
+  };
+
+  const fetchPendingSubmissions = async (showLoading = true, activeScope = scope) => {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const subsRes = await api.get('/verifications/pending');
+      const subsRes = await api.get(`/verifications/pending?scope=${activeScope}&per_page=100`);
       if (subsRes.success) {
         setSubmissions(subsRes.data.data || subsRes.data || []);
       }
@@ -217,8 +241,50 @@ export default function Verifications() {
   };
 
   useEffect(() => {
-    fetchPendingSubmissions(true);
-  }, []);
+    fetchPendingSubmissions(true, scope);
+    fetchSummary();
+  }, [scope]);
+
+  const handleSetDuty = async (onDuty) => {
+    if (!onDuty && !dutyReason.trim()) {
+      setError('Alasan wajib diisi saat Supervisor Verifikator diset tidak bertugas.');
+      return;
+    }
+    setDutySaving(true);
+    setError(null);
+    try {
+      const res = await api.patch('/verifications/verifier-duty', {
+        is_on_duty: onDuty,
+        reason: dutyReason.trim() || null,
+      });
+      if (res.success) {
+        setSuccessMsg(res.message || 'Status ketersediaan diperbarui.');
+        setSummary(res.data);
+        setDutyReason('');
+        setShowDutyForm(false);
+        fetchPendingSubmissions(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Gagal memperbarui status ketersediaan.');
+    } finally {
+      setDutySaving(false);
+    }
+  };
+
+  const formatWib = (iso) => {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '-';
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    return `${String(d.getDate()).padStart(2, '0')} ${monthNames[d.getMonth()]} ${d.getFullYear()} • ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} WIB`;
+  };
+
+  const formatRemaining = (wf) => {
+    if (!wf || wf.hours_remaining === null || wf.hours_remaining === undefined) return null;
+    const h = Math.abs(wf.hours_remaining);
+    const text = h >= 1 ? `${Math.floor(h)} jam ${Math.round((h % 1) * 60)} menit` : `${Math.round(h * 60)} menit`;
+    return wf.is_overdue ? `Lewat SLA ${text}` : `Sisa ${text}`;
+  };
 
   useEffect(() => {
     if (successMsg) {
@@ -496,6 +562,41 @@ export default function Verifications() {
 
   // --- APPROVE SUBMISSION ---
   const handleApprove = async () => {
+    const isFinalStage = selectedSubmission?.workflow?.action === 'final_approve';
+
+    if (isFinalStage) {
+      if (!(await confirm({
+        title: 'Approval Akhir Laporan Kebersihan',
+        message: `Setujui secara final laporan ruang ${selectedSubmission.task?.room?.name}? Laporan akan dinyatakan selesai.`,
+        confirmText: 'Ya, Approval Akhir',
+        cancelText: 'Batal',
+        type: 'info'
+      }))) {
+        return;
+      }
+
+      setProcessing(true);
+      setError(null);
+      setSuccessMsg(null);
+      const finalSubId = selectedSubmission.id;
+      try {
+        const response = await api.post(`/verifications/${finalSubId}/approve`, { notes: feedback || 'Laporan disetujui (approval akhir).' });
+        if (response.success) {
+          setSubmissions(prev => prev.filter(s => s.id !== finalSubId));
+          setSuccessMsg(`Approval akhir ruang ${selectedSubmission.task?.room?.name} selesai. Laporan dinyatakan selesai.`);
+          setSelectedSubmission(null);
+          setFeedback('');
+          fetchPendingSubmissions(false);
+          fetchSummary();
+        }
+      } catch (err) {
+        setError(err.message || 'Gagal melakukan approval akhir.');
+      } finally {
+        setProcessing(false);
+      }
+      return;
+    }
+
     if (!isQrUnlocked) {
       setError('Persetujuan ditolak! Anda wajib melakukan scan QR Code ruangan di lokasi terlebih dahulu untuk membuktikan kehadiran fisik Anda.');
       return;
@@ -539,10 +640,11 @@ export default function Verifications() {
 
       if (response.success) {
         setSubmissions(prev => prev.filter(s => s.id !== subId));
-        setSuccessMsg(`Laporan kebersihan ruang ${selectedSubmission.task?.room?.name} berhasil diverifikasi & disetujui di lokasi!`);
+        setSuccessMsg(response.message || `Laporan kebersihan ruang ${selectedSubmission.task?.room?.name} berhasil diverifikasi di lokasi!`);
         setSelectedSubmission(null);
         setFeedback('');
         fetchPendingSubmissions(false);
+        fetchSummary();
       }
     } catch (err) {
       setError(err.message || 'Gagal menyetujui laporan.');
@@ -585,6 +687,7 @@ export default function Verifications() {
         setSelectedSubmission(null);
         setFeedback('');
         fetchPendingSubmissions(false);
+        fetchSummary();
       }
     } catch (err) {
       setError(err.message || 'Gagal menolak laporan.');
@@ -599,7 +702,7 @@ export default function Verifications() {
         <div>
           <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: 800 }}>Verifikasi Laporan Kebersihan</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Pemeriksaan hasil kerja petugas CS &amp; verifikasi fisik langsung di lokasi ruangan (*Scan-to-Verify*).
+            Alur: CS submit → verifikasi Supervisor Verifikator (Pak Kusnan) → approval akhir Supervisor tertinggi (Pak Winaryo). SLA verifikasi {summary?.sla_hours || 24} jam kalender sejak submit.
           </p>
         </div>
         {selectedSubmission && (
@@ -618,6 +721,87 @@ export default function Verifications() {
           </button>
         )}
       </div>
+
+      {/* PANEL STATUS WORKFLOW & KETERSEDIAAN SUPERVISOR VERIFIKATOR */}
+      {!selectedSubmission && summary && (
+        <div className="glass-panel" style={{ padding: '18px 20px', borderRadius: 'var(--radius-xl)', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', background: summary.verifier?.is_on_duty ? 'var(--success)' : '#eab308', flexShrink: 0 }}>
+                {summary.verifier?.is_on_duty ? <UserCheck size={22} /> : <UserX size={22} />}
+              </div>
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.98rem' }}>
+                  Supervisor Verifikator: {summary.verifier?.name || 'Belum dikonfigurasi'}
+                </strong>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  {!summary.verifier
+                    ? 'Atur level hierarki pada akun Supervisor (menu Pengguna) atau jalankan seeder hierarki.'
+                    : summary.verifier.is_on_duty
+                      ? 'Bertugas — laporan baru masuk ke antrean verifikasinya.'
+                      : `Tidak bertugas — laporan baru langsung dialihkan ke ${summary.head?.name || 'Supervisor tertinggi'}.`}
+                  {summary.verifier?.last_change && (
+                    <> Terakhir diubah {formatWib(summary.verifier.last_change.changed_at)} oleh {summary.verifier.last_change.changed_by || '-'}{summary.verifier.last_change.reason ? ` (${summary.verifier.last_change.reason})` : ''}.</>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {summary.can_manage_verifier_duty && summary.verifier && (
+              summary.verifier.is_on_duty ? (
+                <button type="button" className="btn btn-secondary" onClick={() => setShowDutyForm(v => !v)} style={{ fontWeight: 700 }}>
+                  <UserX size={15} style={{ marginRight: '6px' }} /> Set Tidak Bertugas
+                </button>
+              ) : (
+                <button type="button" className="btn btn-success" onClick={() => handleSetDuty(true)} disabled={dutySaving} style={{ fontWeight: 700 }}>
+                  <UserCheck size={15} style={{ marginRight: '6px' }} /> {dutySaving ? 'Memproses...' : 'Set Bertugas'}
+                </button>
+              )
+            )}
+          </div>
+
+          {showDutyForm && summary.verifier?.is_on_duty && (
+            <div style={{ marginTop: '14px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="form-control"
+                style={{ flex: '1 1 260px' }}
+                placeholder="Alasan wajib diisi (mis. cuti, sakit, dinas luar)"
+                value={dutyReason}
+                onChange={(e) => setDutyReason(e.target.value)}
+                maxLength={500}
+              />
+              <button type="button" className="btn btn-danger" onClick={() => handleSetDuty(false)} disabled={dutySaving} style={{ fontWeight: 700 }}>
+                {dutySaving ? 'Memproses...' : 'Simpan & Alihkan Antrean'}
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+            {[
+              { label: 'Antrean Saya', value: summary.counts?.my_queue },
+              { label: 'Menunggu Verifikasi', value: summary.counts?.pending_verification },
+              { label: 'Menunggu Approval Akhir', value: summary.counts?.pending_final_approval },
+              { label: `Lewat SLA ${summary.sla_hours} Jam`, value: summary.counts?.overdue, danger: (summary.counts?.overdue || 0) > 0 },
+              { label: 'Dialihkan ke Supervisor Tertinggi', value: summary.counts?.redirected_to_head },
+            ].map((c) => (
+              <div key={c.label} style={{ padding: '8px 14px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', background: c.danger ? 'rgba(225, 29, 72, 0.06)' : 'rgba(14, 49, 146, 0.03)', minWidth: '120px' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: c.danger ? 'var(--danger)' : 'var(--text-primary)' }}>{c.value ?? 0}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+            <button type="button" className={`btn btn-sm ${scope === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setScope('mine')} style={{ fontWeight: 700 }}>
+              Antrean Saya
+            </button>
+            <button type="button" className={`btn btn-sm ${scope === 'all' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setScope('all')} style={{ fontWeight: 700 }}>
+              Semua Antrean (hanya lihat)
+            </button>
+          </div>
+        </div>
+      )}
 
       {successMsg && (
         <div className="alert alert-success" style={{ marginBottom: '20px' }}>
@@ -638,18 +822,46 @@ export default function Verifications() {
         <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
 
           <div style={{ marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
-            <span className="status-badge status-waiting_verification" style={{ marginBottom: '6px' }}>Menunggu Verifikasi On-Site</span>
+            <span className="status-badge status-waiting_verification" style={{ marginBottom: '6px' }}>
+              {selectedSubmission.workflow?.stage_label || 'Menunggu Verifikasi Supervisor'}
+            </span>
+            {selectedSubmission.workflow?.is_redirected && (
+              <span className="status-badge status-overdue" style={{ marginBottom: '6px', marginLeft: '6px' }}>
+                Dialihkan: {selectedSubmission.workflow.redirect_reason_label || 'ke Supervisor tertinggi'}
+              </span>
+            )}
             <h2 style={{ margin: 0, fontSize: '1.35rem', marginTop: '4px', fontWeight: 800 }}>
               Ruang: {selectedSubmission.task?.room?.name} ({selectedSubmission.task?.room?.code})
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginTop: '4px' }}>
               Gedung: <strong>{selectedSubmission.task?.room?.building?.name}</strong> | Petugas CS: <strong>{selectedSubmission.user?.name}</strong> | Waktu Serah: <strong>{formatSubmissionTime(selectedSubmission)}</strong>
             </p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: '4px' }}>
+              Penangani saat ini: <strong>{selectedSubmission.workflow?.verifier_name || '-'}</strong>
+              {selectedSubmission.workflow?.deadline_at && <> | Batas SLA verifikasi: <strong>{formatWib(selectedSubmission.workflow.deadline_at)}</strong>
+              {formatRemaining(selectedSubmission.workflow) && <> ({formatRemaining(selectedSubmission.workflow)})</>}</>}
+              {selectedSubmission.workflow?.verified_at && <> | Diverifikasi: <strong>{formatWib(selectedSubmission.workflow.verified_at)}</strong> oleh {selectedSubmission.workflow.verified_by_name || '-'}</>}
+              {selectedSubmission.workflow?.redirect_note && <> | Catatan pengalihan: {selectedSubmission.workflow.redirect_note}</>}
+            </p>
           </div>
+
+          {selectedSubmission.workflow?.action === 'final_approve' && (
+            <div className="alert alert-info" style={{ marginBottom: '24px' }}>
+              <ShieldCheck size={18} />
+              <span>Laporan ini telah diverifikasi {selectedSubmission.workflow.verified_by_name || 'Supervisor Verifikator'}. Tinjau hasilnya lalu lakukan approval akhir atau kembalikan ke CS.</span>
+            </div>
+          )}
+          {!selectedSubmission.workflow?.can_act && (
+            <div className="alert alert-info" style={{ marginBottom: '24px' }}>
+              <Lock size={18} />
+              <span>Mode lihat saja. Hanya Supervisor Verifikator (atau Supervisor tertinggi pada laporan yang dialihkan / tahap approval akhir) yang dapat menindaklanjuti laporan ini.</span>
+            </div>
+          )}
 
           {/* ========================================================================= */}
           {/* BANNER 1: STATUS VERIFIKASI FISIK ON-SITE (SCAN-TO-VERIFY) */}
           {/* ========================================================================= */}
+          {selectedSubmission.workflow?.action === 'verify' && (
           <div 
             style={{ 
               padding: '18px 20px', 
@@ -706,12 +918,13 @@ export default function Verifications() {
               </button>
             )}
           </div>
+          )}
 
-          {/* FOTO BUKTI PENGERJAAN PETUGAS CS (TAMPAK KESELURUHAN) */}
+          {/* FOTO BUKTI PENGERJAAN PETUGAS CS (OPSIONAL, 1 FOTO; DATA LAMA DAPAT MEMILIKI FOTO TAMBAHAN) */}
           <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', background: 'rgba(255,255,255,0.02)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '6px' }}>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                <Camera size={18} /> Foto Bukti Pengerjaan Petugas CS (Tampak Keseluruhan)
+                <Camera size={18} /> Foto Bukti Pengerjaan Petugas CS (Opsional)
               </h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ketuk foto untuk memperbesar (zoom)</span>
             </div>
@@ -719,14 +932,34 @@ export default function Verifications() {
             <div style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', border: '1px solid var(--border-color)', background: 'white', maxWidth: '640px' }}>
               <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: 'rgba(14, 49, 146, 0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <strong style={{ fontSize: '0.85rem' }}>Foto Kondisi Keseluruhan Ruangan</strong>
-                <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                  <Check size={12} /> Terverifikasi Lapangan
-                </span>
               </div>
-              <div style={{ width: '100%', maxHeight: '380px', aspectRatio: '16/9', overflow: 'hidden', background: '#070a13' }}>
-                <SecureImage src={`/submissions/${selectedSubmission.id}/foto-after-1`} alt="Foto Bukti Keseluruhan Ruangan" />
-              </div>
+              {selectedSubmission.has_foto_after === false ? (
+                <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  <ImageIcon size={28} style={{ opacity: 0.5, marginBottom: '6px' }} />
+                  <div>Petugas CS tidak melampirkan foto (foto bersifat opsional).</div>
+                </div>
+              ) : (
+                <div style={{ width: '100%', maxHeight: '380px', aspectRatio: '16/9', overflow: 'hidden', background: '#070a13' }}>
+                  <SecureImage src={`/submissions/${selectedSubmission.id}/foto-after-1`} alt="Foto Bukti Keseluruhan Ruangan" />
+                </div>
+              )}
             </div>
+
+            {/* Kompatibilitas data lama: laporan lama dapat memiliki foto_after_2..4 */}
+            {[2, 3, 4].some(n => selectedSubmission[`foto_after_${n}_url`]) && (
+              <div style={{ marginTop: '14px' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px' }}>
+                  Foto tambahan (laporan lama)
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {[2, 3, 4].filter(n => selectedSubmission[`foto_after_${n}_url`]).map(n => (
+                    <div key={n} style={{ width: '180px', height: '120px', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#070a13' }}>
+                      <SecureImage src={`/submissions/${selectedSubmission.id}/foto-after-${n}`} alt={`Foto tambahan ${n}`} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* CHECKLIST ITEM HASIL */}
@@ -740,11 +973,22 @@ export default function Verifications() {
                   <h4 style={{ fontWeight: 700, fontSize: '0.95rem', margin: 0 }}>
                     #{idx + 1} - {result.checklist_item?.name || 'Item Checklist'}
                   </h4>
-                  {result.status ? (
-                    <span className="status-badge status-completed">Dibersihkan</span>
-                  ) : (
-                    <span className="status-badge status-pending">Belum / Tidak</span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setSopItem(result)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700 }}
+                      title="Lihat detail SOP item ini"
+                    >
+                      <BookOpen size={14} /> Lihat SOP
+                    </button>
+                    {result.status ? (
+                      <span className="status-badge status-completed">Dibersihkan</span>
+                    ) : (
+                      <span className="status-badge status-pending">Belum / Tidak</span>
+                    )}
+                  </div>
                 </div>
 
                 {result.notes && (
@@ -835,15 +1079,17 @@ export default function Verifications() {
           </div>
 
           {/* ACTION BUTTONS — BESAR & JELAS */}
+          {selectedSubmission.workflow?.can_act && (
           <div>
             <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
-              KEPUTUSAN VERIFIKASI SUPERVISOR:
+              {selectedSubmission.workflow?.action === 'final_approve' ? 'KEPUTUSAN APPROVAL AKHIR:' : 'KEPUTUSAN VERIFIKASI SUPERVISOR:'}
             </label>
             <div className="verification-decision-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
               
               {/* TOMBOL APPROVE (TERKUNCI JIKA BELUM SCAN QR ATAU BELUM AMBIL FOTO) */}
               {(() => {
-                const isReadyToApprove = isQrUnlocked && inspectionPhotoBlob !== null;
+                const isFinalStage = selectedSubmission.workflow?.action === 'final_approve';
+                const isReadyToApprove = isFinalStage || (isQrUnlocked && inspectionPhotoBlob !== null);
                 return (
                   <button 
                     type="button" 
@@ -861,16 +1107,18 @@ export default function Verifications() {
                       opacity: isReadyToApprove ? 1 : 0.6,
                       cursor: isReadyToApprove ? 'pointer' : 'not-allowed'
                     }}
-                    title={!isQrUnlocked ? 'Anda wajib scan QR ruangan di lokasi terlebih dahulu' : !inspectionPhotoBlob ? 'Anda wajib mengambil foto bukti inspeksi terlebih dahulu' : 'Setujui laporan kebersihan ini'}
+                    title={isFinalStage ? 'Approval akhir laporan kebersihan ini' : !isQrUnlocked ? 'Anda wajib scan QR ruangan di lokasi terlebih dahulu' : !inspectionPhotoBlob ? 'Anda wajib mengambil foto bukti inspeksi terlebih dahulu' : 'Setujui laporan kebersihan ini'}
                   >
                     {isReadyToApprove ? <Check size={18} /> : <Lock size={18} />}
                     {processing 
                       ? 'Memproses...' 
-                      : !isQrUnlocked 
+                      : isFinalStage
+                        ? 'Approval Akhir (Selesai)'
+                        : !isQrUnlocked 
                         ? 'Setujui (Terkunci - Wajib Scan QR)' 
                         : !inspectionPhotoBlob 
                           ? 'Setujui (Terkunci - Wajib Ambil Foto)' 
-                          : 'Setujui Laporan Ini (Approve)'}
+                          : 'Verifikasi & Teruskan ke Approval Akhir'}
                   </button>
                 );
               })()}
@@ -887,6 +1135,7 @@ export default function Verifications() {
               </button>
             </div>
           </div>
+          )}
 
         </div>
       )}
@@ -912,7 +1161,7 @@ export default function Verifications() {
                         <th>Ruangan &amp; Gedung</th>
                         <th>Petugas CS</th>
                         <th>Waktu Serah Laporan</th>
-                        <th>Status Verifikasi Fisik</th>
+                        <th>Tahap &amp; SLA Verifikasi</th>
                         <th style={{ textAlign: 'right' }}>Aksi</th>
                       </tr>
                     </thead>
@@ -939,10 +1188,24 @@ export default function Verifications() {
                           </td>
 
                           <td>
-                            <span className="status-badge status-waiting_verification" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <Lock size={12} />
-                              Wajib Cek On-Site
+                            <span className={`status-badge ${sub.workflow?.is_overdue ? 'status-overdue' : 'status-waiting_verification'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock size={12} />
+                              {sub.workflow?.stage_label || 'Menunggu Verifikasi'}
                             </span>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                              Penangani: {sub.workflow?.verifier_name || '-'}
+                              {sub.workflow?.deadline_at && sub.workflow?.stage === 'pending_verification' && <> • Batas {formatWib(sub.workflow.deadline_at)}</>}
+                            </div>
+                            {formatRemaining(sub.workflow) && (
+                              <div style={{ fontSize: '0.74rem', fontWeight: 700, color: sub.workflow?.is_overdue ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                                {formatRemaining(sub.workflow)}
+                              </div>
+                            )}
+                            {sub.workflow?.is_redirected && sub.workflow?.stage === 'pending_verification' && (
+                              <div style={{ fontSize: '0.74rem', color: 'var(--warning, #b45309)', fontWeight: 600 }}>
+                                Dialihkan: {sub.workflow.redirect_reason_label}
+                              </div>
+                            )}
                           </td>
 
                           <td style={{ textAlign: 'right' }}>
@@ -953,7 +1216,7 @@ export default function Verifications() {
                               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
                             >
                               <Eye size={14} />
-                              Tinjau &amp; Cek Fisik
+                              {sub.workflow?.can_act ? (sub.workflow?.action === 'final_approve' ? 'Approval Akhir' : 'Tinjau & Cek Fisik') : 'Lihat Detail'}
                             </button>
                           </td>
                         </tr>
@@ -964,7 +1227,7 @@ export default function Verifications() {
                           <td colSpan="5" style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
                             <CheckCircle2 size={40} style={{ margin: '0 auto 12px', color: 'var(--success)', opacity: 0.8 }} />
                             <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Tidak Ada Antrean Verifikasi</h4>
-                            <p style={{ margin: 0, fontSize: '0.85rem' }}>Seluruh laporan kebersihan telah diverifikasi atau belum ada laporan baru yang diserahkan CS.</p>
+                            <p style={{ margin: 0, fontSize: '0.85rem' }}>Tidak ada laporan pada antrean ini. Seluruh laporan telah diproses atau belum ada laporan baru dari CS.</p>
                           </td>
                         </tr>
                       )}
@@ -987,14 +1250,19 @@ export default function Verifications() {
                             Kode: {sub.task?.room?.code || '-'} • Gedung: {sub.task?.room?.building?.name || '-'}
                           </div>
                         </div>
-                        <span className="status-badge status-waiting_verification" style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                          <Lock size={11} /> Cek On-Site
+                        <span className={`status-badge ${sub.workflow?.is_overdue ? 'status-overdue' : 'status-waiting_verification'}`} style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                          <Clock size={11} /> {sub.workflow?.stage_label || 'Menunggu Verifikasi'}
                         </span>
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', padding: '8px 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)', color: 'var(--text-secondary)' }}>
                         <div>Petugas: <strong style={{ color: 'var(--text-primary)' }}>{sub.user?.name || sub.cs_name || 'Petugas CS'}</strong></div>
                         <div>Waktu: <strong style={{ color: 'var(--text-primary)' }}>{formatSubmissionTime(sub)}</strong></div>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        Penangani: <strong>{sub.workflow?.verifier_name || '-'}</strong>
+                        {formatRemaining(sub.workflow) && <> • <span style={{ color: sub.workflow?.is_overdue ? 'var(--danger)' : 'inherit', fontWeight: 700 }}>{formatRemaining(sub.workflow)}</span></>}
+                        {sub.workflow?.is_redirected && sub.workflow?.stage === 'pending_verification' && <> • Dialihkan: {sub.workflow.redirect_reason_label}</>}
                       </div>
 
                       <button
@@ -1003,7 +1271,7 @@ export default function Verifications() {
                         onClick={() => handleSelectSubmission(sub)}
                         style={{ width: '100%', height: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 700 }}
                       >
-                        <Eye size={16} /> Tinjau &amp; Cek Fisik Ruangan
+                        <Eye size={16} /> {sub.workflow?.can_act ? (sub.workflow?.action === 'final_approve' ? 'Approval Akhir' : 'Tinjau & Cek Fisik Ruangan') : 'Lihat Detail'}
                       </button>
                     </div>
                   ))}
@@ -1020,6 +1288,58 @@ export default function Verifications() {
             </>
           )}
         </div>
+      )}
+
+      {/* MODAL DETAIL SOP ITEM CHECKLIST */}
+      {sopItem && createPortal(
+        <div className="modal-backdrop" onClick={() => setSopItem(null)}>
+          <div
+            className="glass-panel"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '520px', width: '92vw', padding: 0, overflow: 'hidden' }}
+          >
+            <div className="modal-header" style={{ padding: '18px 24px', margin: 0 }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Detail SOP
+                </span>
+                <h2 className="modal-title" style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <BookOpen className="text-primary" size={22} />
+                  {sopItem.checklist_item?.name || sopItem.nama_item || 'Item Checklist'}
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Ruang: {selectedSubmission?.task?.room?.name || '-'}
+                  {sopItem.sop?.template_name ? ` • Template: ${sopItem.sop.template_name}` : ''}
+                </div>
+              </div>
+              <button type="button" className="modal-close-btn" onClick={() => setSopItem(null)} title="Tutup">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px' }}>
+              {sopItem.sop?.description ? (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.92rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                  {sopItem.sop.description}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                  Belum ada detail SOP untuk item ini. SOP dapat diisi di menu Template Checklist.
+                </div>
+              )}
+              {sopItem.notes && (
+                <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px dashed var(--border-color)', fontSize: '0.85rem' }}>
+                  <strong>Catatan CS: </strong>{sopItem.notes}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ margin: 0, padding: '14px 24px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setSopItem(null)}>Tutup</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}

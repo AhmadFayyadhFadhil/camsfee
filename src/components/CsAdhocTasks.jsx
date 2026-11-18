@@ -511,7 +511,7 @@ export default function CsAdhocTasks({ onResumeDailyTasks }) {
                           fontWeight: 700,
                         }}
                       >
-                        {task.task_type === 'scheduled_event' ? 'Persiapan Meeting / Acara' : 'Tugas Mendadak'}
+                        {task.task_type === 'scheduled_event' ? 'Persiapan Meeting / Acara' : 'Tugas Tambahan'}
                       </span>
 
                       {task.status === 'pending' && <span className="status-badge status-pending">Belum Dimulai</span>}

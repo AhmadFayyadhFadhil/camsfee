@@ -264,7 +264,7 @@ export default function AdhocTaskSupervisor() {
             ? 'Penugasan berhasil diperbarui.'
             : taskType === 'scheduled_event'
             ? 'Penugasan persiapan acara/meeting berhasil dijadwalkan!'
-            : 'Tugas mendadak berhasil dikirim ke CS!'
+            : 'Tugas tambahan berhasil dikirim ke CS!'
         );
         setShowModal(false);
         fetchData();
@@ -372,7 +372,7 @@ export default function AdhocTaskSupervisor() {
             onClick={() => handleOpenCreate('immediate')} 
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
           >
-            <Plus size={16} /> Buat Tugas Mendadak
+            <Plus size={16} /> Buat Tugas Tambahan
           </button>
         </div>
       </div>
@@ -437,7 +437,7 @@ export default function AdhocTaskSupervisor() {
             borderBottom: activeTabFilter === 'immediate' ? '3px solid var(--primary)' : '3px solid transparent',
           }}
         >
-          Tugas Mendadak (Hari Ini)
+          Tugas Tambahan (Hari Ini)
         </button>
       </div>
 
@@ -516,7 +516,7 @@ export default function AdhocTaskSupervisor() {
                           </span>
                         )}
                         <span>•</span>
-                        <span>{task.task_type === 'scheduled_event' ? 'Persiapan Meeting' : 'Tugas Mendadak'}</span>
+                        <span>{task.task_type === 'scheduled_event' ? 'Persiapan Meeting' : 'Tugas Tambahan'}</span>
                         <span>•</span>
                         <span style={{ color: 'var(--text-muted)' }}>Oleh: {task.creator_name}</span>
                       </div>
@@ -628,7 +628,7 @@ export default function AdhocTaskSupervisor() {
                     ? 'Edit Data Penugasan'
                     : taskType === 'scheduled_event'
                     ? 'Penugasan Persiapan Ruang Meeting / Acara'
-                    : 'Penugasan Tugas Mendadak (Langsung)'}
+                    : 'Penugasan Tugas Tambahan (Langsung)'}
                 </h2>
               </div>
               <button className="modal-close-btn" onClick={() => setShowModal(false)}><X size={20} /></button>
@@ -645,7 +645,7 @@ export default function AdhocTaskSupervisor() {
                     </label>
                     <label style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-lg)', border: taskType === 'immediate' ? '2px solid var(--primary)' : '1px solid var(--border-color)', background: taskType === 'immediate' ? '#eff6ff' : '#ffffff', cursor: 'pointer' }}>
                       <input type="radio" name="taskType" value="immediate" checked={taskType === 'immediate'} onChange={() => { setTaskType('immediate'); setRequiresCleanup(false); }} />
-                      <strong style={{ color: 'var(--primary)', marginLeft: '6px' }}>Tugas Mendadak (Langsung)</strong>
+                      <strong style={{ color: 'var(--primary)', marginLeft: '6px' }}>Tugas Tambahan (Langsung)</strong>
                     </label>
                   </div>
                 )}

@@ -710,7 +710,7 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
             </div>
           </div>
 
-          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--info)', background: 'rgba(26, 75, 196, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Menunggu verifikasi dari PIC">
+          <div className="glass-card stats-card" style={{ borderLeft: '4px solid var(--info)', background: 'rgba(26, 75, 196, 0.03)', cursor: 'pointer' }} onClick={() => setCurrentTab && setCurrentTab('tasks')} title="Menunggu verifikasi Supervisor">
             <div className="stats-icon" style={{ background: 'rgba(26, 75, 196, 0.08)', color: 'var(--info)' }}>
               <Eye size={24} />
             </div>
@@ -994,10 +994,12 @@ export default function Dashboard({ user, setCurrentTab, setOpenScanModalOnMount
       key: 'pending',
       label: 'Menunggu Verifikasi',
       value: data.pending_verifications || 0,
-      caption: 'Laporan menunggu persetujuan',
+      caption: data.verification_workflow
+        ? `${data.verification_workflow.counts?.overdue || 0} lewat SLA ${data.verification_workflow.sla_hours} jam • ${data.verification_workflow.counts?.pending_final_approval || 0} menunggu approval akhir`
+        : 'Laporan menunggu verifikasi Supervisor',
       icon: Eye,
       tone: 'amber',
-      tab: 'verifications'
+      tab: isAdminOrSupervisor ? 'verifications' : null
     },
     {
       key: 'findings',

@@ -510,7 +510,7 @@ export default function CsTasks({
 
             const response = await api.post('/submissions/scan', payload);
             if (response.success) {
-              setSuccessMsg(`QR Ruangan ${scanningTask.room?.name || ''} Terkonfirmasi! Silakan periksa item checklist dan ambil 4 foto bukti.`);
+              setSuccessMsg(`QR Ruangan ${scanningTask.room?.name || ''} Terkonfirmasi! Silakan periksa item checklist. Foto bukti ruangan bersifat opsional (maks. 1 foto).`);
               setError(null);
 
               const items = (response.data.checklist_items || []).map(item => ({
@@ -765,7 +765,7 @@ export default function CsTasks({
 
       const response = await api.post('/submissions/scan', payload);
       if (response.success) {
-        setSuccessMsg(`Memulai pengerjaan ruangan: ${task.room?.name || 'Ruangan'}. Silakan periksa item checklist dan ambil 4 foto bukti.`);
+        setSuccessMsg(`Memulai pengerjaan ruangan: ${task.room?.name || 'Ruangan'}. Silakan periksa item checklist. Foto bukti ruangan bersifat opsional (maks. 1 foto).`);
         setError(null);
         
         const items = (response.data.checklist_items || []).map(item => ({
@@ -1032,7 +1032,7 @@ export default function CsTasks({
     if (t.status === 'waiting_verification') {
       return (
         <span style={{ fontSize: '0.8rem', color: 'var(--warning)', fontWeight: 600 }}>
-          Menunggu PIC
+          Menunggu Supervisor
         </span>
       );
     }
@@ -1205,12 +1205,7 @@ export default function CsTasks({
     setSuccessMsg(null);
     setSubmitting(true);
 
-    if (!fotoAfterFiles[0]) {
-      setError('Foto bukti kondisi keseluruhan ruangan harus diambil sebelum menyerahkan laporan.');
-      setSubmitting(false);
-      return;
-    }
-
+    // Foto After bersifat OPSIONAL (maksimal 1 foto)
     if (!gpsState.ready) {
       setError('GPS belum siap. Pastikan izin lokasi diberikan dan coba lagi.');
       setSubmitting(false);
@@ -1218,8 +1213,10 @@ export default function CsTasks({
     }
 
     try {
-      // Pastikan foto terkompresi di bawah 1MB
-      const compressedPhoto = await compressImage(fotoAfterFiles[0], 1600, 1000 * 1024);
+      // Pastikan foto (jika ada) terkompresi di bawah 1MB
+      const compressedPhoto = fotoAfterFiles[0]
+        ? await compressImage(fotoAfterFiles[0], 1600, 1000 * 1024)
+        : null;
 
       const formData = new FormData();
       formData.append('task_id', activeTask.id);
@@ -1242,14 +1239,16 @@ export default function CsTasks({
       });
 
       const photoFile = compressedPhoto || fotoAfterFiles[0];
-      formData.append('foto_after_1', photoFile, `after-${activeTask.id.substring(0, 8)}.jpg`);
-      formData.append('foto_after', photoFile, `after-${activeTask.id.substring(0, 8)}.jpg`);
+      if (photoFile) {
+        formData.append('foto_after_1', photoFile, `after-${activeTask.id.substring(0, 8)}.jpg`);
+        formData.append('foto_after', photoFile, `after-${activeTask.id.substring(0, 8)}.jpg`);
+      }
 
       const response = await api.post('/submissions', formData);
       if (response.success) {
         const activeId = activeTask.id;
         setTasks(prev => prev.map(t => (t.id === activeId ? { ...t, status: 'waiting_verification' } : t)));
-        setSuccessMsg('Laporan kebersihan ruangan berhasil dikirim! Menunggu verifikasi dari PIC.');
+        setSuccessMsg('Laporan kebersihan ruangan berhasil dikirim! Menunggu verifikasi dari Supervisor.');
         setActiveTask(null);
         setChecklistItems([]);
         setSubmissionNotes('');
@@ -1515,7 +1514,7 @@ export default function CsTasks({
         </div>
       )}
 
-      {/* BANNER TUGAS MENDADAK */}
+      {/* BANNER TUGAS TAMBAHAN */}
       {adhocCount > 0 && onOpenAdhocTasks && (
         <div
           style={{
@@ -1535,7 +1534,7 @@ export default function CsTasks({
             <Zap size={26} color="#eab308" fill="#eab308" style={{ flexShrink: 0 }} />
             <div>
               <strong style={{ color: '#b45309', fontSize: '1rem', display: 'block' }}>
-                Ada {adhocCount} Tugas Mendadak dari Supervisor!
+                Ada {adhocCount} Tugas Tambahan dari Supervisor!
               </strong>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
                 Tugas ini bersifat darurat dan harus dikerjakan segera. Setelah selesai, Anda akan otomatis kembali ke tugas harian ini.
@@ -1547,7 +1546,7 @@ export default function CsTasks({
             onClick={onOpenAdhocTasks} 
             style={{ color: '#fff', fontWeight: 700, minWidth: '200px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           >
-            <Zap size={16} /> Kerjakan Tugas Mendadak
+            <Zap size={16} /> Kerjakan Tugas Tambahan
           </button>
         </div>
       )}
@@ -1574,7 +1573,7 @@ export default function CsTasks({
         const totalChecklistCount = checklistItems.length;
         const photosTakenCount = fotoAfterFiles[0] ? 1 : 0;
         const isAllPhotosTaken = photosTakenCount === 1;
-        const isReadyToSubmit = isAllPhotosTaken && gpsState.ready;
+        const isReadyToSubmit = gpsState.ready; // foto After opsional
 
         return (
           <div className="glass-panel" style={{ padding: '24px', borderRadius: 'var(--radius-xl)', marginBottom: '30px' }}>
@@ -1595,7 +1594,7 @@ export default function CsTasks({
                   {isAllPhotosTaken ? <Check size={14} /> : '2'}
                 </div>
                 <div className={`step-label ${isAllPhotosTaken ? 'done' : completedChecklistCount === totalChecklistCount ? 'active' : ''}`}>
-                  2. Ambil Foto Ruangan ({photosTakenCount}/1)
+                  2. Foto Ruangan - Opsional ({photosTakenCount}/1)
                 </div>
               </div>
               <div className={`step-divider ${isAllPhotosTaken ? 'done' : ''}`}></div>
@@ -1708,10 +1707,10 @@ export default function CsTasks({
               <div style={{ marginBottom: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ marginBottom: '12px' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--primary)' }}>
-                    Langkah 2: Ambil Foto Bukti Keseluruhan Ruangan
+                    Langkah 2: Foto Bukti Keseluruhan Ruangan (Opsional)
                   </h3>
                   <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    Wajib ambil 1 foto tampak keseluruhan ruangan (ambil dari pintu atau sudut ruangan agar seluruh area kebersihan terlihat jelas).
+                    Foto bersifat opsional (maksimal 1 foto). Jika diambil, ambil tampak keseluruhan ruangan dari pintu atau sudut agar seluruh area kebersihan terlihat jelas.
                   </p>
                 </div>
 
@@ -1730,8 +1729,8 @@ export default function CsTasks({
                             <Check size={14} /> Foto Siap
                           </span>
                         ) : (
-                          <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.78rem' }}>
-                            * Wajib Diambil
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.78rem' }}>
+                            Opsional
                           </span>
                         )}
                       </div>
@@ -1804,9 +1803,9 @@ export default function CsTasks({
                   {completedChecklistCount === totalChecklistCount && totalChecklistCount > 0 ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
                   <span>Checklist: {completedChecklistCount}/{totalChecklistCount} item</span>
                 </div>
-                <div className={`readiness-item ${isAllPhotosTaken ? 'ready' : 'not-ready'}`}>
-                  {isAllPhotosTaken ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}
-                  <span>Foto bukti: {photosTakenCount}/1 ruangan</span>
+                <div className={`readiness-item ${isAllPhotosTaken ? 'ready' : ''}`}>
+                  {isAllPhotosTaken ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor', opacity: 0.4 }} />}
+                  <span>Foto bukti (opsional): {photosTakenCount}/1</span>
                 </div>
                 <div className={`readiness-item ${gpsState.ready ? 'ready' : 'not-ready'}`}>
                   {gpsState.ready ? <CheckCircle2 size={16} /> : <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'currentColor' }} />}

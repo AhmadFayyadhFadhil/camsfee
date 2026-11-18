@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { ROLES } from '../utils/constants';
+import { ROLES, SUPERVISOR_LEVELS, SUPERVISOR_LEVEL_LABELS } from '../utils/constants';
 import { Users, Plus, Edit2, Trash2, Check, X, ShieldAlert, Key } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext.jsx';
 
@@ -20,6 +20,10 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
   const [password, setPassword] = useState('');
   const [selectedRoles, setSelectedRoles] = useState([]); // Array of role names, e.g. ['pic']
   const [isActive, setIsActive] = useState(true);
+  const [supervisorLevel, setSupervisorLevel] = useState(''); // head | verifier | operational
+
+  // Level hierarki Supervisor hanya dapat diatur Admin atau Supervisor tertinggi (divalidasi juga di backend)
+  const canManageSupervisorLevel = Boolean(isAdmin || currentUser?.supervisor_level === 'head');
 
   // Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,6 +87,7 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
     setPassword('');
     setSelectedRoles(['cleaning_service']); // Default
     setIsActive(true);
+    setSupervisorLevel('');
     setShowForm(true);
   };
 
@@ -93,6 +98,7 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
     setPassword(''); // Empty password, only filled if changing
     setSelectedRoles(user.roles || []);
     setIsActive(user.is_active);
+    setSupervisorLevel(user.supervisor_level || '');
     setShowForm(true);
   };
 
@@ -123,6 +129,10 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
 
     if (password) {
       payload.password = password;
+    }
+
+    if (canManageSupervisorLevel && selectedRoles.includes('supervisor')) {
+      payload.supervisor_level = supervisorLevel || null;
     }
 
     try {
@@ -414,6 +424,25 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
                     ))}
                   </div>
                 </div>
+
+                {selectedRoles.includes('supervisor') && canManageSupervisorLevel && (
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Level Hierarki Supervisor</label>
+                    <select
+                      className="form-control form-select"
+                      value={supervisorLevel}
+                      onChange={(e) => setSupervisorLevel(e.target.value)}
+                    >
+                      <option value="">Tanpa level (tidak ikut workflow verifikasi)</option>
+                      {SUPERVISOR_LEVELS.map(l => (
+                        <option key={l.value} value={l.value}>{l.label}</option>
+                      ))}
+                    </select>
+                    <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                      Hanya satu akun aktif untuk level Tertinggi dan satu untuk level Verifikator.
+                    </small>
+                  </div>
+                )}
               </div>
 
               <div className="modal-footer">
@@ -458,6 +487,11 @@ export default function UsersList({ currentUser, isSupervisor, isAdmin }) {
                           {r.replace('_', ' ')}
                         </span>
                       ))}
+                      {u.supervisor_level && (
+                        <span className="role-badge role-supervisor" title="Level hierarki Supervisor">
+                          {SUPERVISOR_LEVEL_LABELS[u.supervisor_level] || u.supervisor_level}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td>

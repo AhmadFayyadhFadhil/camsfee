@@ -490,7 +490,7 @@ export default function App() {
       title: 'Monitoring & Approval',
       icon: Activity,
       defaultOpen: true,
-      visible: isPic || isSupervisor || isAdmin,
+      visible: isSupervisor || isAdmin, // PIC tidak lagi terlibat dalam verifikasi
       items: [
         { tab: 'verifications', label: 'Verifikasi Laporan', icon: CheckSquare },
         { tab: 'adhoc_tasks', label: 'Tugas Khusus & Acara', icon: FileText, visible: isSupervisor || isAdmin }

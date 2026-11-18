@@ -22,6 +22,7 @@ export function resolveNotificationTarget(notif, userRoles = []) {
     title.includes('meeting') ||
     title.includes('acara') ||
     title.includes('tugas mendadak') ||
+    title.includes('tugas tambahan') ||
     title.includes('tugas khusus') ||
     data.adhoc_task_id
   ) {
@@ -54,6 +55,7 @@ export function resolveNotificationTarget(notif, userRoles = []) {
   // 4. Verifikasi Laporan Kebersihan / Submissions
   if (
     type.includes('SUBMISSION') ||
+    type.includes('CHECKLIST') ||
     type.includes('VERIF') ||
     title.includes('laporan disetujui') ||
     title.includes('laporan ditolak') ||

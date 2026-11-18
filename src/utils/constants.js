@@ -8,6 +8,19 @@ export const ROLES = [
   { id: 5, name: 'guest', label: 'Guest' },
 ];
 
+// Hierarki Supervisor (tetap memakai role `supervisor`; level disimpan pada akun)
+export const SUPERVISOR_LEVELS = [
+  { value: 'head', label: 'Supervisor Tertinggi (Approval Akhir)' },
+  { value: 'verifier', label: 'Supervisor Verifikator (Verifikasi Checklist Harian)' },
+  { value: 'operational', label: 'Supervisor Operasional (tanpa hak approval)' },
+];
+
+export const SUPERVISOR_LEVEL_LABELS = {
+  head: 'Supervisor Tertinggi',
+  verifier: 'Supervisor Verifikator',
+  operational: 'Supervisor Operasional',
+};
+
 export const SHIFTS = [
   { id: 1, name: 'Shift 1', time: '06:00 - 14:00' },
   { id: 2, name: 'Shift 2', time: '14:00 - 22:00' },
